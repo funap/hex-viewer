@@ -1,0 +1,9 @@
+[package]
+name = "xvi"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+gpui = "0.2"
+gpui-component = "0.4.0-preview1"
+anyhow = "1.0"
