@@ -1,4 +1,4 @@
-//! このモジュールは、アプリケーションのエントリポイントと`HelloWorld` UIコンポーネントを定義します。
+//! このモジュールは、アプリケーションのエントリポイントと`Workspace` UIコンポーネントを定義します。
 //!
 //! `gpui`と`gpui_component`クレートを使用して、タブとボタンを持つシンプルなアプリケーションを
 //! 作成する方法を示しています。
@@ -11,16 +11,16 @@ use gpui_component::Root;
 use gpui_component::dock::{DockArea, DockItem, Panel, PanelEvent, PanelView};
 use std::sync::Arc;
 
-/// `HelloWorld`コンポーネントの主要なアプリケーション状態。
+/// `Workspace`コンポーネントの主要なアプリケーション状態。
 ///
 /// この構造体は、現在選択されているタブの状態を保持します。
-pub struct HelloWorld {
+pub struct Workspace {
     dock_area: Entity<DockArea>,
 }
 
-impl Render for HelloWorld {
+impl Render for Workspace {
     /// タブバーと、選択されたタブに基づいて内容が変化するコンテンツエリア、およびボタンを含む
-    /// `HelloWorld`コンポーネントをレンダリングします。
+    /// `Workspace`コンポーネントをレンダリングします。
     fn render(&mut self, _: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         self.dock_area.clone()
     }
@@ -158,8 +158,8 @@ fn main() {
                     );
                 });
 
-                // 初期選択タブを0に設定して、新しい`HelloWorld`ビューを作成します。
-                let view = cx.new(|_cx| HelloWorld {
+                // 新しい`Workspace`ビューを作成します。
+                let view = cx.new(|_cx| Workspace {
                     dock_area: dock_area_entity,
                 });
                 // ウィンドウの最初のレベルはRootコンポーネントである必要があります。
