@@ -12,11 +12,13 @@ use gpui_component::input::InputState;
 use std::sync::Arc;
 
 mod workspace;
-mod panels;
+mod editor_panel;
+mod settings_panel;
 mod app_title_bar;
 
 use workspace::Workspace;
-use panels::{MyPanel, EditorPanel};
+use editor_panel::EditorPanel;
+use settings_panel::SettingsPanel;
 use app_title_bar::AppTitleBar;
 use gpui_component::menu::AppMenuBar;
 
@@ -42,18 +44,29 @@ fn main() {
                 let app_title_bar = cx.new(|_cx| AppTitleBar { app_menu_bar });
 
                 dock_area_entity.update(cx, |dock_area, cx| {
-                    let panel1 = cx.new(|cx| MyPanel::new("Panel 1", cx));
-                    let panel2 = cx.new(|cx| MyPanel::new("Panel 2", cx));
-                    let panel3 = cx.new(|cx| MyPanel::new("Panel 3", cx));
+                    let panel1 = cx.new(|cx| SettingsPanel::new("Panel 1", cx));
+                    let panel2 = cx.new(|cx| SettingsPanel::new("Panel 2", cx));
+                    let panel3 = cx.new(|cx| SettingsPanel::new("Panel 3", cx));
 
-                    let code_editor_state = cx.new(|cx| {
+                    let code_editor_state1 = cx.new(|cx| {
                         InputState::new(window_ctx, cx)
                             .code_editor("rust") // Language for syntax highlighting
                             .line_number(true) // Show line numbers
                             .searchable(true) // Enable search functionality
-                            .default_value("fn main() {\n    println!(\"Hello, world!\");\n}")
+                            .default_value("fn main() {\n    println!(\"Hello, from editor 1!\");\n}")
                     });
-                    let editor_panel = cx.new(|cx| EditorPanel::new(code_editor_state, cx));
+                    let editor_panel1 =
+                        cx.new(|cx| EditorPanel::new("Editor 1", code_editor_state1, cx));
+
+                    let code_editor_state2 = cx.new(|cx| {
+                        InputState::new(window_ctx, cx)
+                            .code_editor("rust") // Language for syntax highlighting
+                            .line_number(true) // Show line numbers
+                            .searchable(true) // Enable search functionality
+                            .default_value("fn main() {\n    println!(\"Hello, from editor 2!\");\n}")
+                    });
+                    let editor_panel2 =
+                        cx.new(|cx| EditorPanel::new("Editor 2", code_editor_state2, cx));
 
                     dock_area.set_left_dock(
                         DockItem::tabs(
@@ -97,7 +110,17 @@ fn main() {
                         cx,
                     );
 
-                    dock_area.set_center(DockItem::panel(Arc::new(editor_panel)), window_ctx, cx);
+                    dock_area.set_center(
+                        DockItem::tabs(
+                            vec![Arc::new(editor_panel1), Arc::new(editor_panel2)],
+                            None,
+                            &dock_area_entity.downgrade(),
+                            window_ctx,
+                            cx,
+                        ),
+                        window_ctx,
+                        cx,
+                    );
                 });
 
                 let view = cx.new(|_cx| Workspace {
