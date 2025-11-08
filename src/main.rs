@@ -4,70 +4,81 @@
 //! 作成する方法を示しています。
 
 use gpui::{
-    AnyWeakView, AppContext, Application, Context, IntoElement, ParentElement, Render, Styled,
-    Window, WindowOptions, div,
+    App, AppContext, Application, Context, Entity, EventEmitter, FocusHandle, Focusable,
+    IntoElement, ParentElement, Render, SharedString, Window, WindowOptions, div,
 };
-use gpui_component::tab::{Tab, TabBar};
-use gpui_component::{Root, StyledExt, button::*};
-use std::rc::Rc;
+use gpui_component::Root;
+use gpui_component::dock::{DockArea, DockItem, Panel, PanelEvent, PanelView};
+use std::sync::Arc;
 
 /// `HelloWorld`コンポーネントの主要なアプリケーション状態。
 ///
 /// この構造体は、現在選択されているタブの状態を保持します。
 pub struct HelloWorld {
-    selected_tab: usize,
-    view_handle: Option<Rc<AnyWeakView>>,
+    dock_area: Entity<DockArea>,
 }
-
-const ACCOUNT_TAB_INDEX: usize = 0;
-const PROFILE_TAB_INDEX: usize = 1;
-const SETTINGS_TAB_INDEX: usize = 2;
 
 impl Render for HelloWorld {
     /// タブバーと、選択されたタブに基づいて内容が変化するコンテンツエリア、およびボタンを含む
     /// `HelloWorld`コンポーネントをレンダリングします。
     fn render(&mut self, _: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        let view = self.view_handle.clone().unwrap();
-        div()
-            .v_flex()
-            .gap_2()
-            .size_full()
-            .items_center()
-            .justify_center()
-            .child(
-                // 異なるセクション間のナビゲーションのためのTabBarコンポーネント。
-                TabBar::new("tabs")
-                    .selected_index(self.selected_tab)
-                    .on_click(move |idx, _, cx| {
-                        view.upgrade().unwrap().downcast::<Self>().unwrap().update(
-                            cx,
-                            |this, cx| {
-                                this.selected_tab = *idx;
-                                cx.notify();
-                            },
-                        );
-                    })
-                    .child(Tab::new("Account"))
-                    .child(Tab::new("Profile"))
-                    .child(Tab::new("Settings")),
-            )
-            .child(
-                // `selected_tab`の状態に基づいて動的にレンダリングされるコンテンツ。
-                match self.selected_tab {
-                    ACCOUNT_TAB_INDEX => div().child("Account Content"),
-                    PROFILE_TAB_INDEX => div().child("Profile Content"),
-                    SETTINGS_TAB_INDEX => div().child("Settings Content"),
-                    _ => div().child("Unknown Tab"),
-                },
-            )
-            .child(
-                // シンプルなボタンコンポーネント。
-                Button::new("ok")
-                    .primary()
-                    .label("Let's Go!")
-                    .on_click(|_, _, _| println!("Clicked!")), // ボタンクリックのイベントハンドラ。
-            )
+        self.dock_area.clone()
     }
+}
+
+/// A simple panel for demonstration purposes.
+pub struct MyPanel {
+    title: SharedString,
+    focus_handle: FocusHandle,
+}
+
+impl MyPanel {
+    pub fn new(title: impl Into<SharedString>, cx: &mut Context<Self>) -> Self {
+        Self {
+            title: title.into(),
+            focus_handle: cx.focus_handle(),
+        }
+    }
+}
+
+impl Render for MyPanel {
+    fn render(&mut self, _: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div().child(format!("Content for {}", self.title))
+    }
+}
+
+impl EventEmitter<PanelEvent> for MyPanel {}
+
+impl Focusable for MyPanel {
+    fn focus_handle(&self, _cx: &App) -> gpui::FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+
+impl Panel for MyPanel {
+    fn panel_name(&self) -> &'static str {
+        "MyPanel"
+    }
+
+    fn title(&self, _window: &Window, _cx: &App) -> gpui::AnyElement {
+        self.title.clone().into_any_element()
+    }
+
+    fn closable(&self, _cx: &App) -> bool {
+        true
+    }
+
+    fn zoomable(&self, _cx: &App) -> Option<gpui_component::dock::PanelControl> {
+        Some(gpui_component::dock::PanelControl::Both)
+    }
+
+    fn visible(&self, _cx: &App) -> bool {
+        true
+    }
+
+    fn set_active(&mut self, _active: bool, _window: &mut Window, _cx: &mut App) {}
+
+    fn set_zoomed(&mut self, _zoomed: bool, _window: &mut Window, _cx: &mut App) {}
 }
 
 fn main() {
@@ -82,17 +93,77 @@ fn main() {
         // メインウィンドウを開く非同期タスクをスポーンします。
         cx.spawn(async move |cx| {
             // デフォルトオプションで新しいウィンドウを開きます。
-            cx.open_window(WindowOptions::default(), |window, cx| {
+            cx.open_window(WindowOptions::default(), |window_ctx, cx| {
+                let dock_area_entity =
+                    cx.new(|cx| DockArea::new("main_dock_area", None, window_ctx, cx));
+
+                dock_area_entity.update(cx, |dock_area, cx| {
+                    let panel1 = cx.new(|cx| MyPanel::new("Panel 1", cx));
+                    let panel2 = cx.new(|cx| MyPanel::new("Panel 2", cx));
+                    let panel3 = cx.new(|cx| MyPanel::new("Panel 3", cx));
+                    let panel4 = cx.new(|cx| MyPanel::new("Panel 4", cx));
+
+                    dock_area.set_left_dock(
+                        DockItem::tabs(
+                            vec![Arc::new(panel1)],
+                            None,
+                            &dock_area_entity.downgrade(),
+                            window_ctx,
+                            cx,
+                        ),
+                        None,
+                        true,
+                        window_ctx,
+                        cx,
+                    );
+
+                    dock_area.set_bottom_dock(
+                        DockItem::tabs(
+                            vec![Arc::new(panel2)],
+                            None,
+                            &dock_area_entity.downgrade(),
+                            window_ctx,
+                            cx,
+                        ),
+                        None,
+                        true,
+                        window_ctx,
+                        cx,
+                    );
+
+                    dock_area.set_right_dock(
+                        DockItem::tabs(
+                            vec![Arc::new(panel3)],
+                            None,
+                            &dock_area_entity.downgrade(),
+                            window_ctx,
+                            cx,
+                        ),
+                        None,
+                        true,
+                        window_ctx,
+                        cx,
+                    );
+
+                    dock_area.set_center(
+                        DockItem::tabs(
+                            vec![Arc::new(panel4)],
+                            None,
+                            &dock_area_entity.downgrade(),
+                            window_ctx,
+                            cx,
+                        ),
+                        window_ctx,
+                        cx,
+                    );
+                });
+
                 // 初期選択タブを0に設定して、新しい`HelloWorld`ビューを作成します。
                 let view = cx.new(|_cx| HelloWorld {
-                    selected_tab: ACCOUNT_TAB_INDEX,
-                    view_handle: None,
-                });
-                view.update(cx, |this, _cx| {
-                    this.view_handle = Some(Rc::new(view.downgrade().into()));
+                    dock_area: dock_area_entity,
                 });
                 // ウィンドウの最初のレベルはRootコンポーネントである必要があります。
-                cx.new(|cx| Root::new(view.into(), window, cx))
+                cx.new(|cx| Root::new(view.into(), window_ctx, cx))
             })?;
 
             Ok::<_, anyhow::Error>(())
