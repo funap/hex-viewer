@@ -9,6 +9,7 @@ use gpui::{
 };
 use gpui_component::Root;
 use gpui_component::dock::{DockArea, DockItem, Panel, PanelEvent, PanelView};
+use gpui_component::input::{Input, InputState};
 use std::sync::Arc;
 
 /// `Workspace`コンポーネントの主要なアプリケーション状態。
@@ -81,6 +82,61 @@ impl Panel for MyPanel {
     fn set_zoomed(&mut self, _zoomed: bool, _window: &mut Window, _cx: &mut App) {}
 }
 
+/// A panel for displaying a code editor.
+pub struct EditorPanel {
+    editor: Entity<InputState>,
+    focus_handle: FocusHandle,
+}
+
+impl EditorPanel {
+    pub fn new(editor: Entity<InputState>, cx: &mut Context<Self>) -> Self {
+        Self {
+            editor,
+            focus_handle: cx.focus_handle(),
+        }
+    }
+}
+
+impl Render for EditorPanel {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        Input::new(&self.editor).h_full() // Full height
+    }
+}
+
+impl EventEmitter<PanelEvent> for EditorPanel {}
+
+impl Focusable for EditorPanel {
+    fn focus_handle(&self, _cx: &App) -> gpui::FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+
+impl Panel for EditorPanel {
+    fn panel_name(&self) -> &'static str {
+        "EditorPanel"
+    }
+
+    fn title(&self, _window: &Window, _cx: &App) -> gpui::AnyElement {
+        SharedString::from("Editor").into_any_element()
+    }
+
+    fn closable(&self, _cx: &App) -> bool {
+        true
+    }
+
+    fn zoomable(&self, _cx: &App) -> Option<gpui_component::dock::PanelControl> {
+        Some(gpui_component::dock::PanelControl::Both)
+    }
+
+    fn visible(&self, _cx: &App) -> bool {
+        true
+    }
+
+    fn set_active(&mut self, _active: bool, _window: &mut Window, _cx: &mut App) {}
+
+    fn set_zoomed(&mut self, _zoomed: bool, _window: &mut Window, _cx: &mut App) {}
+}
+
 fn main() {
     // 新しいGPUIアプリケーションインスタンスを作成します。
     let app = Application::new();
@@ -101,9 +157,15 @@ fn main() {
                     let panel1 = cx.new(|cx| MyPanel::new("Panel 1", cx));
                     let panel2 = cx.new(|cx| MyPanel::new("Panel 2", cx));
                     let panel3 = cx.new(|cx| MyPanel::new("Panel 3", cx));
-                    let panel4 = cx.new(|cx| MyPanel::new("Panel 4 - Center", cx));
-                    let panel5 = cx.new(|cx| MyPanel::new("Panel 5 - Center", cx));
-                    let panel6 = cx.new(|cx| MyPanel::new("Panel 6 - Center", cx));
+
+                    let code_editor_state = cx.new(|cx| {
+                        InputState::new(window_ctx, cx)
+                            .code_editor("rust") // Language for syntax highlighting
+                            .line_number(true) // Show line numbers
+                            .searchable(true) // Enable search functionality
+                            .default_value("fn main() {\n    println!(\"Hello, world!\");\n}")
+                    });
+                    let editor_panel = cx.new(|cx| EditorPanel::new(code_editor_state, cx));
 
                     dock_area.set_left_dock(
                         DockItem::tabs(
@@ -147,17 +209,7 @@ fn main() {
                         cx,
                     );
 
-                    dock_area.set_center(
-                        DockItem::tabs(
-                            vec![Arc::new(panel4), Arc::new(panel5), Arc::new(panel6)],
-                            None,
-                            &dock_area_entity.downgrade(),
-                            window_ctx,
-                            cx,
-                        ),
-                        window_ctx,
-                        cx,
-                    );
+                    dock_area.set_center(DockItem::panel(Arc::new(editor_panel)), window_ctx, cx);
                 });
 
                 // 新しい`Workspace`ビューを作成します。
@@ -167,7 +219,6 @@ fn main() {
                 // ウィンドウの最初のレベルはRootコンポーネントである必要があります。
                 cx.new(|cx| Root::new(view.into(), window_ctx, cx))
             })?;
-
             Ok::<_, anyhow::Error>(())
         })
         .detach(); // スポーンされたタスクをデタッチし、独立して実行できるようにします。
