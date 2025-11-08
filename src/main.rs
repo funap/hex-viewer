@@ -15,11 +15,13 @@ mod workspace;
 mod editor_panel;
 mod settings_panel;
 mod app_title_bar;
+mod file_tree_panel;
 
 use workspace::Workspace;
 use editor_panel::EditorPanel;
 use settings_panel::SettingsPanel;
 use app_title_bar::AppTitleBar;
+use file_tree_panel::FileTreePanel; // Changed from FileTreePanel
 use gpui_component::menu::AppMenuBar;
 
 
@@ -31,6 +33,7 @@ fn main() {
     app.run(move |cx| {
         // GPUIコンポーネントの機能を使用する前に、これを呼び出す必要があります。
         gpui_component::init(cx);
+        file_tree_panel::init(cx);
 
         // メインウィンドウを開く非同期タスクをスポーンします。
         cx.spawn(async move |cx| {
@@ -43,8 +46,10 @@ fn main() {
                 let app_menu_bar = AppMenuBar::new(window_ctx, cx);
                 let app_title_bar = cx.new(|_cx| AppTitleBar { app_menu_bar });
 
+                let file_tree_panel = cx.new(|cx| FileTreePanel::new("File Tree", cx));
+
                 dock_area_entity.update(cx, |dock_area, cx| {
-                    let panel1 = cx.new(|cx| SettingsPanel::new("Panel 1", cx));
+                    // let file_tree_panel = cx.new(|cx| FileTreePanel::new(cx)); // Old FileTreePanel
                     let panel2 = cx.new(|cx| SettingsPanel::new("Panel 2", cx));
                     let panel3 = cx.new(|cx| SettingsPanel::new("Panel 3", cx));
 
@@ -70,7 +75,7 @@ fn main() {
 
                     dock_area.set_left_dock(
                         DockItem::tabs(
-                            vec![Arc::new(panel1)],
+                            vec![Arc::new(file_tree_panel)],
                             None,
                             &dock_area_entity.downgrade(),
                             window_ctx,
