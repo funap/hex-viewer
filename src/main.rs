@@ -8,7 +8,7 @@ use gpui::{
     IntoElement, ParentElement, Render, SharedString, Window, WindowOptions, div,
 };
 use gpui_component::Root;
-use gpui_component::dock::{DockArea, DockItem, Panel, PanelEvent, PanelView};
+use gpui_component::dock::{DockArea, DockItem, Panel, PanelEvent};
 use gpui_component::input::{Input, InputState};
 use std::sync::Arc;
 
