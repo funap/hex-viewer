@@ -101,7 +101,9 @@ fn main() {
                     let panel1 = cx.new(|cx| MyPanel::new("Panel 1", cx));
                     let panel2 = cx.new(|cx| MyPanel::new("Panel 2", cx));
                     let panel3 = cx.new(|cx| MyPanel::new("Panel 3", cx));
-                    let panel4 = cx.new(|cx| MyPanel::new("Panel 4", cx));
+                    let panel4 = cx.new(|cx| MyPanel::new("Panel 4 - Center", cx));
+                    let panel5 = cx.new(|cx| MyPanel::new("Panel 5 - Center", cx));
+                    let panel6 = cx.new(|cx| MyPanel::new("Panel 6 - Center", cx));
 
                     dock_area.set_left_dock(
                         DockItem::tabs(
@@ -147,7 +149,7 @@ fn main() {
 
                     dock_area.set_center(
                         DockItem::tabs(
-                            vec![Arc::new(panel4)],
+                            vec![Arc::new(panel4), Arc::new(panel5), Arc::new(panel6)],
                             None,
                             &dock_area_entity.downgrade(),
                             window_ctx,
