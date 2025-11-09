@@ -16,7 +16,6 @@ impl Workspace {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        println!("on_action_open_file called for path: {}", action.path);
         let file_path = &action.path;
         let file_name = PathBuf::from(file_path)
             .file_name()
@@ -27,7 +26,11 @@ impl Workspace {
         let content = std::fs::read_to_string(file_path).unwrap_or_else(|_| "".to_string());
 
         let editor_input_state = cx.new(|cx| {
-            InputState::new(window, cx).default_value(content)
+            InputState::new(window, cx)
+                .code_editor("rust")
+                .line_number(true)
+                .searchable(true)
+                .default_value(content)
         });
 
         let editor_panel = cx.new(|cx| EditorPanel::new(file_name, editor_input_state, cx));
