@@ -11,6 +11,7 @@ mod editor_panel;
 mod settings_panel;
 mod app_title_bar;
 mod file_tree_panel;
+mod app_actions;
 
 use workspace::Workspace;
 use editor_panel::EditorPanel;

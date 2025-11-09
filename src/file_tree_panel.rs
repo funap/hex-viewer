@@ -1,24 +1,20 @@
 use std::path::PathBuf;
+use crate::app_actions::{OpenFile, Rename, SelectItem};
 
 use autocorrect::ignorer::Ignorer;
-use gpui::{Action, App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render, SharedString, Window, KeyBinding, div, px, InteractiveElement, Styled, AppContext, ParentElement};
+use gpui::{App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render, SharedString, Window, KeyBinding, div, px, InteractiveElement, Styled, AppContext, ParentElement};
 
 
 
-#[derive(Debug, Clone, PartialEq, Action, serde::Deserialize, schemars::JsonSchema)]
-pub struct OpenFile {
-    pub path: String,
-}
 
-#[derive(Debug, Clone, PartialEq, Action)]
-pub struct Rename;
 
-#[derive(Debug, Clone, PartialEq, Action)]
-pub struct SelectItem;
+
+
+
 
 use gpui_component::{
     ActiveTheme as _, IconName, StyledExt as _,
-    dock::{PanelControl, Panel, PanelEvent},
+    dock::{Panel, PanelEvent},
     h_flex,
     label::Label,
     list::ListItem,
@@ -184,9 +180,11 @@ impl Render for FileTreePanel { // Renamed from TreeStory
                                         )
                                         .on_click(cx.listener({
                                             let item = item.clone();
-                                            move |this, _, _, cx| {
+                                            move |this, _, window, cx| {
                                                 this.selected_item = Some(item.clone());
                                                 if !item.is_folder() {
+                                                    println!("Dispatching OpenFile action for path: {}", item.id);
+                                                    cx.focus_self(window); // FileTreePanelにフォーカスを設定
                                                     cx.dispatch_action(&OpenFile { path: item.id.to_string() });
                                                 }
                                                 cx.notify();

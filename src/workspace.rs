@@ -1,10 +1,9 @@
 use gpui::*;
-use gpui_component::dock::{DockArea, Panel, PanelEvent};
+use gpui_component::dock::DockArea;
 use gpui_component::dock::DockPlacement;
-use gpui::Bounds;
 
 use crate::app_title_bar::AppTitleBar;
-use crate::file_tree_panel::{FileTreePanel, OpenFile};
+use crate::app_actions::OpenFile;
 use crate::editor_panel::EditorPanel;
 use gpui_component::input::InputState;
 use std::path::PathBuf;
@@ -17,6 +16,7 @@ impl Workspace {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
+        println!("on_action_open_file called for path: {}", action.path);
         let file_path = &action.path;
         let file_name = PathBuf::from(file_path)
             .file_name()
