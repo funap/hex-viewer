@@ -185,7 +185,7 @@ impl Render for FileTreePanel { // Renamed from TreeStory
                                                 if !item.is_folder() {
                                                     println!("Dispatching OpenFile action for path: {}", item.id);
                                                     cx.focus_self(window); // FileTreePanelにフォーカスを設定
-                                                    cx.dispatch_action(&OpenFile { path: item.id.to_string() });
+                                                    window.dispatch_action(Box::new(OpenFile { path: item.id.to_string() }), cx);
                                                 }
                                                 cx.notify();
                                             }
