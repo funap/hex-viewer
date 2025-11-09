@@ -1,9 +1,3 @@
-# ルール
-
-- 回答は日本語でしてください。
-- コードベースの理解・編集は serena に委任にすること
-- Cargo.tomlのdependenciesのバージョンは変更しないこと
-
 # Rust coding guidelines
 
 * Prioritize code correctness and clarity. Speed and efficiency are secondary priorities unless otherwise specified.

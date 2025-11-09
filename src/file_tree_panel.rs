@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use autocorrect::ignorer::Ignorer;
 use gpui::{Action, App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render, SharedString, Window, KeyBinding, div, px, InteractiveElement, Styled, AppContext, ParentElement};
 
-// ...
+
 
 #[derive(Debug, Clone, PartialEq, Action, serde::Deserialize, schemars::JsonSchema)]
 pub struct OpenFile {
@@ -119,7 +119,6 @@ impl FileTreePanel { // Renamed from TreeStory
         if let Some(entry) = self.tree_state.read(cx).selected_entry() {
             let item = entry.item();
             println!("Renaming item: {} ({})", item.label, item.id);
-            // Here you could implement actual renaming logic
         }
     }
 }
