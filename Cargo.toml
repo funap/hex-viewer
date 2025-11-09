@@ -7,3 +7,8 @@ edition = "2024"
 gpui = "0.2"
 gpui-component = "0.4.0-preview1"
 anyhow = "1.0"
+tokio = { version = "1", features = ["full"] }
+gpui_util = "0.2"
+autocorrect = "2.14.2"
+serde = { version = "1.0", features = ["derive"] }
+schemars = "1.1"
