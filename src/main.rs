@@ -6,18 +6,14 @@ use gpui_component::dock::{DockArea, DockItem};
 use gpui_component::input::InputState;
 use std::sync::Arc;
 
-mod workspace;
-mod editor_panel;
-mod settings_panel;
-mod app_title_bar;
-mod file_tree_panel;
-mod app_actions;
+mod app;
+mod ui;
 
-use workspace::Workspace;
-use editor_panel::EditorPanel;
-use settings_panel::SettingsPanel;
-use app_title_bar::AppTitleBar;
-use file_tree_panel::FileTreePanel;
+use app::workspace::Workspace;
+use ui::components::editor_panel::EditorPanel;
+use ui::components::settings_panel::SettingsPanel;
+use ui::components::app_title_bar::AppTitleBar;
+use ui::components::file_tree_panel::FileTreePanel;
 use gpui_component::menu::AppMenuBar;
 
 
@@ -26,21 +22,25 @@ fn main() {
 
     app.run(move |cx| {
         gpui_component::init(cx);
-        file_tree_panel::init(cx);
+        ui::components::file_tree_panel::init(cx);
 
         cx.spawn(async move |cx| {
             cx.open_window(WindowOptions::default(), |window_ctx, cx| {
+use ui::constants;
+
+// ...
+
                 let dock_area_entity =
-                    cx.new(|cx| DockArea::new("main_dock_area", None, window_ctx, cx));
+                    cx.new(|cx| DockArea::new(constants::MAIN_DOCK_AREA_ID, None, window_ctx, cx));
 
                 let app_menu_bar = AppMenuBar::new(window_ctx, cx);
                 let app_title_bar = cx.new(|_cx| AppTitleBar { app_menu_bar });
 
-                let file_tree_panel = cx.new(|cx| FileTreePanel::new("File Tree", cx));
+                let file_tree_panel = cx.new(|cx| FileTreePanel::new(constants::FILE_TREE_PANEL_TITLE, cx));
 
                 dock_area_entity.update(cx, |dock_area, cx| {
-                    let panel2 = cx.new(|cx| SettingsPanel::new("Panel 2", cx));
-                    let panel3 = cx.new(|cx| SettingsPanel::new("Panel 3", cx));
+                    let panel2 = cx.new(|cx| SettingsPanel::new(constants::SETTINGS_PANEL_TITLE_2, cx));
+                    let panel3 = cx.new(|cx| SettingsPanel::new(constants::SETTINGS_PANEL_TITLE_3, cx));
 
                     let code_editor_state1 = cx.new(|cx| {
                         InputState::new(window_ctx, cx)
@@ -50,7 +50,7 @@ fn main() {
                             .default_value("fn main() {\n    println!(\"Hello, from editor 1!\");\n}")
                     });
                     let editor_panel1 =
-                        cx.new(|cx| EditorPanel::new("Editor 1", code_editor_state1, cx));
+                        cx.new(|cx| EditorPanel::new(constants::EDITOR_PANEL_TITLE_1, code_editor_state1, cx));
 
                     let code_editor_state2 = cx.new(|cx| {
                         InputState::new(window_ctx, cx)
@@ -60,7 +60,7 @@ fn main() {
                             .default_value("fn main() {\n    println!(\"Hello, from editor 2!\");\n}")
                     });
                     let editor_panel2 =
-                        cx.new(|cx| EditorPanel::new("Editor 2", code_editor_state2, cx));
+                        cx.new(|cx| EditorPanel::new(constants::EDITOR_PANEL_TITLE_2, code_editor_state2, cx));
 
                     dock_area.set_left_dock(
                         DockItem::tabs(

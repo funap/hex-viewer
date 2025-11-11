@@ -1,6 +1,6 @@
 - 回答は日本語でしてください。
 - コードベースの理解・編集は serena に委任にすること
-− gpui, gpui-componentのインターフェースは、WebFetch / GoogleSearch を使うより前に serena で確認してください
+− gpui, gpui-componentのインターフェースは、WebFetch / google_web_search  を使うより前に serena で確認してください
 - Cargo.toml の dependenciesのバージョンは変更しないこと
 - コードの構成や内容を要約するようなコメントは書かないでください。コメントは、コードが特定の方法で書かれている理由が複雑または分かりにくい場合に、「なぜ」そのように書かれているのかを説明するためだけに記述するべきです。
 
