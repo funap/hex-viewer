@@ -6,13 +6,15 @@ use gpui_component::dock::{Panel, PanelEvent};
 use gpui_component::input::{Input, InputState};
 
 /// A panel for displaying a code editor.
-pub struct EditorPanel {
+#[allow(dead_code)]
+pub struct Pane {
     title: SharedString,
     editor: Entity<InputState>,
     focus_handle: FocusHandle,
 }
 
-impl EditorPanel {
+impl Pane {
+    #[allow(dead_code)]
     pub fn new(
         title: impl Into<SharedString>,
         editor: Entity<InputState>,
@@ -26,23 +28,23 @@ impl EditorPanel {
     }
 }
 
-impl Render for EditorPanel {
+impl Render for Pane {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         Input::new(&self.editor).h_full() // Full height
     }
 }
 
-impl EventEmitter<PanelEvent> for EditorPanel {}
+impl EventEmitter<PanelEvent> for Pane {}
 
-impl Focusable for EditorPanel {
+impl Focusable for Pane {
     fn focus_handle(&self, _cx: &App) -> gpui::FocusHandle {
         self.focus_handle.clone()
     }
 }
 
-impl Panel for EditorPanel {
+impl Panel for Pane {
     fn panel_name(&self) -> &'static str {
-        "EditorPanel"
+        "Pane"
     }
 
     fn title(&self, _window: &Window, _cx: &App) -> gpui::AnyElement {

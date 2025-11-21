@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use crate::app::actions::{OpenFile, Rename, SelectItem};
+use crate::app::{OpenFile, Rename, SelectItem};
 
 use autocorrect::ignorer::Ignorer;
 use gpui::{App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render, SharedString, Window, KeyBinding, div, px, InteractiveElement, Styled, AppContext, ParentElement};

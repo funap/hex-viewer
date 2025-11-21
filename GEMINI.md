@@ -1,8 +1,9 @@
 - 回答は日本語でしてください。
 - コードベースの理解・編集は serena に委任にすること
 − gpui, gpui-componentのインターフェースは、WebFetch / google_web_search  を使うより前に serena で確認してください
-- Cargo.toml の dependenciesのバージョンは変更しないこと
+- Cargo.toml の dependenciesのバージョンは下げることは禁止。
 - コードの構成や内容を要約するようなコメントは書かないでください。コメントは、コードが特定の方法で書かれている理由が複雑または分かりにくい場合に、「なぜ」そのように書かれているのかを説明するためだけに記述するべきです。
+- タスクが完了する際に `cargo check` を実行して、コンパイルエラーがないことを確認してください。
 
 # Rust coding guidelines
 
@@ -143,3 +144,76 @@ GPUI has had some changes to its APIs. Always write code using the new APIs:
 * Use `Context<T>` references. This replaces `ModelContext<T>` which no longer exists and should NEVER be used.
 * `Window` is now passed around explicitly. The new interface adds a `Window` reference parameter to some methods, and adds some new "*_in" methods for plumbing `Window`. The old types `WindowContext` and `ViewContext<T>` should NEVER be used.
 
+
+本ドキュメントは、GPUIを用いたHex Editorプロジェクトにおけるファイル構成、モジュールの責務、および主要な設計原則を定義するものです。
+
+1. ディレクトリ構造と命名規則すべてのコードは src/ ディレクトリ内に配置し、機能ごとに独立したモジュールとして管理します。
+
+| パス | 責務の概要 | 命名規則 |
+| src/main.rs | アプリケーションのエントリーポイント。GPUI初期化とAppモデルの起動のみ。 | - |
+| src/app.rs | アプリケーションのルートステート。グローバルデータ、GPUIアクションの登録。 | App 構造体 |
+| src/ui/ | ユーザーインターフェース (GPUI View/Model)。描画とイベントハンドリング。 | ui::* モジュール、*View / *Model 構造体 |
+| src/data/ | バイナリデータとI/O処理。ファイルシステムとのやり取り。 | data::* モジュール、FileBuffer 構造体 |
+| src/analysis/ | バイナリの高度な解析ロジック。状態を持たない純粋関数を推奨。 | analysis::* モジュール |
+| src/search/ | 検索・Grepロジック。 | search::* モジュール |
+| src/checksum/ | ハッシュ・チェックサム計算ロジック。 | checksum::* モジュール |
+| src/util/ | 共通ユーティリティ、定数、トレイト定義など。 | util::* モジュール |
+
+2. モジュールの責務 (Single Responsibility Principle)
+
+各モジュールは以下の責務を厳守すること。
+
+2.1. データ層(src/data/)
+
+data::file_buffer:  大規模なバイナリファイルに効率的にアクセスするための抽象化レイヤー（例: メモリマップトファイル (mmap) の利用）。ファイルの読み込み、特定範囲のバイト列取得、編集操作（未実装の場合はプレースホルダーを置く）。UI層はこのモジュールを経由せずに直接ファイルI/Oを行うことを禁止する。
+
+data::encoding: バイト列を指定されたエンコーディング（UTF-8, SJISなど）に対応する文字列に変換する責務。エンコーディング判別ロジックもここに含める。
+ 
+ 2.2. UI層 (src/ui/)
+ 
+ ui::window:  GPUIのメインウィンドウ管理。ドッキングシステム、タブ、ペインの作成・破棄・フォーカス管理。複数ファイル表示、単一ファイルの分割表示のロジックはここで管理する。
+ 
+ ui::pane:  単一のファイル（またはファイルの一部分）のコンテキストを持つコンテナ。EditorViewのライフサイクルを管理し、ファイル状態（ダーティフラグ、エンコーディング設定など）を保持する。
+ 
+ ui::editor_view: 純粋な描画ロジックに集中する。バイト列をHex、アドレス、テキスト表示に変換し、GPUIの描画APIを用いてレンダリングする。カーソル移動、選択範囲、スクロールなどの入力イベントを処理し、その結果をPaneやFileBufferに伝える。ビジネスロジック（Diff計算、検索実行など）の実行を禁止する。
+ 
+ ui::toolbar: ユーザー入力（検索クエリ、ハッシュ計算トリガーなど）を受け取り、結果を表示するためのコンポーネント。
+ 
+ 2.3. 解析・計算層 (src/analysis/, src/search/, src/checksum/)
+ 
+ これらのモジュールは、UIとは完全に分離された純粋な計算ロジックを提供する。入力はバイト列またはファイルコンテキスト、出力は計算結果オブジェクト（Diff結果、検索結果リスト、ハッシュ値など）とする。計算はUIスレッドをブロックしないよう、GPUIの非同期タスク (cx.spawn) または別途スレッドプールを利用して実行することを原則とする。
+ 
+ 2.4. サービス層 (src/service/) 
+
+service::editor_service:
+
+ワークフローのオーケストレーション: UIからのリクエスト（例: 「このファイルとあのファイルをDiffせよ」）を受け取り、data/、analysis/、search/モジュールを呼び出し、結果をまとめてAppまたはPaneの状態に反映させる。
+
+非同期タスクの統合管理: Diff、Grepなどの重い処理を非同期で実行し、進捗状況を監視する。
+
+データフローの制御: 複雑なロジック（例: バイナリ編集後の元に戻す/やり直す機能の管理）をFileBufferと連携して制御する。
+
+
+3. アーキテクチャ原則
+
+非同期処理の徹底:
+
+ファイルI/O、検索、Diff計算、ハッシュ計算など、時間がかかる可能性のあるすべての操作は、GPUIの非同期処理 (Task / cx.spawn) を用いてバックグラウンドで実行し、UIスレッドのフリーズ（ブロック）を回避する。これらのタスクの実行と結果のハンドリングは、Service層を通じて行うことを推奨する。
+
+リアクティブな状態管理:
+
+アプリケーションの状態はGPUIのModelとViewを用いてリアクティブに管理する。特に、FileBufferのデータ変更は、EditorViewに自動的に通知され、再描画されるように設計する。
+
+データとUIの分離 (MVC/MVVM):
+
+data/ (Model) はコアな情報のみを扱い、UIライブラリに依存しない。
+
+ui/ (View/ViewModel) はデータの表示とユーザー入力の処理のみに集中する。
+
+呼び出しパス: UI (View) -> Service -> Logic/Data
+
+キーボードショートカットの集中管理:
+
+すべてのアクションは、src/app.rsで定義し、KeyBinding::new()で登録する。
+
+アクションのハンドリングは、その責務を持つ適切なViewまたはModel（例: OpenNewFileはApp、MoveCursorはEditorView）で行う。
