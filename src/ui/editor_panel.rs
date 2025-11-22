@@ -1,12 +1,24 @@
 use crate::data::file_buffer::FileBuffer;
 use gpui::ScrollWheelEvent;
 use gpui::*;
-use gpui_component::PixelsExt;
 use gpui_component::dock::{Panel, PanelEvent};
+use gpui_component::{ActiveTheme, PixelsExt};
 use std::cmp;
 use std::sync::Arc;
 
-actions!(editor_panel, [MoveLeft, MoveRight, MoveUp, MoveDown]);
+actions!(
+    editor_panel,
+    [
+        MoveLeft,
+        MoveRight,
+        MoveUp,
+        MoveDown,
+        SelectLeft,
+        SelectRight,
+        SelectUp,
+        SelectDown
+    ]
+);
 
 const CONTEXT: &str = "EditorPanel";
 
@@ -16,6 +28,10 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("right", MoveRight, Some(CONTEXT)),
         KeyBinding::new("up", MoveUp, Some(CONTEXT)),
         KeyBinding::new("down", MoveDown, Some(CONTEXT)),
+        KeyBinding::new("shift-left", SelectLeft, Some(CONTEXT)),
+        KeyBinding::new("shift-right", SelectRight, Some(CONTEXT)),
+        KeyBinding::new("shift-up", SelectUp, Some(CONTEXT)),
+        KeyBinding::new("shift-down", SelectDown, Some(CONTEXT)),
     ]);
 }
 pub struct EditorPanel {
@@ -163,20 +179,28 @@ impl EditorPanel {
     }
 
     fn move_left(&mut self, _: &MoveLeft, _window: &mut Window, cx: &mut Context<Self>) {
+        self.selection_start = None;
+        self.selection_end = None;
         if self.cursor_offset > 0 {
             self.cursor_offset -= 1;
+            self.ensure_cursor_visible();
             cx.notify();
         }
     }
 
     fn move_right(&mut self, _: &MoveRight, _window: &mut Window, cx: &mut Context<Self>) {
+        self.selection_start = None;
+        self.selection_end = None;
         if self.cursor_offset < self.buffer.len().saturating_sub(1) {
             self.cursor_offset += 1;
+            self.ensure_cursor_visible();
             cx.notify();
         }
     }
 
     fn move_up(&mut self, _: &MoveUp, _window: &mut Window, cx: &mut Context<Self>) {
+        self.selection_start = None;
+        self.selection_end = None;
         if self.cursor_offset >= 16 {
             self.cursor_offset -= 16;
             self.ensure_cursor_visible();
@@ -185,9 +209,60 @@ impl EditorPanel {
     }
 
     fn move_down(&mut self, _: &MoveDown, _window: &mut Window, cx: &mut Context<Self>) {
+        self.selection_start = None;
+        self.selection_end = None;
         let new_offset = self.cursor_offset + 16;
         if new_offset < self.buffer.len() {
             self.cursor_offset = new_offset;
+            self.ensure_cursor_visible();
+            cx.notify();
+        }
+    }
+
+    fn select_left(&mut self, _: &SelectLeft, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.selection_start.is_none() {
+            self.selection_start = Some(self.cursor_offset);
+        }
+        if self.cursor_offset > 0 {
+            self.cursor_offset -= 1;
+            self.selection_end = Some(self.cursor_offset);
+            self.ensure_cursor_visible();
+            cx.notify();
+        }
+    }
+
+    fn select_right(&mut self, _: &SelectRight, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.selection_start.is_none() {
+            self.selection_start = Some(self.cursor_offset);
+        }
+        if self.cursor_offset < self.buffer.len().saturating_sub(1) {
+            self.cursor_offset += 1;
+            self.selection_end = Some(self.cursor_offset);
+            self.ensure_cursor_visible();
+            cx.notify();
+        }
+    }
+
+    fn select_up(&mut self, _: &SelectUp, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.selection_start.is_none() {
+            self.selection_start = Some(self.cursor_offset);
+        }
+        if self.cursor_offset >= 16 {
+            self.cursor_offset -= 16;
+            self.selection_end = Some(self.cursor_offset);
+            self.ensure_cursor_visible();
+            cx.notify();
+        }
+    }
+
+    fn select_down(&mut self, _: &SelectDown, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.selection_start.is_none() {
+            self.selection_start = Some(self.cursor_offset);
+        }
+        let new_offset = self.cursor_offset + 16;
+        if new_offset < self.buffer.len() {
+            self.cursor_offset = new_offset;
+            self.selection_end = Some(self.cursor_offset);
             self.ensure_cursor_visible();
             cx.notify();
         }
@@ -233,7 +308,7 @@ impl Render for EditorPanel {
         div()
             .flex()
             .flex_col()
-            .bg(rgb(0x1e1e1e))
+            .bg(cx.theme().background)
             .font_family("Menlo")
             .size_full()
             .key_context(CONTEXT)
@@ -242,6 +317,10 @@ impl Render for EditorPanel {
             .on_action(cx.listener(Self::move_right))
             .on_action(cx.listener(Self::move_up))
             .on_action(cx.listener(Self::move_down))
+            .on_action(cx.listener(Self::select_left))
+            .on_action(cx.listener(Self::select_right))
+            .on_action(cx.listener(Self::select_up))
+            .on_action(cx.listener(Self::select_down))
             .on_scroll_wheel(cx.listener(Self::on_scroll_wheel))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
@@ -258,6 +337,13 @@ struct PrepaintState {
     data_lines: Vec<DataLine>,
     selection_quads: Vec<PaintQuad>,
     cursor: Option<PaintQuad>,
+    header: HeaderParts,
+}
+
+struct HeaderParts {
+    offset: ShapedLine,
+    hex_bytes: Vec<ShapedLine>,
+    ascii: ShapedLine,
 }
 
 struct DataLine {
@@ -323,12 +409,13 @@ impl Element for HexViewElement {
         let text_style = window.text_style();
         let font_size = text_style.font_size.to_pixels(window.rem_size());
 
-        let offset_color = rgb(0x858585);
-        let hex_byte_color = rgb(0x9cdcfe);
-        let hex_null_color = rgb(0x505050);
-        let ascii_printable_color = rgb(0xce9178);
-        let ascii_non_printable_color = rgb(0x505050);
-        let selection_bg_color = rgb(0x264f78);
+        let theme = cx.theme();
+        let offset_color = theme.info;
+        let hex_byte_color = theme.primary;
+        let hex_null_color = theme.muted;
+        let ascii_printable_color = theme.foreground;
+        let ascii_non_printable_color = theme.muted;
+        let selection_bg_color = theme.secondary;
 
         let line_count = (buffer.len() + 15) / 16;
         let header_height = px(32.);
@@ -416,7 +503,15 @@ impl Element for HexViewElement {
             let mut ascii_str = String::new();
             let mut ascii_runs = Vec::new();
             let mut current_run_start = 0;
-            let mut current_color = ascii_non_printable_color;
+            let mut current_color = if let Some(first) = chunk.first() {
+                if *first >= 32 && *first <= 126 {
+                    ascii_printable_color
+                } else {
+                    ascii_non_printable_color
+                }
+            } else {
+                ascii_non_printable_color
+            };
 
             for (byte_idx, byte) in chunk.iter().enumerate() {
                 let (char_str, color) = if *byte >= 32 && *byte <= 126 {
@@ -481,11 +576,66 @@ impl Element for HexViewElement {
                 let cursor_x = hex_start_x + (hex_byte_width + hex_gap) * byte_in_row as f32;
 
                 Some(fill(
-                    Bounds::new(point(cursor_x, y_pos), size(px(2.), row_height)),
-                    gpui::blue(),
+                    Bounds::new(point(cursor_x, y_pos), size(hex_byte_width, row_height)),
+                    theme.accent,
                 ))
             } else {
                 None
+            }
+        };
+
+        let header = {
+            let header_color = theme.foreground;
+            let font = text_style.font();
+
+            let offset_run = TextRun {
+                len: 6,
+                font: font.clone(),
+                color: header_color.into(),
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            };
+            let offset =
+                window
+                    .text_system()
+                    .shape_line("Offset".into(), font_size, &[offset_run], None);
+
+            let mut hex_bytes = Vec::new();
+            for i in 0..16 {
+                let s = format!("+{:X}", i);
+                let run = TextRun {
+                    len: s.len(),
+                    font: font.clone(),
+                    color: header_color.into(),
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                };
+                hex_bytes.push(
+                    window
+                        .text_system()
+                        .shape_line(s.into(), font_size, &[run], None),
+                );
+            }
+
+            let ascii_run = TextRun {
+                len: 5,
+                font: font.clone(),
+                color: header_color.into(),
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            };
+            let ascii =
+                window
+                    .text_system()
+                    .shape_line("ASCII".into(), font_size, &[ascii_run], None);
+
+            HeaderParts {
+                offset,
+                hex_bytes,
+                ascii,
             }
         };
 
@@ -493,6 +643,7 @@ impl Element for HexViewElement {
             data_lines,
             selection_quads,
             cursor,
+            header,
         }
     }
 
@@ -514,8 +665,9 @@ impl Element for HexViewElement {
         let hex_gap = px(4.);
         let ascii_start_x = hex_start_x + (hex_byte_width + hex_gap) * 16.0 + px(16.);
 
-        let bg_color = rgb(0x1e1e1e);
-        let border_color = rgb(0x333333);
+        let theme = cx.theme();
+        let bg_color = theme.background;
+        let border_color = theme.border;
 
         window.paint_quad(fill(bounds, bg_color));
 
@@ -527,8 +679,33 @@ impl Element for HexViewElement {
             border_color,
         ));
 
+        // Paint header
+        let header_y = bounds.top();
+        prepaint
+            .header
+            .offset
+            .paint(point(bounds.left(), header_y), header_height, window, cx)
+            .ok();
+
+        for (i, hex_header) in prepaint.header.hex_bytes.iter().enumerate() {
+            let x_pos = hex_start_x + (hex_byte_width + hex_gap) * i as f32;
+            hex_header
+                .paint(point(x_pos, header_y), header_height, window, cx)
+                .ok();
+        }
+
+        prepaint
+            .header
+            .ascii
+            .paint(point(ascii_start_x, header_y), header_height, window, cx)
+            .ok();
+
         for selection_quad in prepaint.selection_quads.drain(..) {
             window.paint_quad(selection_quad);
+        }
+
+        if let Some(cursor) = prepaint.cursor.take() {
+            window.paint_quad(cursor);
         }
 
         for (i, data_line) in prepaint.data_lines.iter().enumerate() {
@@ -550,10 +727,6 @@ impl Element for HexViewElement {
                 .ascii_line
                 .paint(point(ascii_start_x, y_pos), row_height, window, cx)
                 .ok();
-        }
-
-        if let Some(cursor) = prepaint.cursor.take() {
-            window.paint_quad(cursor);
         }
 
         self.panel.update(cx, |panel, _cx| {

@@ -6,6 +6,7 @@ use std::sync::Arc;
 mod app;
 mod data;
 mod service;
+mod theme;
 mod ui;
 mod util;
 
@@ -29,6 +30,7 @@ fn main() {
         cx.set_global(app::App::new());
 
         gpui_component::init(cx);
+        theme::init(cx);
         ui::file_tree_panel::init(cx);
         ui::editor_panel::init(cx);
 
