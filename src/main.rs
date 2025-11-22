@@ -1,6 +1,7 @@
 use gpui::{AppContext, Application, WindowOptions};
 use gpui_component::Root;
 use gpui_component::dock::{DockArea, DockItem};
+use gpui_component_assets::Assets;
 use std::sync::Arc;
 
 mod app;
@@ -24,7 +25,7 @@ fn main() {
         .unwrap();
     let _guard = rt.enter();
 
-    let app = Application::new();
+    let app = Application::new().with_assets(Assets);
 
     app.run(move |cx| {
         cx.set_global(app::App::new());

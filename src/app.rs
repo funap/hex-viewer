@@ -18,6 +18,12 @@ pub struct Rename;
 #[derive(Clone, PartialEq, Action)]
 pub struct SelectItem;
 
+#[derive(Clone, PartialEq, Action)]
+pub struct OpenFolder;
+
+#[derive(Clone, PartialEq, Action)]
+pub struct CloseFolder;
+
 #[derive(Clone)]
 pub struct AddEditorPanel(pub Arc<FileBuffer>);
 

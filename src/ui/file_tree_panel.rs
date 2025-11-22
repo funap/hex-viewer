@@ -1,16 +1,11 @@
+use crate::app::{CloseFolder, OpenFile, OpenFolder, Rename, SelectItem};
 use std::path::PathBuf;
-use crate::app::{OpenFile, Rename, SelectItem};
 
 use autocorrect::ignorer::Ignorer;
-use gpui::{App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render, SharedString, Window, KeyBinding, div, px, InteractiveElement, Styled, AppContext, ParentElement};
-
-
-
-
-
-
-
-
+use gpui::{
+    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement,
+    IntoElement, KeyBinding, ParentElement, Render, SharedString, Styled, Window, div, px,
+};
 
 use gpui_component::{
     ActiveTheme as _, IconName, StyledExt as _,
@@ -21,8 +16,6 @@ use gpui_component::{
     tree::{TreeItem, TreeState, tree},
     v_flex,
 };
-
-
 
 const CONTEXT: &str = "TreeStory";
 pub(crate) fn init(cx: &mut App) {
@@ -37,6 +30,7 @@ pub struct FileTreePanel {
     selected_item: Option<TreeItem>,
     title: SharedString,
     focus_handle: FocusHandle,
+    root_path: Option<PathBuf>,
 }
 
 fn build_file_items(ignorer: &Ignorer, root: &PathBuf, path: &PathBuf) -> Vec<TreeItem> {
@@ -72,7 +66,8 @@ fn build_file_items(ignorer: &Ignorer, root: &PathBuf, path: &PathBuf) -> Vec<Tr
     items
 }
 
-impl FileTreePanel { // Renamed from TreeStory
+impl FileTreePanel {
+    // Renamed from TreeStory
     pub fn new(title: impl Into<SharedString>, cx: &mut Context<Self>) -> Self {
         let tree_state = cx.new(|cx| TreeState::new(cx));
 
@@ -81,9 +76,8 @@ impl FileTreePanel { // Renamed from TreeStory
             selected_item: None,
             title: title.into(),
             focus_handle: cx.focus_handle(),
+            root_path: None,
         };
-
-        Self::load_files(tree_state, PathBuf::from("./"), cx);
 
         this
     }
@@ -117,6 +111,49 @@ impl FileTreePanel { // Renamed from TreeStory
             println!("Renaming item: {} ({})", item.label, item.id);
         }
     }
+
+    fn on_action_open_folder(
+        &mut self,
+        _: &OpenFolder,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let path = cx.prompt_for_paths(gpui::PathPromptOptions {
+            files: false,
+            directories: true,
+            multiple: false,
+            prompt: Some("Select a folder".into()),
+        });
+
+        let view = cx.entity();
+        cx.spawn_in(window, async move |_, window| {
+            let path = path.await.ok()?.ok()??.iter().next()?.clone();
+
+            window
+                .update(|_window, cx| {
+                    view.update(cx, |this, cx| {
+                        let tree_state = this.tree_state.clone();
+                        this.root_path = Some(path.clone());
+                        Self::load_files(tree_state, path, cx);
+                    });
+                })
+                .ok()
+        })
+        .detach();
+    }
+
+    fn on_action_close_folder(
+        &mut self,
+        _: &CloseFolder,
+        _: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.root_path = None;
+        self.tree_state.update(cx, |state, cx| {
+            state.set_items(vec![], cx);
+        });
+        cx.notify();
+    }
 }
 
 // Removed Story trait implementation as it's not relevant to this project.
@@ -134,18 +171,49 @@ impl FileTreePanel { // Renamed from TreeStory
 //     }
 // }
 
-impl Render for FileTreePanel { // Renamed from TreeStory
+impl Render for FileTreePanel {
+    // Renamed from TreeStory
     fn render(
         &mut self,
         _: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
         let view = cx.entity();
+
+        if self.root_path.is_none() {
+            return v_flex()
+                .id("tree-story")
+                .key_context(CONTEXT)
+                .on_action(cx.listener(Self::on_action_open_folder))
+                .size_full()
+                .justify_center()
+                .items_center()
+                .child(
+                    div().child(
+                        div()
+                            .on_mouse_down(
+                                gpui::MouseButton::Left,
+                                cx.listener(|this, _, window, cx| {
+                                    this.on_action_open_folder(&OpenFolder, window, cx);
+                                }),
+                            )
+                            .id("open-folder-btn")
+                            .p_2()
+                            .bg(cx.theme().accent)
+                            .text_color(cx.theme().accent_foreground)
+                            .rounded_md()
+                            .cursor_pointer()
+                            .child("Open Folder"),
+                    ),
+                );
+        }
+
         v_flex()
             .id("tree-story")
             .key_context(CONTEXT)
             .on_action(cx.listener(Self::on_action_rename))
             .on_action(cx.listener(Self::on_action_select_item))
+            .on_action(cx.listener(Self::on_action_close_folder))
             .gap_5()
             .size_full()
             .child(
@@ -183,9 +251,17 @@ impl Render for FileTreePanel { // Renamed from TreeStory
                                             move |this, _, window, cx| {
                                                 this.selected_item = Some(item.clone());
                                                 if !item.is_folder() {
-                                                    println!("Dispatching OpenFile action for path: {}", item.id);
+                                                    println!(
+                                                        "Dispatching OpenFile action for path: {}",
+                                                        item.id
+                                                    );
                                                     cx.focus_self(window); // FileTreePanelにフォーカスを設定
-                                                    window.dispatch_action(Box::new(OpenFile { path: item.id.to_string() }), cx);
+                                                    window.dispatch_action(
+                                                        Box::new(OpenFile {
+                                                            path: item.id.to_string(),
+                                                        }),
+                                                        cx,
+                                                    );
                                                 }
                                                 cx.notify();
                                             }
