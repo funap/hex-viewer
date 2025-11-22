@@ -1,6 +1,9 @@
 use crate::data::file_buffer::FileBuffer;
+use gpui::ScrollWheelEvent;
 use gpui::*;
+use gpui_component::PixelsExt;
 use gpui_component::dock::{Panel, PanelEvent};
+use std::cmp;
 use std::sync::Arc;
 
 actions!(editor_panel, [MoveLeft, MoveRight, MoveUp, MoveDown]);
@@ -132,6 +135,33 @@ impl EditorPanel {
         cx.notify();
     }
 
+    fn on_scroll_wheel(
+        &mut self,
+        event: &ScrollWheelEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        // Determine visible rows based on current bounds
+        let bounds = match self.last_bounds {
+            Some(b) => b,
+            None => return,
+        };
+        let header_height = px(32.);
+        let row_height = px(24.);
+        let visible_height = bounds.size.height - header_height;
+        let visible_rows = (visible_height / row_height).floor() as usize;
+        let total_rows = (self.buffer.len() + 15) / 16;
+        let max_offset = total_rows.saturating_sub(visible_rows) as i32;
+
+        // Scroll delta Y: positive means scroll down (content moves up)
+        let delta_y = event.delta.pixel_delta(row_height).y.as_f32() as i32;
+
+        let new_scroll_offset = self.scroll_offset as i32 - delta_y;
+
+        self.scroll_offset = cmp::max(0, cmp::min(new_scroll_offset, max_offset)) as usize;
+        cx.notify();
+    }
+
     fn move_left(&mut self, _: &MoveLeft, _window: &mut Window, cx: &mut Context<Self>) {
         if self.cursor_offset > 0 {
             self.cursor_offset -= 1;
@@ -212,6 +242,7 @@ impl Render for EditorPanel {
             .on_action(cx.listener(Self::move_right))
             .on_action(cx.listener(Self::move_up))
             .on_action(cx.listener(Self::move_down))
+            .on_scroll_wheel(cx.listener(Self::on_scroll_wheel))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
@@ -302,7 +333,7 @@ impl Element for HexViewElement {
         let line_count = (buffer.len() + 15) / 16;
         let header_height = px(32.);
         let row_height = px(24.);
-        
+
         let scroll_offset = panel.scroll_offset;
         let visible_height = bounds.size.height - header_height;
         let visible_rows = (visible_height / row_height).ceil() as usize + 1;
@@ -440,7 +471,13 @@ impl Element for HexViewElement {
             if focus_handle.is_focused(window) && cursor_offset < buffer.len() {
                 let cursor_row = cursor_offset / 16;
                 let byte_in_row = cursor_offset % 16;
-                let y_pos = bounds.top() + header_height + row_height * cursor_row as f32;
+                // Adjust for current scroll offset
+                let visible_cursor_row = if cursor_row >= panel.scroll_offset {
+                    cursor_row - panel.scroll_offset
+                } else {
+                    0
+                };
+                let y_pos = bounds.top() + header_height + row_height * visible_cursor_row as f32;
                 let cursor_x = hex_start_x + (hex_byte_width + hex_gap) * byte_in_row as f32;
 
                 Some(fill(
