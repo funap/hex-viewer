@@ -435,11 +435,40 @@ impl Element for HexViewElement {
         let hex_byte_width = px(22.);
         let hex_gap = px(4.);
 
+        let (min_sel, max_sel) = if let (Some(start), Some(end)) = (selection_start, selection_end)
+        {
+            if start <= end {
+                (start, end)
+            } else {
+                (end, start)
+            }
+        } else {
+            (usize::MAX, usize::MIN)
+        };
+
         for i in start_row..end_row {
             let offset = i * 16;
             let chunk = buffer.get_range(offset, 16);
             let row_index = i - start_row;
             let y_pos = bounds.top() + header_height + row_height * row_index as f32;
+
+            // Draw continuous selection background for this line
+            let line_start = offset;
+            let line_end = offset + 15;
+            if line_start <= max_sel && line_end >= min_sel {
+                let start_in_line = cmp::max(line_start, min_sel) - line_start;
+                let end_in_line = cmp::min(line_end, max_sel) - line_start;
+
+                let x_start = hex_start_x + (hex_byte_width + hex_gap) * start_in_line as f32;
+                let x_end =
+                    hex_start_x + (hex_byte_width + hex_gap) * end_in_line as f32 + hex_byte_width;
+                let width = x_end - x_start;
+
+                selection_quads.push(fill(
+                    Bounds::new(point(x_start, y_pos), size(width, row_height)),
+                    selection_bg_color,
+                ));
+            }
 
             let offset_str = format!("{:08x}", offset);
             let offset_run = TextRun {
@@ -456,33 +485,12 @@ impl Element for HexViewElement {
                     .shape_line(offset_str.into(), font_size, &[offset_run], None);
 
             let mut hex_lines = Vec::new();
-            for (byte_idx, byte) in chunk.iter().enumerate() {
-                let byte_pos = offset + byte_idx;
-                let is_selected = if let (Some(start), Some(end)) = (selection_start, selection_end)
-                {
-                    let (min_pos, max_pos) = if start <= end {
-                        (start, end)
-                    } else {
-                        (end, start)
-                    };
-                    byte_pos >= min_pos && byte_pos <= max_pos
-                } else {
-                    false
-                };
-
+            for (_byte_idx, byte) in chunk.iter().enumerate() {
                 let color = if *byte == 0 {
                     hex_null_color
                 } else {
                     hex_byte_color
                 };
-
-                if is_selected {
-                    let x_pos = hex_start_x + (hex_byte_width + hex_gap) * byte_idx as f32;
-                    selection_quads.push(fill(
-                        Bounds::new(point(x_pos, y_pos), size(hex_byte_width, row_height)),
-                        selection_bg_color,
-                    ));
-                }
 
                 let hex_str = format!("{:02x}", byte);
                 let hex_run = TextRun {
