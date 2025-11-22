@@ -2,6 +2,7 @@ use crate::data::file_buffer::FileBuffer;
 use gpui::ScrollWheelEvent;
 use gpui::*;
 use gpui_component::dock::{Panel, PanelEvent};
+use gpui_component::scroll::*;
 use gpui_component::{ActiveTheme, PixelsExt};
 use std::cmp;
 use std::sync::Arc;
@@ -61,6 +62,8 @@ pub struct EditorPanel {
     last_bounds: Option<Bounds<Pixels>>,
     cursor_offset: usize,
     scroll_offset: usize,
+    scrollbar_state: ScrollbarState,
+    scroll_handle: ScrollHandle,
 }
 
 impl EditorPanel {
@@ -74,6 +77,8 @@ impl EditorPanel {
             last_bounds: None,
             cursor_offset: 0,
             scroll_offset: 0,
+            scrollbar_state: ScrollbarState::default(),
+            scroll_handle: ScrollHandle::new(),
         }
     }
 
@@ -99,6 +104,8 @@ impl EditorPanel {
         } else if cursor_row >= self.scroll_offset + visible_rows {
             self.scroll_offset = cursor_row.saturating_sub(visible_rows - 1);
         }
+        self.scroll_handle
+            .set_offset(point(px(0.), -(self.scroll_offset as f32 * row_height)));
     }
 
     fn byte_pos_from_point(&self, point: Point<Pixels>) -> Option<usize> {
@@ -156,6 +163,16 @@ impl EditorPanel {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // Sync scroll handle to scroll offset if changed by scrollbar drag
+        let row_height = px(24.);
+        let handle_y = self.scroll_handle.offset().y;
+        let handle_row = ((-handle_y).max(px(0.)) / row_height).round() as usize;
+        let total_rows = (self.buffer.len() + 15) / 16;
+        if handle_row != self.scroll_offset {
+            self.scroll_offset = handle_row.min(total_rows.saturating_sub(1));
+            cx.notify();
+        }
+
         if self.is_dragging {
             if let Some(byte_pos) = self.byte_pos_from_point(event.position) {
                 self.selection_end = Some(byte_pos);
@@ -166,7 +183,18 @@ impl EditorPanel {
 
     fn on_mouse_up(&mut self, _event: &MouseUpEvent, _window: &mut Window, cx: &mut Context<Self>) {
         self.is_dragging = false;
-        cx.notify();
+
+        // Sync scroll handle on mouse up as well
+        let row_height = px(24.);
+        let handle_y = self.scroll_handle.offset().y;
+        let handle_row = ((-handle_y).max(px(0.)) / row_height).round() as usize;
+        let total_rows = (self.buffer.len() + 15) / 16;
+        if handle_row != self.scroll_offset {
+            self.scroll_offset = handle_row.min(total_rows.saturating_sub(1));
+            cx.notify();
+        } else {
+            cx.notify();
+        }
     }
 
     fn on_scroll_wheel(
@@ -193,6 +221,8 @@ impl EditorPanel {
         let new_scroll_offset = self.scroll_offset as i32 - delta_y;
 
         self.scroll_offset = cmp::max(0, cmp::min(new_scroll_offset, max_offset)) as usize;
+        self.scroll_handle
+            .set_offset(point(px(0.), -(self.scroll_offset as f32 * row_height)));
         cx.notify();
     }
 
@@ -444,6 +474,26 @@ impl Panel for EditorPanel {
 
 impl Render for EditorPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let header_height = px(32.);
+        let row_height = px(24.);
+        let total_rows = (self.buffer.len() + 15) / 16;
+
+        let extra_height = if let Some(bounds) = self.last_bounds {
+            let visible_height = bounds.size.height - header_height;
+            let ratio = visible_height / row_height;
+            visible_height - row_height * ratio.floor()
+        } else {
+            px(0.)
+        };
+
+        let total_height = header_height + row_height * total_rows as f32 + extra_height;
+
+        let handle_y = self.scroll_handle.offset().y;
+        let handle_row = ((-handle_y).max(px(0.)) / row_height).round() as usize;
+        if handle_row != self.scroll_offset {
+            self.scroll_offset = handle_row.min(total_rows.saturating_sub(1));
+        }
+
         div()
             .flex()
             .flex_col()
@@ -473,12 +523,23 @@ impl Render for EditorPanel {
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
-            .child(HexViewElement { panel: cx.entity() })
+            .child(HexViewElement {
+                panel: cx.entity(),
+                scroll_offset: self.scroll_offset,
+            })
+            .child(
+                div().absolute().top_0().right_0().bottom_0().w_4().child(
+                    Scrollbar::vertical(&self.scrollbar_state, &self.scroll_handle)
+                        .axis(ScrollbarAxis::Vertical)
+                        .scroll_size(size(px(0.), total_height)),
+                ),
+            )
     }
 }
 
 struct HexViewElement {
     panel: Entity<EditorPanel>,
+    scroll_offset: usize,
 }
 
 struct PrepaintState {
@@ -569,7 +630,7 @@ impl Element for HexViewElement {
         let header_height = px(32.);
         let row_height = px(24.);
 
-        let scroll_offset = panel.scroll_offset;
+        let scroll_offset = self.scroll_offset;
         let visible_height = bounds.size.height - header_height;
         let visible_rows = (visible_height / row_height).ceil() as usize + 1;
         let start_row = scroll_offset;
