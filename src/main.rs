@@ -30,6 +30,7 @@ fn main() {
 
         gpui_component::init(cx);
         ui::file_tree_panel::init(cx);
+        ui::editor_panel::init(cx);
 
         cx.spawn(async move |cx| {
             let app = cx

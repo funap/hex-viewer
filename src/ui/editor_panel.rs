@@ -3,6 +3,18 @@ use gpui::*;
 use gpui_component::dock::{Panel, PanelEvent};
 use std::sync::Arc;
 
+actions!(editor_panel, [MoveLeft, MoveRight, MoveUp, MoveDown]);
+
+const CONTEXT: &str = "EditorPanel";
+
+pub(crate) fn init(cx: &mut App) {
+    cx.bind_keys([
+        KeyBinding::new("left", MoveLeft, Some(CONTEXT)),
+        KeyBinding::new("right", MoveRight, Some(CONTEXT)),
+        KeyBinding::new("up", MoveUp, Some(CONTEXT)),
+        KeyBinding::new("down", MoveDown, Some(CONTEXT)),
+    ]);
+}
 pub struct EditorPanel {
     buffer: Arc<FileBuffer>,
     focus_handle: FocusHandle,
@@ -10,6 +22,8 @@ pub struct EditorPanel {
     selection_end: Option<usize>,
     is_dragging: bool,
     last_bounds: Option<Bounds<Pixels>>,
+    cursor_offset: usize,
+    scroll_offset: usize,
 }
 
 impl EditorPanel {
@@ -21,6 +35,32 @@ impl EditorPanel {
             selection_end: None,
             is_dragging: false,
             last_bounds: None,
+            cursor_offset: 0,
+            scroll_offset: 0,
+        }
+    }
+
+    fn cursor_offset(&self) -> usize {
+        self.cursor_offset
+    }
+
+    fn ensure_cursor_visible(&mut self) {
+        let bounds = match self.last_bounds {
+            Some(b) => b,
+            None => return,
+        };
+
+        let header_height = px(32.);
+        let row_height = px(24.);
+        let visible_height = bounds.size.height - header_height;
+        let visible_rows = (visible_height / row_height).floor() as usize;
+
+        let cursor_row = self.cursor_offset / 16;
+
+        if cursor_row < self.scroll_offset {
+            self.scroll_offset = cursor_row;
+        } else if cursor_row >= self.scroll_offset + visible_rows {
+            self.scroll_offset = cursor_row.saturating_sub(visible_rows - 1);
         }
     }
 
@@ -66,6 +106,7 @@ impl EditorPanel {
     ) {
         if let Some(byte_pos) = self.byte_pos_from_point(event.position) {
             self.is_dragging = true;
+            self.cursor_offset = byte_pos;
             self.selection_start = Some(byte_pos);
             self.selection_end = Some(byte_pos);
             cx.notify();
@@ -89,6 +130,37 @@ impl EditorPanel {
     fn on_mouse_up(&mut self, _event: &MouseUpEvent, _window: &mut Window, cx: &mut Context<Self>) {
         self.is_dragging = false;
         cx.notify();
+    }
+
+    fn move_left(&mut self, _: &MoveLeft, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.cursor_offset > 0 {
+            self.cursor_offset -= 1;
+            cx.notify();
+        }
+    }
+
+    fn move_right(&mut self, _: &MoveRight, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.cursor_offset < self.buffer.len().saturating_sub(1) {
+            self.cursor_offset += 1;
+            cx.notify();
+        }
+    }
+
+    fn move_up(&mut self, _: &MoveUp, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.cursor_offset >= 16 {
+            self.cursor_offset -= 16;
+            self.ensure_cursor_visible();
+            cx.notify();
+        }
+    }
+
+    fn move_down(&mut self, _: &MoveDown, _window: &mut Window, cx: &mut Context<Self>) {
+        let new_offset = self.cursor_offset + 16;
+        if new_offset < self.buffer.len() {
+            self.cursor_offset = new_offset;
+            self.ensure_cursor_visible();
+            cx.notify();
+        }
     }
 }
 
@@ -134,7 +206,12 @@ impl Render for EditorPanel {
             .bg(rgb(0x1e1e1e))
             .font_family("Menlo")
             .size_full()
+            .key_context(CONTEXT)
             .track_focus(&self.focus_handle(cx))
+            .on_action(cx.listener(Self::move_left))
+            .on_action(cx.listener(Self::move_right))
+            .on_action(cx.listener(Self::move_up))
+            .on_action(cx.listener(Self::move_down))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
@@ -149,6 +226,7 @@ struct HexViewElement {
 struct PrepaintState {
     data_lines: Vec<DataLine>,
     selection_quads: Vec<PaintQuad>,
+    cursor: Option<PaintQuad>,
 }
 
 struct DataLine {
@@ -224,6 +302,12 @@ impl Element for HexViewElement {
         let line_count = (buffer.len() + 15) / 16;
         let header_height = px(32.);
         let row_height = px(24.);
+        
+        let scroll_offset = panel.scroll_offset;
+        let visible_height = bounds.size.height - header_height;
+        let visible_rows = (visible_height / row_height).ceil() as usize + 1;
+        let start_row = scroll_offset;
+        let end_row = (scroll_offset + visible_rows).min(line_count);
 
         let mut data_lines = Vec::new();
         let mut selection_quads = Vec::new();
@@ -233,10 +317,11 @@ impl Element for HexViewElement {
         let hex_byte_width = px(22.);
         let hex_gap = px(4.);
 
-        for i in 0..line_count {
+        for i in start_row..end_row {
             let offset = i * 16;
             let chunk = buffer.get_range(offset, 16);
-            let y_pos = bounds.top() + header_height + row_height * i as f32;
+            let row_index = i - start_row;
+            let y_pos = bounds.top() + header_height + row_height * row_index as f32;
 
             let offset_str = format!("{:08x}", offset);
             let offset_run = TextRun {
@@ -348,9 +433,29 @@ impl Element for HexViewElement {
             });
         }
 
+        let cursor = {
+            let cursor_offset = panel.cursor_offset();
+            let focus_handle = panel.focus_handle.clone();
+
+            if focus_handle.is_focused(window) && cursor_offset < buffer.len() {
+                let cursor_row = cursor_offset / 16;
+                let byte_in_row = cursor_offset % 16;
+                let y_pos = bounds.top() + header_height + row_height * cursor_row as f32;
+                let cursor_x = hex_start_x + (hex_byte_width + hex_gap) * byte_in_row as f32;
+
+                Some(fill(
+                    Bounds::new(point(cursor_x, y_pos), size(px(2.), row_height)),
+                    gpui::blue(),
+                ))
+            } else {
+                None
+            }
+        };
+
         PrepaintState {
             data_lines,
             selection_quads,
+            cursor,
         }
     }
 
@@ -408,6 +513,10 @@ impl Element for HexViewElement {
                 .ascii_line
                 .paint(point(ascii_start_x, y_pos), row_height, window, cx)
                 .ok();
+        }
+
+        if let Some(cursor) = prepaint.cursor.take() {
+            window.paint_quad(cursor);
         }
 
         self.panel.update(cx, |panel, _cx| {
