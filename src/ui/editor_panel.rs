@@ -16,7 +16,16 @@ actions!(
         SelectLeft,
         SelectRight,
         SelectUp,
-        SelectDown
+        SelectDown,
+        SelectAll,
+        PageUp,
+        PageDown,
+        Home,
+        End,
+        SelectPageUp,
+        SelectPageDown,
+        SelectHome,
+        SelectEnd
     ]
 );
 
@@ -32,6 +41,15 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("shift-right", SelectRight, Some(CONTEXT)),
         KeyBinding::new("shift-up", SelectUp, Some(CONTEXT)),
         KeyBinding::new("shift-down", SelectDown, Some(CONTEXT)),
+        KeyBinding::new("cmd-a", SelectAll, Some(CONTEXT)),
+        KeyBinding::new("pageup", PageUp, Some(CONTEXT)),
+        KeyBinding::new("pagedown", PageDown, Some(CONTEXT)),
+        KeyBinding::new("home", Home, Some(CONTEXT)),
+        KeyBinding::new("end", End, Some(CONTEXT)),
+        KeyBinding::new("shift-pageup", SelectPageUp, Some(CONTEXT)),
+        KeyBinding::new("shift-pagedown", SelectPageDown, Some(CONTEXT)),
+        KeyBinding::new("shift-home", SelectHome, Some(CONTEXT)),
+        KeyBinding::new("shift-end", SelectEnd, Some(CONTEXT)),
     ]);
 }
 pub struct EditorPanel {
@@ -267,6 +285,127 @@ impl EditorPanel {
             cx.notify();
         }
     }
+
+    fn select_all(&mut self, _: &SelectAll, _window: &mut Window, cx: &mut Context<Self>) {
+        self.selection_start = Some(0);
+        self.selection_end = Some(self.buffer.len().saturating_sub(1));
+        self.cursor_offset = self.buffer.len().saturating_sub(1);
+        cx.notify();
+    }
+
+    fn get_visible_rows(&self) -> usize {
+        if let Some(bounds) = self.last_bounds {
+            let header_height = px(32.);
+            let row_height = px(24.);
+            let visible_height = bounds.size.height - header_height;
+            (visible_height / row_height).floor() as usize
+        } else {
+            10 // Default fallback
+        }
+    }
+
+    fn page_up(&mut self, _: &PageUp, _window: &mut Window, cx: &mut Context<Self>) {
+        self.selection_start = None;
+        self.selection_end = None;
+        let visible_rows = self.get_visible_rows();
+        let move_amount = visible_rows * 16;
+        if self.cursor_offset >= move_amount {
+            self.cursor_offset -= move_amount;
+        } else {
+            self.cursor_offset = 0;
+        }
+        self.ensure_cursor_visible();
+        cx.notify();
+    }
+
+    fn page_down(&mut self, _: &PageDown, _window: &mut Window, cx: &mut Context<Self>) {
+        self.selection_start = None;
+        self.selection_end = None;
+        let visible_rows = self.get_visible_rows();
+        let move_amount = visible_rows * 16;
+        let new_offset = self.cursor_offset + move_amount;
+        if new_offset < self.buffer.len() {
+            self.cursor_offset = new_offset;
+        } else {
+            self.cursor_offset = self.buffer.len().saturating_sub(1);
+        }
+        self.ensure_cursor_visible();
+        cx.notify();
+    }
+
+    fn home(&mut self, _: &Home, _window: &mut Window, cx: &mut Context<Self>) {
+        self.selection_start = None;
+        self.selection_end = None;
+        self.cursor_offset = 0;
+        self.ensure_cursor_visible();
+        cx.notify();
+    }
+
+    fn end(&mut self, _: &End, _window: &mut Window, cx: &mut Context<Self>) {
+        self.selection_start = None;
+        self.selection_end = None;
+        self.cursor_offset = self.buffer.len().saturating_sub(1);
+        self.ensure_cursor_visible();
+        cx.notify();
+    }
+
+    fn select_page_up(&mut self, _: &SelectPageUp, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.selection_start.is_none() {
+            self.selection_start = Some(self.cursor_offset);
+        }
+        let visible_rows = self.get_visible_rows();
+        let move_amount = visible_rows * 16;
+        if self.cursor_offset >= move_amount {
+            self.cursor_offset -= move_amount;
+        } else {
+            self.cursor_offset = 0;
+        }
+        self.selection_end = Some(self.cursor_offset);
+        self.ensure_cursor_visible();
+        cx.notify();
+    }
+
+    fn select_page_down(
+        &mut self,
+        _: &SelectPageDown,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.selection_start.is_none() {
+            self.selection_start = Some(self.cursor_offset);
+        }
+        let visible_rows = self.get_visible_rows();
+        let move_amount = visible_rows * 16;
+        let new_offset = self.cursor_offset + move_amount;
+        if new_offset < self.buffer.len() {
+            self.cursor_offset = new_offset;
+        } else {
+            self.cursor_offset = self.buffer.len().saturating_sub(1);
+        }
+        self.selection_end = Some(self.cursor_offset);
+        self.ensure_cursor_visible();
+        cx.notify();
+    }
+
+    fn select_home(&mut self, _: &SelectHome, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.selection_start.is_none() {
+            self.selection_start = Some(self.cursor_offset);
+        }
+        self.cursor_offset = 0;
+        self.selection_end = Some(self.cursor_offset);
+        self.ensure_cursor_visible();
+        cx.notify();
+    }
+
+    fn select_end(&mut self, _: &SelectEnd, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.selection_start.is_none() {
+            self.selection_start = Some(self.cursor_offset);
+        }
+        self.cursor_offset = self.buffer.len().saturating_sub(1);
+        self.selection_end = Some(self.cursor_offset);
+        self.ensure_cursor_visible();
+        cx.notify();
+    }
 }
 
 impl EventEmitter<PanelEvent> for EditorPanel {}
@@ -321,6 +460,15 @@ impl Render for EditorPanel {
             .on_action(cx.listener(Self::select_right))
             .on_action(cx.listener(Self::select_up))
             .on_action(cx.listener(Self::select_down))
+            .on_action(cx.listener(Self::select_all))
+            .on_action(cx.listener(Self::page_up))
+            .on_action(cx.listener(Self::page_down))
+            .on_action(cx.listener(Self::home))
+            .on_action(cx.listener(Self::end))
+            .on_action(cx.listener(Self::select_page_up))
+            .on_action(cx.listener(Self::select_page_down))
+            .on_action(cx.listener(Self::select_home))
+            .on_action(cx.listener(Self::select_end))
             .on_scroll_wheel(cx.listener(Self::on_scroll_wheel))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
