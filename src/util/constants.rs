@@ -1,4 +1,5 @@
 pub const MAIN_DOCK_AREA_ID: &str = "main_dock_area";
+pub const MAIN_DOCK_AREA_VERSION: usize = 1;
 pub const FILE_TREE_PANEL_TITLE: &str = "File Tree";
 pub const SETTINGS_PANEL_TITLE_2: &str = "Panel 2";
 pub const SETTINGS_PANEL_TITLE_3: &str = "Panel 3";

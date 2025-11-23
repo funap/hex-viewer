@@ -22,6 +22,14 @@ impl FileBuffer {
         })
     }
 
+    /// Creates an empty FileBuffer with no file path.
+    pub fn empty() -> Self {
+        Self {
+            path: PathBuf::from("Untitled"),
+            data: Vec::new(),
+        }
+    }
+
     /// Returns the length of the buffer.
     pub fn len(&self) -> usize {
         self.data.len()

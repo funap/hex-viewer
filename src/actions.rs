@@ -1,6 +1,5 @@
 use crate::data::file_buffer::FileBuffer;
-use crate::service::editor_service::EditorService;
-use gpui::{Action, Global};
+use gpui::Action;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -57,22 +56,3 @@ impl PartialEq for AddEditorPanel {
         Arc::ptr_eq(&self.0, &other.0)
     }
 }
-
-#[allow(dead_code)]
-#[derive(Clone)]
-pub struct App {
-    pub editor_service: EditorService,
-}
-
-impl Global for App {}
-
-impl App {
-    pub fn new() -> Self {
-        Self {
-            editor_service: EditorService::new(),
-        }
-    }
-}
-
-#[allow(dead_code)]
-pub struct AppState;

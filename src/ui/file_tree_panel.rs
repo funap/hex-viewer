@@ -1,4 +1,4 @@
-use crate::app::{CloseFolder, OpenFile, OpenFolder, Rename, SelectItem};
+use crate::actions::{CloseFolder, OpenFile, OpenFolder, Rename, SelectItem};
 use std::path::PathBuf;
 
 use autocorrect::ignorer::Ignorer;
@@ -152,6 +152,12 @@ impl FileTreePanel {
         self.tree_state.update(cx, |state, cx| {
             state.set_items(vec![], cx);
         });
+        cx.notify();
+    }
+
+    pub fn set_root_path(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+        self.root_path = Some(path.clone());
+        Self::load_files(self.tree_state.clone(), path, cx);
         cx.notify();
     }
 }

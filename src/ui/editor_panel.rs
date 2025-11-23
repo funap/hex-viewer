@@ -482,7 +482,8 @@ impl Render for EditorPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let header_height = px(32.);
         let row_height = px(24.);
-        let total_rows = (self.buffer.len() + 15) / 16;
+        // Ensure at least one line is shown, even for empty buffer
+        let total_rows = ((self.buffer.len() + 15) / 16).max(1);
 
         let extra_height = if let Some(bounds) = self.last_bounds {
             let visible_height = bounds.size.height - header_height;
@@ -595,7 +596,8 @@ impl Element for HexViewElement {
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
         let panel = self.panel.read(cx);
-        let line_count = (panel.buffer.len() + 15) / 16;
+        // Ensure at least one line is shown, even for empty buffer
+        let line_count = ((panel.buffer.len() + 15) / 16).max(1);
         let header_height = px(32.);
         let row_height = px(24.);
         let total_height = header_height + row_height * line_count as f32;
@@ -632,7 +634,8 @@ impl Element for HexViewElement {
         let ascii_non_printable_color = theme.muted;
         let selection_bg_color = theme.secondary;
 
-        let line_count = (buffer.len() + 15) / 16;
+        // Ensure at least one line is shown, even for empty buffer
+        let line_count = ((buffer.len() + 15) / 16).max(1);
         let header_height = px(32.);
         let row_height = px(24.);
 
@@ -786,9 +789,18 @@ impl Element for HexViewElement {
             let cursor_offset = panel.cursor_offset();
             let focus_handle = panel.focus_handle.clone();
 
-            if focus_handle.is_focused(window) && cursor_offset < buffer.len() {
-                let cursor_row = cursor_offset / 16;
-                let byte_in_row = cursor_offset % 16;
+            // Show cursor if focused, even for empty buffer
+            if focus_handle.is_focused(window) {
+                let cursor_row = if buffer.len() > 0 {
+                    cursor_offset / 16
+                } else {
+                    0
+                };
+                let byte_in_row = if buffer.len() > 0 {
+                    cursor_offset % 16
+                } else {
+                    0
+                };
                 // Adjust for current scroll offset
                 let visible_cursor_row = if cursor_row >= panel.scroll_offset {
                     cursor_row - panel.scroll_offset
@@ -800,7 +812,7 @@ impl Element for HexViewElement {
 
                 Some(fill(
                     Bounds::new(point(cursor_x, y_pos), size(hex_byte_width, row_height)),
-                    theme.accent,
+                    theme.accent.opacity(0.3),
                 ))
             } else {
                 None
