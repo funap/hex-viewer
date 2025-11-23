@@ -452,7 +452,13 @@ impl Panel for EditorPanel {
     }
 
     fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
-        "Hex Editor".into_any_element()
+        let title = self
+            .buffer
+            .path
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_else(|| "(untitled)".to_string());
+        title.into_any_element()
     }
 
     fn closable(&self, _cx: &App) -> bool {
