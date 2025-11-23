@@ -132,7 +132,10 @@ impl EditorPanel {
         }
 
         let y_offset = point.y - bounds.top() - header_height;
-        let row = (y_offset / row_height).floor() as usize;
+        let visible_row = (y_offset / row_height).floor() as usize;
+
+        // Add scroll offset to get the actual row in the buffer
+        let row = visible_row + self.scroll_offset;
 
         let x_offset = point.x - hex_start_x;
         if x_offset < px(0.) {
@@ -213,21 +216,11 @@ impl EditorPanel {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        // Determine visible rows based on current bounds
-        let bounds = match self.last_bounds {
-            Some(b) => b,
-            None => return,
-        };
-        let header_height = px(HEADER_HEIGHT);
         let row_height = px(ROW_HEIGHT);
-        let visible_height = bounds.size.height - header_height;
-        let visible_rows = (visible_height / row_height).floor() as usize;
         let total_rows = (self.buffer.len() + BYTES_PER_ROW - 1) / BYTES_PER_ROW;
-        let max_offset = total_rows.saturating_sub(visible_rows) as i32;
+        let max_offset = total_rows.saturating_sub(1).max(0) as i32;
 
-        // Scroll delta Y: positive means scroll down (content moves up)
         let delta_y = event.delta.pixel_delta(row_height).y.as_f32() as i32;
-
         let new_scroll_offset = self.scroll_offset as i32 - delta_y;
 
         self.scroll_offset = cmp::max(0, cmp::min(new_scroll_offset, max_offset)) as usize;
@@ -495,15 +488,8 @@ impl Render for EditorPanel {
         // Ensure at least one line is shown, even for empty buffer
         let total_rows = ((self.buffer.len() + BYTES_PER_ROW - 1) / BYTES_PER_ROW).max(1);
 
-        let extra_height = if let Some(bounds) = self.last_bounds {
-            let visible_height = bounds.size.height - header_height;
-            let ratio = visible_height / row_height;
-            visible_height - row_height * ratio.floor()
-        } else {
-            px(0.)
-        };
-
-        let total_height = header_height + row_height * total_rows as f32 + extra_height;
+        // Total height is just header + all data rows, no extra padding needed
+        let total_height = header_height + row_height * total_rows as f32;
 
         let handle_y = self.scroll_handle.offset().y;
         let handle_row = ((-handle_y).max(px(0.)) / row_height).round() as usize;
