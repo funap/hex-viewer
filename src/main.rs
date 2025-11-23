@@ -11,14 +11,17 @@ mod keybindings;
 mod service;
 mod theme;
 mod ui;
-mod util;
 
 use gpui_component::menu::AppMenuBar;
 use ui::editor_panel::EditorPanel;
 use ui::file_tree_panel::FileTreePanel;
-use ui::settings_panel::SettingsPanel;
 use ui::toolbar::AppTitleBar;
 use ui::window::WindowRoot;
+
+// Application constants
+const MAIN_DOCK_AREA_ID: &str = "main_dock_area";
+const MAIN_DOCK_AREA_VERSION: usize = 1;
+const FILE_TREE_PANEL_TITLE: &str = "File Tree";
 
 fn main() {
     let rt = tokio::runtime::Builder::new_multi_thread()
@@ -73,12 +76,10 @@ fn main() {
             let _ = cx
                 .update(|cx| {
                     let _ = cx.open_window(WindowOptions::default(), |window_ctx, cx| {
-                        use crate::util::constants;
-
                         let dock_area_entity = cx.new(|cx| {
                             DockArea::new(
-                                constants::MAIN_DOCK_AREA_ID,
-                                Some(constants::MAIN_DOCK_AREA_VERSION),
+                                MAIN_DOCK_AREA_ID,
+                                Some(MAIN_DOCK_AREA_VERSION),
                                 window_ctx,
                                 cx,
                             )
@@ -88,52 +89,17 @@ fn main() {
                         let app_title_bar = cx.new(|_cx| AppTitleBar { app_menu_bar });
 
                         let file_tree_panel =
-                            cx.new(|cx| FileTreePanel::new(constants::FILE_TREE_PANEL_TITLE, cx));
+                            cx.new(|cx| FileTreePanel::new(FILE_TREE_PANEL_TITLE, cx));
 
                         // Clone for later use
                         let file_tree_panel_clone = file_tree_panel.clone();
 
                         dock_area_entity.update(cx, |dock_area, cx| {
-                            let panel2 = cx.new(|cx| {
-                                SettingsPanel::new(constants::SETTINGS_PANEL_TITLE_2, cx)
-                            });
-                            let panel3 = cx.new(|cx| {
-                                SettingsPanel::new(constants::SETTINGS_PANEL_TITLE_3, cx)
-                            });
-
                             let editor_panel = cx.new(|cx| EditorPanel::new(buffer, cx));
 
                             dock_area.set_left_dock(
                                 DockItem::tabs(
                                     vec![Arc::new(file_tree_panel)],
-                                    None,
-                                    &dock_area_entity.downgrade(),
-                                    window_ctx,
-                                    cx,
-                                ),
-                                None,
-                                true,
-                                window_ctx,
-                                cx,
-                            );
-
-                            dock_area.set_bottom_dock(
-                                DockItem::tabs(
-                                    vec![Arc::new(panel2)],
-                                    None,
-                                    &dock_area_entity.downgrade(),
-                                    window_ctx,
-                                    cx,
-                                ),
-                                None,
-                                true,
-                                window_ctx,
-                                cx,
-                            );
-
-                            dock_area.set_right_dock(
-                                DockItem::tabs(
-                                    vec![Arc::new(panel3)],
                                     None,
                                     &dock_area_entity.downgrade(),
                                     window_ctx,

@@ -32,6 +32,16 @@ actions!(
 
 const CONTEXT: &str = "EditorPanel";
 
+// HexView layout constants
+const HEADER_HEIGHT: f32 = 32.0;
+const ROW_HEIGHT: f32 = 24.0;
+const OFFSET_WIDTH: f32 = 96.0;
+const HEX_BYTE_WIDTH: f32 = 22.0;
+const HEX_GAP: f32 = 4.0;
+const SECTION_GAP: f32 = 16.0;
+const BYTES_PER_ROW: usize = 16;
+const FONT_FAMILY: &str = "Menlo";
+
 pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("left", MoveLeft, Some(CONTEXT)),
@@ -92,12 +102,12 @@ impl EditorPanel {
             None => return,
         };
 
-        let header_height = px(32.);
-        let row_height = px(24.);
+        let header_height = px(HEADER_HEIGHT);
+        let row_height = px(ROW_HEIGHT);
         let visible_height = bounds.size.height - header_height;
         let visible_rows = (visible_height / row_height).floor() as usize;
 
-        let cursor_row = self.cursor_offset / 16;
+        let cursor_row = self.cursor_offset / BYTES_PER_ROW;
 
         if cursor_row < self.scroll_offset {
             self.scroll_offset = cursor_row;
@@ -110,12 +120,12 @@ impl EditorPanel {
 
     fn byte_pos_from_point(&self, point: Point<Pixels>) -> Option<usize> {
         let bounds = self.last_bounds?;
-        let header_height = px(32.);
-        let row_height = px(24.);
-        let offset_width = px(96.);
-        let hex_start_x = bounds.left() + offset_width + px(16.);
-        let hex_byte_width = px(22.);
-        let hex_gap = px(4.);
+        let header_height = px(HEADER_HEIGHT);
+        let row_height = px(ROW_HEIGHT);
+        let offset_width = px(OFFSET_WIDTH);
+        let hex_start_x = bounds.left() + offset_width + px(SECTION_GAP);
+        let hex_byte_width = px(HEX_BYTE_WIDTH);
+        let hex_gap = px(HEX_GAP);
 
         if point.y < bounds.top() + header_height {
             return None;
@@ -130,11 +140,11 @@ impl EditorPanel {
         }
 
         let byte_in_row = (x_offset / (hex_byte_width + hex_gap)).floor() as usize;
-        if byte_in_row >= 16 {
+        if byte_in_row >= BYTES_PER_ROW {
             return None;
         }
 
-        let byte_pos = row * 16 + byte_in_row;
+        let byte_pos = row * BYTES_PER_ROW + byte_in_row;
         if byte_pos >= self.buffer.len() {
             return None;
         }
@@ -164,10 +174,10 @@ impl EditorPanel {
         cx: &mut Context<Self>,
     ) {
         // Sync scroll handle to scroll offset if changed by scrollbar drag
-        let row_height = px(24.);
+        let row_height = px(ROW_HEIGHT);
         let handle_y = self.scroll_handle.offset().y;
         let handle_row = ((-handle_y).max(px(0.)) / row_height).round() as usize;
-        let total_rows = (self.buffer.len() + 15) / 16;
+        let total_rows = (self.buffer.len() + BYTES_PER_ROW - 1) / BYTES_PER_ROW;
         if handle_row != self.scroll_offset {
             self.scroll_offset = handle_row.min(total_rows.saturating_sub(1));
             cx.notify();
@@ -185,10 +195,10 @@ impl EditorPanel {
         self.is_dragging = false;
 
         // Sync scroll handle on mouse up as well
-        let row_height = px(24.);
+        let row_height = px(ROW_HEIGHT);
         let handle_y = self.scroll_handle.offset().y;
         let handle_row = ((-handle_y).max(px(0.)) / row_height).round() as usize;
-        let total_rows = (self.buffer.len() + 15) / 16;
+        let total_rows = (self.buffer.len() + BYTES_PER_ROW - 1) / BYTES_PER_ROW;
         if handle_row != self.scroll_offset {
             self.scroll_offset = handle_row.min(total_rows.saturating_sub(1));
             cx.notify();
@@ -208,11 +218,11 @@ impl EditorPanel {
             Some(b) => b,
             None => return,
         };
-        let header_height = px(32.);
-        let row_height = px(24.);
+        let header_height = px(HEADER_HEIGHT);
+        let row_height = px(ROW_HEIGHT);
         let visible_height = bounds.size.height - header_height;
         let visible_rows = (visible_height / row_height).floor() as usize;
-        let total_rows = (self.buffer.len() + 15) / 16;
+        let total_rows = (self.buffer.len() + BYTES_PER_ROW - 1) / BYTES_PER_ROW;
         let max_offset = total_rows.saturating_sub(visible_rows) as i32;
 
         // Scroll delta Y: positive means scroll down (content moves up)
@@ -325,8 +335,8 @@ impl EditorPanel {
 
     fn get_visible_rows(&self) -> usize {
         if let Some(bounds) = self.last_bounds {
-            let header_height = px(32.);
-            let row_height = px(24.);
+            let header_height = px(HEADER_HEIGHT);
+            let row_height = px(ROW_HEIGHT);
             let visible_height = bounds.size.height - header_height;
             (visible_height / row_height).floor() as usize
         } else {
@@ -338,7 +348,7 @@ impl EditorPanel {
         self.selection_start = None;
         self.selection_end = None;
         let visible_rows = self.get_visible_rows();
-        let move_amount = visible_rows * 16;
+        let move_amount = visible_rows * BYTES_PER_ROW;
         if self.cursor_offset >= move_amount {
             self.cursor_offset -= move_amount;
         } else {
@@ -352,7 +362,7 @@ impl EditorPanel {
         self.selection_start = None;
         self.selection_end = None;
         let visible_rows = self.get_visible_rows();
-        let move_amount = visible_rows * 16;
+        let move_amount = visible_rows * BYTES_PER_ROW;
         let new_offset = self.cursor_offset + move_amount;
         if new_offset < self.buffer.len() {
             self.cursor_offset = new_offset;
@@ -384,7 +394,7 @@ impl EditorPanel {
             self.selection_start = Some(self.cursor_offset);
         }
         let visible_rows = self.get_visible_rows();
-        let move_amount = visible_rows * 16;
+        let move_amount = visible_rows * BYTES_PER_ROW;
         if self.cursor_offset >= move_amount {
             self.cursor_offset -= move_amount;
         } else {
@@ -405,7 +415,7 @@ impl EditorPanel {
             self.selection_start = Some(self.cursor_offset);
         }
         let visible_rows = self.get_visible_rows();
-        let move_amount = visible_rows * 16;
+        let move_amount = visible_rows * BYTES_PER_ROW;
         let new_offset = self.cursor_offset + move_amount;
         if new_offset < self.buffer.len() {
             self.cursor_offset = new_offset;
@@ -480,10 +490,10 @@ impl Panel for EditorPanel {
 
 impl Render for EditorPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let header_height = px(32.);
-        let row_height = px(24.);
+        let header_height = px(HEADER_HEIGHT);
+        let row_height = px(ROW_HEIGHT);
         // Ensure at least one line is shown, even for empty buffer
-        let total_rows = ((self.buffer.len() + 15) / 16).max(1);
+        let total_rows = ((self.buffer.len() + BYTES_PER_ROW - 1) / BYTES_PER_ROW).max(1);
 
         let extra_height = if let Some(bounds) = self.last_bounds {
             let visible_height = bounds.size.height - header_height;
@@ -505,7 +515,7 @@ impl Render for EditorPanel {
             .flex()
             .flex_col()
             .bg(cx.theme().background)
-            .font_family("Menlo")
+            .font_family(FONT_FAMILY)
             .size_full()
             .key_context(CONTEXT)
             .track_focus(&self.focus_handle(cx))
@@ -597,9 +607,9 @@ impl Element for HexViewElement {
     ) -> (LayoutId, Self::RequestLayoutState) {
         let panel = self.panel.read(cx);
         // Ensure at least one line is shown, even for empty buffer
-        let line_count = ((panel.buffer.len() + 15) / 16).max(1);
-        let header_height = px(32.);
-        let row_height = px(24.);
+        let line_count = ((panel.buffer.len() + BYTES_PER_ROW - 1) / BYTES_PER_ROW).max(1);
+        let header_height = px(HEADER_HEIGHT);
+        let row_height = px(ROW_HEIGHT);
         let total_height = header_height + row_height * line_count as f32;
 
         let mut style = Style::default();
@@ -635,9 +645,9 @@ impl Element for HexViewElement {
         let selection_bg_color = theme.secondary;
 
         // Ensure at least one line is shown, even for empty buffer
-        let line_count = ((buffer.len() + 15) / 16).max(1);
-        let header_height = px(32.);
-        let row_height = px(24.);
+        let line_count = ((buffer.len() + BYTES_PER_ROW - 1) / BYTES_PER_ROW).max(1);
+        let header_height = px(HEADER_HEIGHT);
+        let row_height = px(ROW_HEIGHT);
 
         let scroll_offset = self.scroll_offset;
         let visible_height = bounds.size.height - header_height;
@@ -648,10 +658,10 @@ impl Element for HexViewElement {
         let mut data_lines = Vec::new();
         let mut selection_quads = Vec::new();
 
-        let offset_width = px(96.);
-        let hex_start_x = bounds.left() + offset_width + px(16.);
-        let hex_byte_width = px(22.);
-        let hex_gap = px(4.);
+        let offset_width = px(OFFSET_WIDTH);
+        let hex_start_x = bounds.left() + offset_width + px(SECTION_GAP);
+        let hex_byte_width = px(HEX_BYTE_WIDTH);
+        let hex_gap = px(HEX_GAP);
 
         let (min_sel, max_sel) = if let (Some(start), Some(end)) = (selection_start, selection_end)
         {
@@ -892,13 +902,14 @@ impl Element for HexViewElement {
         window: &mut Window,
         cx: &mut App,
     ) {
-        let header_height = px(32.);
-        let row_height = px(24.);
-        let offset_width = px(96.);
-        let hex_start_x = bounds.left() + offset_width + px(16.);
-        let hex_byte_width = px(22.);
-        let hex_gap = px(4.);
-        let ascii_start_x = hex_start_x + (hex_byte_width + hex_gap) * 16.0 + px(16.);
+        let header_height = px(HEADER_HEIGHT);
+        let row_height = px(ROW_HEIGHT);
+        let offset_width = px(OFFSET_WIDTH);
+        let hex_start_x = bounds.left() + offset_width + px(SECTION_GAP);
+        let hex_byte_width = px(HEX_BYTE_WIDTH);
+        let hex_gap = px(HEX_GAP);
+        let ascii_start_x =
+            hex_start_x + (hex_byte_width + hex_gap) * BYTES_PER_ROW as f32 + px(SECTION_GAP);
 
         let theme = cx.theme();
         let bg_color = theme.background;
