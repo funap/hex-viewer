@@ -162,21 +162,6 @@ impl FileTreePanel {
     }
 }
 
-// Removed Story trait implementation as it's not relevant to this project.
-// impl Story for TreeStory {
-//     fn title() -> &'static str {
-//         "Tree"
-//     }
-
-//     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
-//         Self::view(window, cx)
-//     }
-
-//     fn zoomable() -> Option<PanelControl> {
-//         None
-//     }
-// }
-
 impl Render for FileTreePanel {
     // Renamed from TreeStory
     fn render(
@@ -188,7 +173,7 @@ impl Render for FileTreePanel {
 
         if self.root_path.is_none() {
             return v_flex()
-                .id("tree-story")
+                .id("file-tree-panel")
                 .key_context(CONTEXT)
                 .on_action(cx.listener(Self::on_action_open_folder))
                 .size_full()
@@ -215,7 +200,7 @@ impl Render for FileTreePanel {
         }
 
         v_flex()
-            .id("tree-story")
+            .id("file-tree-panel")
             .key_context(CONTEXT)
             .on_action(cx.listener(Self::on_action_rename))
             .on_action(cx.listener(Self::on_action_select_item))
@@ -223,11 +208,6 @@ impl Render for FileTreePanel {
             .gap_5()
             .size_full()
             .child(
-                // Removed section helper function
-                // section("File tree")
-                //     .sub_title("Press `space` to select, `enter` to rename.")
-                //     .v_flex()
-                //     .max_w_md()
                 div()
                     .v_flex()
                     .child(
@@ -261,7 +241,7 @@ impl Render for FileTreePanel {
                                                         "Dispatching OpenFile action for path: {}",
                                                         item.id
                                                     );
-                                                    cx.focus_self(window); // FileTreePanelにフォーカスを設定
+                                                    cx.focus_self(window);
                                                     window.dispatch_action(
                                                         Box::new(OpenFile {
                                                             path: item.id.to_string(),
