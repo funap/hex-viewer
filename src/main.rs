@@ -95,7 +95,8 @@ fn main() {
                         let file_tree_panel_clone = file_tree_panel.clone();
 
                         dock_area_entity.update(cx, |dock_area, cx| {
-                            let editor_panel = cx.new(|cx| EditorPanel::new(buffer, cx));
+                            let editor_panel =
+                                cx.new(|cx| EditorPanel::new(buffer, window_ctx, cx));
 
                             dock_area.set_left_dock(
                                 DockItem::tabs(

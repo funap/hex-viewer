@@ -23,6 +23,15 @@ pub struct OpenFolder;
 #[derive(Clone, PartialEq, Action)]
 pub struct CloseFolder;
 
+#[derive(Clone, PartialEq, Action)]
+pub struct ToggleSearch;
+
+#[derive(Clone, PartialEq, Action)]
+pub struct SearchNext;
+
+#[derive(Clone, PartialEq, Action)]
+pub struct SearchPrev;
+
 #[derive(Clone)]
 pub struct AddEditorPanel(pub Arc<FileBuffer>);
 

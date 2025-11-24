@@ -33,7 +33,7 @@ impl WindowRoot {
     ) {
         let buffer = action.0.clone();
 
-        let editor_panel = cx.new(|cx| EditorPanel::new(buffer, cx));
+        let editor_panel = cx.new(|cx| EditorPanel::new(buffer, window, cx));
 
         self.dock_area.update(cx, |dock_area, cx| {
             dock_area.add_panel(
