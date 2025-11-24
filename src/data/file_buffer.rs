@@ -1,25 +1,17 @@
 use std::path::{Path, PathBuf};
-use tokio::fs::File;
-use tokio::io::AsyncReadExt;
 
 /// A buffer to hold the contents of a file.
 #[allow(dead_code)]
 pub struct FileBuffer {
-    pub path: PathBuf,
-    pub data: Vec<u8>,
+    path: PathBuf,
+    data: Vec<u8>,
 }
 
 #[allow(dead_code)]
 impl FileBuffer {
-    /// Creates a new FileBuffer by asynchronously reading the contents of the file at the given path.
-    pub async fn new(path: &Path) -> anyhow::Result<Self> {
-        let mut file = File::open(path).await?;
-        let mut data = Vec::new();
-        file.read_to_end(&mut data).await?;
-        Ok(Self {
-            path: path.to_path_buf(),
-            data,
-        })
+    /// Creates a new FileBuffer with the given path and data.
+    pub fn new(path: PathBuf, data: Vec<u8>) -> Self {
+        Self { path, data }
     }
 
     /// Creates an empty FileBuffer with no file path.
@@ -28,6 +20,11 @@ impl FileBuffer {
             path: PathBuf::from("Untitled"),
             data: Vec::new(),
         }
+    }
+
+    /// Returns the path of the file.
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 
     /// Returns the length of the buffer.

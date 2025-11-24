@@ -48,6 +48,7 @@ pub const OFFSET_WIDTH: f32 = 96.0;
 pub const HEX_BYTE_WIDTH: f32 = 22.0;
 pub const HEX_GAP: f32 = 4.0;
 pub const SECTION_GAP: f32 = 16.0;
+pub const OFFSET_X_START: f32 = 4.0;
 pub const BYTES_PER_ROW: usize = 16;
 pub const FONT_FAMILY: &str = "Menlo";
 
@@ -212,7 +213,7 @@ impl HexView {
         } else {
             px(0.)
         };
-        let hex_start_x = bounds.left() + offset_width + px(SECTION_GAP);
+        let hex_start_x = bounds.left() + px(OFFSET_X_START) + offset_width + px(SECTION_GAP);
 
         let hex_byte_width = px(HEX_BYTE_WIDTH);
         let hex_gap = px(HEX_GAP);
@@ -277,7 +278,7 @@ impl HexView {
         } else {
             px(0.)
         };
-        let hex_start_x = bounds.left() + offset_width + px(SECTION_GAP);
+        let hex_start_x = bounds.left() + px(OFFSET_X_START) + offset_width + px(SECTION_GAP);
 
         let hex_byte_width = px(HEX_BYTE_WIDTH);
         let hex_gap = px(HEX_GAP);
@@ -818,11 +819,11 @@ impl Element for HexViewElement {
         let font_size = text_style.font_size.to_pixels(window.rem_size());
 
         let theme = cx.theme();
-        let offset_color = theme.info;
-        let hex_byte_color = theme.primary;
-        let hex_null_color = theme.muted;
+        let offset_color = theme.muted_foreground;
+        let hex_byte_color = theme.foreground;
+        let hex_null_color = theme.muted_foreground;
         let ascii_printable_color = theme.foreground;
-        let ascii_non_printable_color = theme.muted;
+        let ascii_non_printable_color = theme.muted_foreground;
         let selection_bg_color = theme.secondary;
 
         // Ensure at least one line is shown, even for empty buffer
@@ -849,7 +850,7 @@ impl Element for HexViewElement {
         } else {
             px(0.)
         };
-        let hex_start_x = bounds.left() + offset_width + px(SECTION_GAP);
+        let hex_start_x = bounds.left() + px(OFFSET_X_START) + offset_width + px(SECTION_GAP);
 
         let hex_byte_width = px(HEX_BYTE_WIDTH);
         let hex_gap = px(HEX_GAP);
@@ -1151,7 +1152,7 @@ impl Element for HexViewElement {
             px(0.)
         };
 
-        let hex_start_x = bounds.left() + offset_width + px(SECTION_GAP);
+        let hex_start_x = bounds.left() + px(OFFSET_X_START) + offset_width + px(SECTION_GAP);
         let hex_byte_width = px(HEX_BYTE_WIDTH);
         let hex_gap = px(HEX_GAP);
         let ascii_start_x =
@@ -1166,8 +1167,11 @@ impl Element for HexViewElement {
 
         window.paint_quad(fill(
             Bounds::new(
-                point(bounds.left(), bounds.top() + header_height - px(1.)),
-                size(bounds.size.width, px(1.)),
+                point(
+                    bounds.left() + px(OFFSET_X_START),
+                    bounds.top() + header_height - px(1.),
+                ),
+                size(bounds.size.width - px(OFFSET_X_START), px(1.)),
             ),
             border_color,
         ));
@@ -1179,7 +1183,12 @@ impl Element for HexViewElement {
                 prepaint
                     .header
                     .offset
-                    .paint(point(bounds.left(), header_y), header_height, window, cx)
+                    .paint(
+                        point(bounds.left() + px(OFFSET_X_START), header_y),
+                        header_height,
+                        window,
+                        cx,
+                    )
                     .ok();
             }
 
@@ -1209,7 +1218,12 @@ impl Element for HexViewElement {
             if self.show_offset {
                 data_line
                     .offset_line
-                    .paint(point(bounds.left(), y_pos), row_height, window, cx)
+                    .paint(
+                        point(bounds.left() + px(OFFSET_X_START), y_pos),
+                        row_height,
+                        window,
+                        cx,
+                    )
                     .ok();
             }
 

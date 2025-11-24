@@ -5,8 +5,10 @@ use gpui_component::dock::{Panel, PanelEvent};
 use std::sync::Arc;
 
 use crate::actions::{FocusHexView, SearchNext, SearchPrev, ToggleSearch};
+use crate::app_state::AppState;
+use crate::data::search::SearchMode;
 use crate::ui::component::hex_view::{self, HexView};
-use crate::ui::component::search_bar::{SearchBar, SearchBarEvent, SearchMode};
+use crate::ui::component::search_bar::{SearchBar, SearchBarEvent};
 use gpui_component::ActiveTheme;
 
 const CONTEXT: &str = "EditorPanel";
@@ -98,31 +100,8 @@ impl EditorPanel {
             return;
         }
 
-        self.search_results = match mode {
-            SearchMode::Text => self.buffer.search_text(query),
-            SearchMode::Hex => {
-                // Parse hex string (remove spaces and keep only valid hex characters)
-                let hex_str: String = query.chars().filter(|c| c.is_ascii_hexdigit()).collect();
-
-                if hex_str.is_empty() || hex_str.len() % 2 != 0 {
-                    // Invalid or empty hex string
-                    Vec::new()
-                } else {
-                    let bytes: Result<Vec<u8>, _> = (0..hex_str.len())
-                        .step_by(2)
-                        .map(|i| {
-                            // Safe to use byte indexing since we filtered to ASCII only
-                            u8::from_str_radix(&hex_str[i..i + 2], 16)
-                        })
-                        .collect();
-
-                    match bytes {
-                        Ok(pattern) => self.buffer.search_bytes(&pattern),
-                        Err(_) => Vec::new(),
-                    }
-                }
-            }
-        };
+        let app_state = AppState::global(cx);
+        self.search_results = app_state.editor_service.search(&self.buffer, query, mode);
 
         if !self.search_results.is_empty() {
             self.current_result_index = Some(0);
@@ -247,7 +226,7 @@ impl Panel for EditorPanel {
     fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
         let title = self
             .buffer
-            .path
+            .path()
             .file_name()
             .map(|name| name.to_string_lossy().to_string())
             .unwrap_or_else(|| "(untitled)".to_string());

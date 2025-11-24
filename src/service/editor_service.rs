@@ -31,7 +31,8 @@ impl EditorService {
         }
 
         // If not in the cache, read the file without holding any lock.
-        let new_buffer = Arc::new(FileBuffer::new(&path).await?);
+        let data = tokio::fs::read(&path).await?;
+        let new_buffer = Arc::new(FileBuffer::new(path.clone(), data));
 
         // Acquire a write lock to insert the new buffer into the cache.
         let mut buffers = self.buffers.write().unwrap();
@@ -43,6 +44,43 @@ impl EditorService {
 
         buffers.insert(path, new_buffer.clone());
         Ok(new_buffer)
+    }
+    /// Searches for a query in the given buffer based on the search mode.
+    pub fn search(
+        &self,
+        buffer: &FileBuffer,
+        query: &str,
+        mode: crate::data::search::SearchMode,
+    ) -> Vec<usize> {
+        if query.is_empty() {
+            return Vec::new();
+        }
+
+        match mode {
+            crate::data::search::SearchMode::Text => buffer.search_text(query),
+            crate::data::search::SearchMode::Hex => {
+                // Parse hex string (remove spaces and keep only valid hex characters)
+                let hex_str: String = query.chars().filter(|c| c.is_ascii_hexdigit()).collect();
+
+                if hex_str.is_empty() || hex_str.len() % 2 != 0 {
+                    // Invalid or empty hex string
+                    Vec::new()
+                } else {
+                    let bytes: Result<Vec<u8>, _> = (0..hex_str.len())
+                        .step_by(2)
+                        .map(|i| {
+                            // Safe to use byte indexing since we filtered to ASCII only
+                            u8::from_str_radix(&hex_str[i..i + 2], 16)
+                        })
+                        .collect();
+
+                    match bytes {
+                        Ok(pattern) => buffer.search_bytes(&pattern),
+                        Err(_) => Vec::new(),
+                    }
+                }
+            }
+        }
     }
 }
 impl Default for EditorService {

@@ -6,11 +6,7 @@ use gpui_component::{
     input::{self, Input, InputState},
 };
 
-#[derive(Clone, Copy, PartialEq)]
-pub enum SearchMode {
-    Text,
-    Hex,
-}
+use crate::data::search::SearchMode;
 
 pub enum SearchBarEvent {
     Search(String, SearchMode),
