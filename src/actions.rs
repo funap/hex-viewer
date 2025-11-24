@@ -32,6 +32,9 @@ pub struct SearchNext;
 #[derive(Clone, PartialEq, Action)]
 pub struct SearchPrev;
 
+#[derive(Clone, PartialEq, Action)]
+pub struct FocusHexView;
+
 #[derive(Clone)]
 pub struct AddEditorPanel(pub Arc<FileBuffer>);
 
