@@ -1,10 +1,12 @@
 use crate::actions::{CloseFolder, OpenFile, OpenFolder, Rename, SelectItem};
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use autocorrect::ignorer::Ignorer;
 use gpui::{
-    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, KeyBinding, ParentElement, Render, SharedString, Styled, Window, div, px,
+    App, AppContext, AsyncApp, Context, Entity, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, KeyBinding, ParentElement, Render, SharedString, Styled,
+    WeakEntity, Window, div, px,
 };
 
 use gpui_component::{
@@ -31,6 +33,8 @@ pub struct FileTreePanel {
     title: SharedString,
     focus_handle: FocusHandle,
     root_path: Option<PathBuf>,
+    loaded_paths: HashSet<String>,
+    items: Vec<TreeItem>,
 }
 
 fn build_file_items(ignorer: &Ignorer, root: &PathBuf, path: &PathBuf) -> Vec<TreeItem> {
@@ -51,8 +55,9 @@ fn build_file_items(ignorer: &Ignorer, root: &PathBuf, path: &PathBuf) -> Vec<Tr
                 .to_string();
             let id = path.to_string_lossy().to_string();
             if path.is_dir() {
-                let children = build_file_items(ignorer, &root, &path);
-                items.push(TreeItem::new(id, file_name).children(children));
+                items.push(
+                    TreeItem::new(id, file_name).child(TreeItem::new("loading", "Loading...")),
+                );
             } else {
                 items.push(TreeItem::new(id, file_name));
             }
@@ -66,6 +71,25 @@ fn build_file_items(ignorer: &Ignorer, root: &PathBuf, path: &PathBuf) -> Vec<Tr
     items
 }
 
+fn update_item_children_recursive(
+    items: &mut Vec<TreeItem>,
+    target_id: &str,
+    children: Vec<TreeItem>,
+) -> bool {
+    for item in items.iter_mut() {
+        if item.id == target_id {
+            item.children = children;
+            return true;
+        }
+        if item.is_folder() {
+            if update_item_children_recursive(&mut item.children, target_id, children.clone()) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 impl FileTreePanel {
     // Renamed from TreeStory
     pub fn new(title: impl Into<SharedString>, cx: &mut Context<Self>) -> Self {
@@ -77,20 +101,69 @@ impl FileTreePanel {
             title: title.into(),
             focus_handle: cx.focus_handle(),
             root_path: None,
+            loaded_paths: HashSet::new(),
+            items: Vec::new(),
         };
 
         this
     }
 
-    fn load_files(state: Entity<TreeState>, path: PathBuf, cx: &mut App) {
-        cx.spawn(async move |cx| {
-            let ignorer = Ignorer::new(&path.to_string_lossy());
-            let items = build_file_items(&ignorer, &path, &path);
-            _ = state.update(cx, |state, cx| {
-                state.set_items(items, cx);
-            });
+    fn load_root(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+        cx.spawn(|view: WeakEntity<FileTreePanel>, cx: &mut AsyncApp| {
+            let mut cx = cx.clone();
+            async move {
+                let ignorer = Ignorer::new(&path.to_string_lossy());
+                let items = build_file_items(&ignorer, &path, &path);
+
+                view.update(&mut cx, |this, cx| {
+                    this.items = items.clone();
+                    this.tree_state.update(cx, |state, cx| {
+                        state.set_items(items, cx);
+                    });
+                })
+                .ok();
+            }
         })
         .detach();
+    }
+
+    fn load_children(&mut self, item_id: &str, cx: &mut Context<Self>) {
+        if self.loaded_paths.contains(item_id) {
+            return;
+        }
+
+        let path = PathBuf::from(item_id);
+        if path.is_dir() {
+            let item_id_clone = item_id.to_string();
+            let root_path = self.root_path.clone();
+
+            cx.spawn(|view: WeakEntity<FileTreePanel>, cx: &mut AsyncApp| {
+                let mut cx = cx.clone();
+                async move {
+                    if let Some(root_path) = root_path {
+                        let ignorer = Ignorer::new(&root_path.to_string_lossy());
+                        let children =
+                            build_file_items(&ignorer, &root_path, &PathBuf::from(&item_id_clone));
+
+                        view.update(&mut cx, |this, cx| {
+                            if update_item_children_recursive(
+                                &mut this.items,
+                                &item_id_clone,
+                                children,
+                            ) {
+                                this.tree_state.update(cx, |state, cx| {
+                                    state.set_items(this.items.clone(), cx);
+                                });
+                            }
+                        })
+                        .ok();
+                    }
+                }
+            })
+            .detach();
+
+            self.loaded_paths.insert(item_id.to_string());
+        }
     }
 
     fn on_action_select_item(
@@ -132,9 +205,10 @@ impl FileTreePanel {
             window
                 .update(|_window, cx| {
                     view.update(cx, |this, cx| {
-                        let tree_state = this.tree_state.clone();
                         this.root_path = Some(path.clone());
-                        Self::load_files(tree_state, path, cx);
+                        this.loaded_paths.clear();
+                        this.loaded_paths.insert(path.to_string_lossy().to_string());
+                        this.load_root(path, cx);
                     });
                 })
                 .ok()
@@ -149,6 +223,8 @@ impl FileTreePanel {
         cx: &mut gpui::Context<Self>,
     ) {
         self.root_path = None;
+        self.loaded_paths.clear();
+        self.items.clear();
         self.tree_state.update(cx, |state, cx| {
             state.set_items(vec![], cx);
         });
@@ -157,7 +233,9 @@ impl FileTreePanel {
 
     pub fn set_root_path(&mut self, path: PathBuf, cx: &mut Context<Self>) {
         self.root_path = Some(path.clone());
-        Self::load_files(self.tree_state.clone(), path, cx);
+        self.loaded_paths.clear();
+        self.loaded_paths.insert(path.to_string_lossy().to_string());
+        self.load_root(path, cx);
         cx.notify();
     }
 }
@@ -214,7 +292,7 @@ impl Render for FileTreePanel {
                         tree(
                             &self.tree_state,
                             move |ix, entry, _selected, _window, cx| {
-                                view.update(cx, |_, cx| {
+                                view.update(cx, |this, cx| {
                                     let item = entry.item();
                                     let icon = if !entry.is_folder() {
                                         IconName::File
@@ -223,6 +301,10 @@ impl Render for FileTreePanel {
                                     } else {
                                         IconName::Folder
                                     };
+
+                                    if entry.is_expanded() && entry.is_folder() {
+                                        this.load_children(&item.id, cx);
+                                    }
 
                                     ListItem::new(ix)
                                         .w_full()
