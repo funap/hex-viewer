@@ -35,6 +35,8 @@ pub struct EditorPanel {
     current_result_index: Option<usize>,
     last_search_query: String,
     search_task: Option<Task<()>>,
+    viewport_search_task: Option<Task<()>>,
+    is_full_search_complete: bool,
 }
 
 impl EditorPanel {
@@ -72,8 +74,12 @@ impl EditorPanel {
             |this, _, event: &crate::ui::component::hex_view::HexViewEvent, cx| {
                 if let crate::ui::component::hex_view::HexViewEvent::Scrolled(_) = event {
                     // Update highlights if there's an active search
-                    if this.is_search_visible && !this.search_results.is_empty() {
-                        this.update_viewport_highlights(cx);
+                    if this.is_search_visible {
+                        if !this.is_full_search_complete {
+                            this.perform_viewport_search(cx);
+                        } else if !this.search_results.is_empty() {
+                            this.update_viewport_highlights(cx);
+                        }
                     }
                 }
             },
@@ -90,6 +96,8 @@ impl EditorPanel {
             current_result_index: None,
             last_search_query: String::new(),
             search_task: None,
+            viewport_search_task: None,
+            is_full_search_complete: false,
         }
     }
 
@@ -112,54 +120,6 @@ impl EditorPanel {
         mode: SearchMode,
         cx: &mut Context<Self>,
     ) {
-        // Search entire file, then filter to viewport on display
-        self.perform_search_with_limit(
-            query,
-            mode,
-            crate::model::search::SearchLimit::Unlimited,
-            false, // Reset to first result
-            cx,
-        );
-    }
-
-    fn perform_incremental_search_preserve_index(
-        &mut self,
-        query: &str,
-        mode: SearchMode,
-        cx: &mut Context<Self>,
-    ) {
-        // Calculate viewport range
-        let (start_byte, end_byte) = self.hex_view.read(cx).viewport_byte_range();
-        let viewport_size = end_byte.saturating_sub(start_byte);
-
-        // Use viewport size as the search range, preserving current index
-        self.perform_search_with_limit(
-            query,
-            mode,
-            crate::model::search::SearchLimit::Range(viewport_size),
-            true, // Preserve current result index
-            cx,
-        );
-    }
-
-    fn perform_full_search(&mut self, query: &str, mode: SearchMode, cx: &mut Context<Self>) {
-        self.perform_search_with_limit(
-            query,
-            mode,
-            crate::model::search::SearchLimit::Unlimited,
-            false, // Reset to first result
-            cx,
-        );
-    }
-
-    fn perform_search_with_limit(
-        &mut self,
-        query: &str,
-        mode: SearchMode,
-        limit: crate::model::search::SearchLimit,
-        preserve_index: bool,
-        cx: &mut Context<Self>,
-    ) {
         if query.is_empty() {
             self.search_results.clear();
             self.current_result_index = None;
@@ -171,12 +131,63 @@ impl EditorPanel {
         }
 
         self.last_search_query = query.to_string();
+        self.is_full_search_complete = false;
+        self.search_results.clear();
+        self.current_result_index = None;
 
-        // Cancel previous search task
+        // 1. Start viewport search for immediate feedback
+        self.perform_viewport_search(cx);
+
+        // 2. Start full search for complete results
+        self.perform_full_search(query, mode, cx);
+    }
+
+    fn perform_viewport_search(&mut self, cx: &mut Context<Self>) {
+        let (start, end) = self.hex_view.read(cx).viewport_byte_range();
+        let query = self.last_search_query.clone();
+        if query.is_empty() {
+            return;
+        }
+
+        let mode = self.search_bar.read(cx).mode();
+        let app_state = AppState::global(cx);
+
+        let options = crate::model::search::SearchOptions {
+            mode,
+            limit: crate::model::search::SearchLimit::Unlimited,
+            range: Some(start..end),
+        };
+
+        let search_task = app_state
+            .editor_service
+            .search(self.buffer.clone(), query, options, cx);
+
+        let task = cx.spawn(async move |this, cx| {
+            let results = search_task.await;
+            if let Some(this) = this.upgrade() {
+                this.update(cx, |this, cx| {
+                    if !this.is_full_search_complete {
+                        // If full search hasn't finished, show viewport results
+                        this.search_results = results;
+                        this.update_viewport_highlights(cx);
+                    }
+                })
+                .ok();
+            }
+        });
+        self.viewport_search_task = Some(task);
+    }
+
+    fn perform_full_search(&mut self, query: &str, mode: SearchMode, cx: &mut Context<Self>) {
+        self.last_search_query = query.to_string();
         self.search_task = None;
 
         let app_state = AppState::global(cx);
-        let options = crate::model::search::SearchOptions { mode, limit };
+        let options = crate::model::search::SearchOptions {
+            mode,
+            limit: crate::model::search::SearchLimit::Unlimited,
+            range: None,
+        };
         let search_task =
             app_state
                 .editor_service
@@ -187,20 +198,13 @@ impl EditorPanel {
             let results = search_task.await;
             if let Some(this) = this.upgrade() {
                 this.update(cx, |this, cx| {
-                    // Save current index if preserving
-                    let saved_index = if preserve_index {
-                        this.current_result_index
-                    } else {
-                        None
-                    };
-
                     this.search_results = results;
+                    this.is_full_search_complete = true;
+                    this.viewport_search_task = None; // Cancel viewport search
 
                     if !this.search_results.is_empty() {
-                        // Restore saved index or reset to 0
-                        this.current_result_index = saved_index.or(Some(0));
-                        // Preserve scroll position if requested
-                        this.highlight_current_result(preserve_index, cx);
+                        this.current_result_index = Some(0);
+                        this.update_viewport_highlights(cx);
                     } else {
                         this.current_result_index = None;
                         this.hex_view.update(cx, |view, cx| {

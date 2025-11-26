@@ -61,7 +61,9 @@ impl EditorService {
             }
 
             match options.mode {
-                crate::model::search::SearchMode::Text => buffer.search_text(&query, options.limit),
+                crate::model::search::SearchMode::Text => {
+                    buffer.search_text(&query, options.limit, options.range.clone())
+                }
                 crate::model::search::SearchMode::Hex => {
                     // Parse hex string (remove spaces and keep only valid hex characters)
                     let hex_str: String = query.chars().filter(|c| c.is_ascii_hexdigit()).collect();
@@ -79,7 +81,9 @@ impl EditorService {
                             .collect();
 
                         match bytes {
-                            Ok(pattern) => buffer.search_bytes(&pattern, options.limit),
+                            Ok(pattern) => {
+                                buffer.search_bytes(&pattern, options.limit, options.range.clone())
+                            }
                             Err(_) => Vec::new(),
                         }
                     }

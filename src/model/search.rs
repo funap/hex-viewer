@@ -18,6 +18,7 @@ pub enum SearchLimit {
 pub struct SearchOptions {
     pub mode: SearchMode,
     pub limit: SearchLimit,
+    pub range: Option<std::ops::Range<usize>>,
 }
 
 impl SearchOptions {
@@ -25,6 +26,7 @@ impl SearchOptions {
         Self {
             mode,
             limit: SearchLimit::Unlimited,
+            range: None,
         }
     }
 
@@ -32,6 +34,7 @@ impl SearchOptions {
         Self {
             mode,
             limit: SearchLimit::Count(max_results),
+            range: None,
         }
     }
 
@@ -39,6 +42,15 @@ impl SearchOptions {
         Self {
             mode,
             limit: SearchLimit::Range(range_bytes),
+            range: None,
+        }
+    }
+
+    pub fn with_range(mode: SearchMode, range: std::ops::Range<usize>) -> Self {
+        Self {
+            mode,
+            limit: SearchLimit::Unlimited,
+            range: Some(range),
         }
     }
 }

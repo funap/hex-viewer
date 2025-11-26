@@ -56,6 +56,7 @@ impl FileBuffer {
         &self,
         pattern: &[u8],
         limit: crate::model::search::SearchLimit,
+        range: Option<std::ops::Range<usize>>,
     ) -> Vec<usize> {
         if pattern.is_empty() || pattern.len() > self.data.len() {
             return Vec::new();
@@ -64,9 +65,25 @@ impl FileBuffer {
         let mut results = Vec::new();
         let pattern_len = pattern.len();
         let data_len = self.data.len();
+
+        // Determine search range
+        let (start, end) = if let Some(r) = range {
+            (r.start.min(data_len), r.end.min(data_len))
+        } else {
+            (0, data_len)
+        };
+
+        if start >= end || end < pattern_len {
+            return Vec::new();
+        }
+
+        let search_end = end - pattern_len;
         let mut first_match: Option<usize> = None;
 
-        for i in 0..=(data_len - pattern_len) {
+        // Ensure start is within bounds for the loop
+        let start = start.min(search_end + 1);
+
+        for i in start..=search_end {
             if &self.data[i..i + pattern_len] == pattern {
                 results.push(i);
 
@@ -101,7 +118,12 @@ impl FileBuffer {
 
     /// Searches for a UTF-8 text string in the buffer and returns all matching offsets.
     /// The limit parameter controls how many results to return.
-    pub fn search_text(&self, text: &str, limit: crate::model::search::SearchLimit) -> Vec<usize> {
-        self.search_bytes(text.as_bytes(), limit)
+    pub fn search_text(
+        &self,
+        text: &str,
+        limit: crate::model::search::SearchLimit,
+        range: Option<std::ops::Range<usize>>,
+    ) -> Vec<usize> {
+        self.search_bytes(text.as_bytes(), limit, range)
     }
 }
