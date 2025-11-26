@@ -31,7 +31,19 @@
           *task_ran.borrow_mut() = true;
       }
   });
+
   ```
+- cx.spawnを使った例
+```rust
+cx.spawn(async move |this, cx| {
+  // async work
+  if let Some(this) = this.upgrade() {
+      this.update(cx, |this, cx| {
+          // update state
+      }).ok();
+  }
+})
+```
 
 # GPUI
 

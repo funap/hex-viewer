@@ -6,10 +6,11 @@ use gpui_component::{
     input::{self, Input, InputState},
 };
 
-use crate::data::search::SearchMode;
+use crate::model::search::SearchMode;
 
 pub enum SearchBarEvent {
-    Search(String, SearchMode),
+    IncrementalSearch(String, SearchMode),
+    FullSearch(String, SearchMode),
     Next,
     Prev,
     Dismiss,
@@ -20,6 +21,8 @@ pub struct SearchBar {
     mode: SearchMode,
     result_count: usize,
     current_index: Option<usize>,
+    debounce_task: Option<Task<()>>,
+    is_searching: bool,
 }
 
 impl EventEmitter<SearchBarEvent> for SearchBar {}
@@ -32,11 +35,30 @@ impl SearchBar {
                 .clean_on_escape()
         });
 
-        // Subscribe to input changes
+        // Subscribe to input changes with debouncing
         cx.subscribe(&input, |this, input, event: &input::InputEvent, cx| {
             if let input::InputEvent::Change = event {
                 let query = input.read(cx).value().to_string();
-                cx.emit(SearchBarEvent::Search(query, this.mode));
+                let mode = this.mode;
+
+                // Cancel previous debounce task
+                this.debounce_task = None;
+
+                // Start new debounce task (300ms)
+                let task = cx.spawn(async move |this, cx| {
+                    cx.background_executor()
+                        .timer(std::time::Duration::from_millis(300))
+                        .await;
+                    if let Some(this) = this.upgrade() {
+                        this.update(cx, |this, cx| {
+                            this.is_searching = true;
+                            cx.emit(SearchBarEvent::IncrementalSearch(query, mode));
+                            cx.notify();
+                        })
+                        .ok();
+                    }
+                });
+                this.debounce_task = Some(task);
             }
         })
         .detach();
@@ -46,12 +68,15 @@ impl SearchBar {
             mode: SearchMode::Hex,
             result_count: 0,
             current_index: None,
+            debounce_task: None,
+            is_searching: false,
         }
     }
 
     pub fn set_results(&mut self, count: usize, current: Option<usize>, cx: &mut Context<Self>) {
         self.result_count = count;
         self.current_index = current;
+        self.is_searching = false;
         cx.notify();
     }
 
@@ -72,7 +97,7 @@ impl SearchBar {
     fn on_mode_change(&mut self, mode: SearchMode, cx: &mut Context<Self>) {
         self.mode = mode;
         let query = self.input.read(cx).value().to_string();
-        cx.emit(SearchBarEvent::Search(query, self.mode));
+        cx.emit(SearchBarEvent::IncrementalSearch(query, self.mode));
         cx.notify();
     }
 }
@@ -97,15 +122,19 @@ impl Render for SearchBar {
             .bg(cx.theme().background)
             .border_b_1()
             .border_color(cx.theme().border)
-            .on_key_down(cx.listener(|_, event: &gpui::KeyDownEvent, _window, cx| {
-                if event.keystroke.key == "enter" {
-                    if event.keystroke.modifiers.shift {
-                        cx.emit(SearchBarEvent::Prev);
-                    } else {
-                        cx.emit(SearchBarEvent::Next);
+            .on_key_down(
+                cx.listener(|this, event: &gpui::KeyDownEvent, _window, cx| {
+                    if event.keystroke.key == "enter" {
+                        if event.keystroke.modifiers.shift {
+                            cx.emit(SearchBarEvent::Prev);
+                        } else {
+                            // Enter triggers full search
+                            let query = this.input.read(cx).value().to_string();
+                            cx.emit(SearchBarEvent::FullSearch(query, this.mode));
+                        }
                     }
-                }
-            }))
+                }),
+            )
             .child(
                 div()
                     .flex()

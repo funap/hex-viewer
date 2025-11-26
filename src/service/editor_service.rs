@@ -1,4 +1,4 @@
-use crate::data::file_buffer::FileBuffer;
+use crate::model::file_buffer::FileBuffer;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
@@ -45,42 +45,47 @@ impl EditorService {
         buffers.insert(path, new_buffer.clone());
         Ok(new_buffer)
     }
-    /// Searches for a query in the given buffer based on the search mode.
+
+    /// Searches for a query in the given buffer based on the search options.
+    /// Returns a Task that executes the search in the background.
     pub fn search(
         &self,
-        buffer: &FileBuffer,
-        query: &str,
-        mode: crate::data::search::SearchMode,
-    ) -> Vec<usize> {
-        if query.is_empty() {
-            return Vec::new();
-        }
+        buffer: Arc<FileBuffer>,
+        query: String,
+        options: crate::model::search::SearchOptions,
+        cx: &gpui::App,
+    ) -> gpui::Task<Vec<usize>> {
+        cx.background_executor().spawn(async move {
+            if query.is_empty() {
+                return Vec::new();
+            }
 
-        match mode {
-            crate::data::search::SearchMode::Text => buffer.search_text(query),
-            crate::data::search::SearchMode::Hex => {
-                // Parse hex string (remove spaces and keep only valid hex characters)
-                let hex_str: String = query.chars().filter(|c| c.is_ascii_hexdigit()).collect();
+            match options.mode {
+                crate::model::search::SearchMode::Text => buffer.search_text(&query, options.limit),
+                crate::model::search::SearchMode::Hex => {
+                    // Parse hex string (remove spaces and keep only valid hex characters)
+                    let hex_str: String = query.chars().filter(|c| c.is_ascii_hexdigit()).collect();
 
-                if hex_str.is_empty() || hex_str.len() % 2 != 0 {
-                    // Invalid or empty hex string
-                    Vec::new()
-                } else {
-                    let bytes: Result<Vec<u8>, _> = (0..hex_str.len())
-                        .step_by(2)
-                        .map(|i| {
-                            // Safe to use byte indexing since we filtered to ASCII only
-                            u8::from_str_radix(&hex_str[i..i + 2], 16)
-                        })
-                        .collect();
+                    if hex_str.is_empty() || hex_str.len() % 2 != 0 {
+                        // Invalid or empty hex string
+                        Vec::new()
+                    } else {
+                        let bytes: Result<Vec<u8>, _> = (0..hex_str.len())
+                            .step_by(2)
+                            .map(|i| {
+                                // Safe to use byte indexing since we filtered to ASCII only
+                                u8::from_str_radix(&hex_str[i..i + 2], 16)
+                            })
+                            .collect();
 
-                    match bytes {
-                        Ok(pattern) => buffer.search_bytes(&pattern),
-                        Err(_) => Vec::new(),
+                        match bytes {
+                            Ok(pattern) => buffer.search_bytes(&pattern, options.limit),
+                            Err(_) => Vec::new(),
+                        }
                     }
                 }
             }
-        }
+        })
     }
 }
 impl Default for EditorService {

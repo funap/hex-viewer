@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 mod actions;
 mod app_state;
-mod data;
 mod keybindings;
+mod model;
 mod service;
 mod theme;
 mod ui;
@@ -70,7 +70,7 @@ fn main() {
                 app.editor_service.open_file(file_path).await.unwrap()
             } else {
                 // Open empty buffer
-                std::sync::Arc::new(crate::data::file_buffer::FileBuffer::empty())
+                std::sync::Arc::new(crate::model::file_buffer::FileBuffer::empty())
             };
 
             let _ = cx

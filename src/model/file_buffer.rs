@@ -51,8 +51,12 @@ impl FileBuffer {
     }
 
     /// Searches for a byte pattern in the buffer and returns all matching offsets.
-    /// Uses a simple but efficient search algorithm.
-    pub fn search_bytes(&self, pattern: &[u8]) -> Vec<usize> {
+    /// The limit parameter controls how many results to return.
+    pub fn search_bytes(
+        &self,
+        pattern: &[u8],
+        limit: crate::model::search::SearchLimit,
+    ) -> Vec<usize> {
         if pattern.is_empty() || pattern.len() > self.data.len() {
             return Vec::new();
         }
@@ -60,10 +64,35 @@ impl FileBuffer {
         let mut results = Vec::new();
         let pattern_len = pattern.len();
         let data_len = self.data.len();
+        let mut first_match: Option<usize> = None;
 
         for i in 0..=(data_len - pattern_len) {
             if &self.data[i..i + pattern_len] == pattern {
                 results.push(i);
+
+                // Track first match for range-based limiting
+                if first_match.is_none() {
+                    first_match = Some(i);
+                }
+
+                // Check limit
+                match limit {
+                    crate::model::search::SearchLimit::Count(max) => {
+                        if results.len() >= max {
+                            break;
+                        }
+                    }
+                    crate::model::search::SearchLimit::Range(range_bytes) => {
+                        if let Some(first) = first_match {
+                            if i >= first + range_bytes {
+                                break;
+                            }
+                        }
+                    }
+                    crate::model::search::SearchLimit::Unlimited => {
+                        // Continue searching
+                    }
+                }
             }
         }
 
@@ -71,7 +100,8 @@ impl FileBuffer {
     }
 
     /// Searches for a UTF-8 text string in the buffer and returns all matching offsets.
-    pub fn search_text(&self, text: &str) -> Vec<usize> {
-        self.search_bytes(text.as_bytes())
+    /// The limit parameter controls how many results to return.
+    pub fn search_text(&self, text: &str, limit: crate::model::search::SearchLimit) -> Vec<usize> {
+        self.search_bytes(text.as_bytes(), limit)
     }
 }

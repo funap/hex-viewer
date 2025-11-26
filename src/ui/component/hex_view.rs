@@ -1,4 +1,4 @@
-use crate::data::file_buffer::FileBuffer;
+use crate::model::file_buffer::FileBuffer;
 use gpui::prelude::*;
 use gpui::*;
 use gpui::{ScrollWheelEvent, WeakEntity};
@@ -155,6 +155,16 @@ impl HexView {
     ) {
         self.highlights = highlights;
         cx.notify();
+    }
+
+    /// Returns the byte range of the current viewport (visible area).
+    /// Returns (start_byte, end_byte) where end_byte is exclusive.
+    pub fn viewport_byte_range(&self) -> (usize, usize) {
+        let start_byte = self.scroll_offset * BYTES_PER_ROW;
+        let visible_rows = self.get_visible_rows();
+        let end_byte = start_byte + (visible_rows * BYTES_PER_ROW);
+        let end_byte = end_byte.min(self.buffer.len());
+        (start_byte, end_byte)
     }
 
     pub fn set_scroll_offset(&mut self, offset: usize, cx: &mut Context<Self>) {
