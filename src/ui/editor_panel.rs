@@ -158,14 +158,20 @@ impl EditorPanel {
             range: Some(start..end),
         };
 
-        let search_task = app_state
-            .editor_service
-            .search(self.buffer.clone(), query, options, cx);
+        let search_task =
+            app_state
+                .editor_service
+                .search(self.buffer.clone(), query.clone(), options, cx);
 
         let task = cx.spawn(async move |this, cx| {
             let results = search_task.await;
             if let Some(this) = this.upgrade() {
                 this.update(cx, |this, cx| {
+                    // Ensure query hasn't changed
+                    if this.last_search_query != query {
+                        return;
+                    }
+
                     if !this.is_full_search_complete {
                         // If full search hasn't finished, show viewport results
                         this.search_results = results;
@@ -179,7 +185,8 @@ impl EditorPanel {
     }
 
     fn perform_full_search(&mut self, query: &str, mode: SearchMode, cx: &mut Context<Self>) {
-        self.last_search_query = query.to_string();
+        let query_string = query.to_string();
+        self.last_search_query = query_string.clone();
         self.search_task = None;
 
         let app_state = AppState::global(cx);
@@ -191,13 +198,18 @@ impl EditorPanel {
         let search_task =
             app_state
                 .editor_service
-                .search(self.buffer.clone(), query.to_string(), options, cx);
+                .search(self.buffer.clone(), query_string.clone(), options, cx);
 
         // Spawn task to handle search results
         let task = cx.spawn(async move |this, cx| {
             let results = search_task.await;
             if let Some(this) = this.upgrade() {
                 this.update(cx, |this, cx| {
+                    // Ensure query hasn't changed
+                    if this.last_search_query != query_string {
+                        return;
+                    }
+
                     this.search_results = results;
                     this.is_full_search_complete = true;
                     this.viewport_search_task = None; // Cancel viewport search
