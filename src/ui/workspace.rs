@@ -28,6 +28,15 @@ const MAIN_DOCK_AREA_VERSION: usize = 1;
 const FILE_TREE_PANEL_TITLE: &str = "File Tree";
 const STATE_FILE: &str = "dock_layout.json";
 
+pub fn init(cx: &mut App) {
+    cx.bind_keys(vec![
+        KeyBinding::new("shift-escape", gpui_component::dock::ToggleZoom, None),
+        KeyBinding::new("ctrl-w", gpui_component::dock::ClosePanel, None),
+    ]);
+
+    cx.activate(true);
+}
+
 impl Workspace {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let dock_area =
