@@ -11,6 +11,13 @@ pub struct OpenFile {
     pub path: String,
 }
 
+#[derive(Clone, PartialEq, Deserialize, JsonSchema, Action)]
+#[action(namespace = app)]
+#[serde(deny_unknown_fields)]
+pub struct SetFileTreeFolder {
+    pub path: String,
+}
+
 #[derive(Clone, PartialEq, Action)]
 pub struct Rename;
 

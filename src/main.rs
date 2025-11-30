@@ -48,6 +48,6 @@ fn main() {
             (None, None)
         };
 
-        Workspace::new_local(cx, file_to_open, folder_to_open).detach();
+        Workspace::open_window(cx, file_to_open, folder_to_open).detach();
     });
 }

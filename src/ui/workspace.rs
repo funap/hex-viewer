@@ -29,63 +29,7 @@ const FILE_TREE_PANEL_TITLE: &str = "File Tree";
 const STATE_FILE: &str = "dock_layout.json";
 
 impl Workspace {
-    pub fn new_local(
-        cx: &mut App,
-        initial_file: Option<PathBuf>,
-        initial_folder: Option<PathBuf>,
-    ) -> Task<anyhow::Result<WindowHandle<Root>>> {
-        let mut window_size = size(px(1600.0), px(1200.0));
-        if let Some(display) = cx.primary_display() {
-            let display_size = display.bounds().size;
-            window_size.width = window_size.width.min(display_size.width * 0.85);
-            window_size.height = window_size.height.min(display_size.height * 0.85);
-        }
-
-        let window_bounds = Bounds::centered(None, window_size, cx);
-
-        cx.spawn(async move |cx| {
-            let options = WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(window_bounds)),
-                #[cfg(not(target_os = "linux"))]
-                titlebar: Some(gpui_component::TitleBar::title_bar_options()),
-                window_min_size: Some(gpui::Size {
-                    width: px(640.),
-                    height: px(480.),
-                }),
-                #[cfg(target_os = "linux")]
-                window_background: gpui::WindowBackgroundAppearance::Transparent,
-                #[cfg(target_os = "linux")]
-                window_decorations: Some(gpui::WindowDecorations::Client),
-                kind: WindowKind::Normal,
-                ..Default::default()
-            };
-
-            let window = cx.open_window(options, |window, cx| {
-                let view = cx.new(|cx| Self::new(window, cx, initial_file, initial_folder));
-                cx.new(|cx| Root::new(view, window, cx))
-            })?;
-
-            window
-                .update(cx, |_, window, cx| {
-                    window.activate_window();
-                    window.set_window_title("XVI");
-                    cx.on_release(|_, cx| {
-                        cx.quit();
-                    })
-                    .detach();
-                })
-                .expect("failed to update window");
-
-            Ok(window)
-        })
-    }
-
-    pub fn new(
-        window: &mut Window,
-        cx: &mut Context<Self>,
-        initial_file: Option<PathBuf>,
-        initial_folder: Option<PathBuf>,
-    ) -> Self {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let dock_area =
             cx.new(|cx| DockArea::new(MAIN_DOCK_AREA_ID, Some(MAIN_DOCK_AREA_VERSION), window, cx));
         let weak_dock_area = dock_area.downgrade();
@@ -99,13 +43,7 @@ impl Workspace {
             }
             Err(err) => {
                 eprintln!("load layout error: {:?}", err);
-                Self::reset_default_layout(
-                    weak_dock_area,
-                    window,
-                    cx,
-                    initial_file,
-                    initial_folder,
-                );
+                Self::reset_default_layout(weak_dock_area, window, cx);
             }
         };
 
@@ -193,71 +131,11 @@ impl Workspace {
         dock_area: WeakEntity<DockArea>,
         window: &mut Window,
         cx: &mut Context<Self>,
-        initial_file: Option<PathBuf>,
-        initial_folder: Option<PathBuf>,
     ) {
-        let app = AppState::global(cx).clone();
-
-        // We need to spawn a task to handle async file opening if needed,
-        // but for initial layout setup we might need synchronous creation or placeholders.
-        // However, `reset_default_layout` is called from `new` which is synchronous.
-        // We can create an empty buffer or load synchronously if possible, but `open_file` is async.
-        // For now, let's create an empty buffer and load the file in background if present.
-
-        let buffer = if let Some(_) = initial_file.clone() {
-            // Ideally we would wait, but we are in sync context.
-            // We'll start with empty and let the file loader update it,
-            // OR we can block if we are sure (not recommended in UI thread),
-            // OR we can just create a placeholder.
-            // Given the structure, let's create an empty buffer and trigger open.
-            Arc::new(crate::model::file_buffer::FileBuffer::empty())
-        } else {
-            Arc::new(crate::model::file_buffer::FileBuffer::empty())
-        };
-
+        // Create empty buffer and file tree panel
+        let buffer = Arc::new(crate::model::file_buffer::FileBuffer::empty());
         let file_tree_panel = cx.new(|cx| FileTreePanel::new(FILE_TREE_PANEL_TITLE, cx));
-        if let Some(folder) = initial_folder {
-            file_tree_panel.update(cx, |panel, cx| {
-                panel.set_root_path(folder, cx);
-            });
-        }
-
         let editor_panel = cx.new(|cx| EditorPanel::new(buffer.clone(), window, cx));
-
-        // If we have an initial file, we should trigger loading it.
-        if let Some(path) = initial_file {
-            cx.spawn(async move |this, cx| {
-                if let Ok(loaded_buffer) = app.editor_service.open_file(path).await {
-                    // We need to update the editor panel with the new buffer.
-                    // This might be tricky if the panel is already created with the old buffer.
-                    // Alternatively, we can just add a new editor panel.
-                    // But we want to replace the initial one.
-                    // For simplicity in this step, let's just add a new panel or update if possible.
-                    // Since EditorPanel takes buffer in constructor, maybe we can just dispatch AddEditorPanel?
-                    // But we want it in the default layout.
-
-                    // Actually, looking at `main.rs` original code, it awaited `open_file`.
-                    // Here we are inside `new` which is sync.
-                    // We can use `cx.spawn` to update the editor panel later.
-                    // But `EditorPanel` might not have a method to swap buffer easily without recreating.
-                    // Let's assume for now we just open it in a new tab if it's not empty,
-                    // or we can try to make `EditorPanel` updateable.
-                    // For now, let's just stick to the structure and maybe dispatch an action.
-
-                    // Wait, `EditorPanel` holds `buffer`.
-                    // Let's just dispatch `AddEditorPanel` which adds a NEW panel.
-                    // The initial empty panel might be redundant then.
-
-                    // Let's try to load it and replace if possible, or just open it.
-                    if let Some(this) = this.upgrade() {
-                        let _ = this.update(cx, |_, cx| {
-                            cx.dispatch_action(&AddEditorPanel(loaded_buffer));
-                        });
-                    }
-                }
-            })
-            .detach();
-        }
 
         if let Some(dock_area_entity) = dock_area.upgrade() {
             dock_area_entity.update(cx, |dock_area_view, cx| {
@@ -283,6 +161,53 @@ impl Workspace {
         }
     }
 
+    fn new_local(cx: &mut App) -> Task<anyhow::Result<WindowHandle<Root>>> {
+        let mut window_size = size(px(1600.0), px(1200.0));
+        if let Some(display) = cx.primary_display() {
+            let display_size = display.bounds().size;
+            window_size.width = window_size.width.min(display_size.width * 0.85);
+            window_size.height = window_size.height.min(display_size.height * 0.85);
+        }
+
+        let window_bounds = Bounds::centered(None, window_size, cx);
+
+        cx.spawn(async move |cx| {
+            let options = WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(window_bounds)),
+                #[cfg(not(target_os = "linux"))]
+                titlebar: Some(gpui_component::TitleBar::title_bar_options()),
+                window_min_size: Some(gpui::Size {
+                    width: px(640.),
+                    height: px(480.),
+                }),
+                #[cfg(target_os = "linux")]
+                window_background: gpui::WindowBackgroundAppearance::Transparent,
+                #[cfg(target_os = "linux")]
+                window_decorations: Some(gpui::WindowDecorations::Client),
+                kind: WindowKind::Normal,
+                ..Default::default()
+            };
+
+            let window = cx.open_window(options, |window, cx| {
+                let view = cx.new(|cx| Self::new(window, cx));
+                cx.new(|cx| Root::new(view, window, cx))
+            })?;
+
+            window
+                .update(cx, |_, window, cx| {
+                    window.activate_window();
+                    window.set_window_title("XVI");
+                    cx.on_release(|_, cx| {
+                        cx.quit();
+                    })
+                    .detach();
+                })
+                .expect("failed to update window");
+
+            Ok(window)
+        })
+    }
+
     fn on_action_add_editor_panel(
         &mut self,
         action: &AddEditorPanel,
@@ -291,15 +216,10 @@ impl Workspace {
     ) {
         let buffer = action.0.clone();
         let editor_panel = cx.new(|cx| EditorPanel::new(buffer, window, cx));
+        let panel = Arc::new(editor_panel);
 
         self.dock_area.update(cx, |dock_area, cx| {
-            dock_area.add_panel(
-                Arc::new(editor_panel),
-                DockPlacement::Center,
-                None,
-                window,
-                cx,
-            );
+            dock_area.add_panel(panel, DockPlacement::Center, None, window, cx);
         });
     }
 
@@ -326,6 +246,39 @@ impl Workspace {
             }
         })
         .detach();
+    }
+
+    /// Opens a new workspace window with the specified file and folder.
+    /// This is the main public API for creating workspace windows.
+    pub fn open_window(
+        cx: &mut App,
+        initial_file: Option<PathBuf>,
+        initial_folder: Option<PathBuf>,
+    ) -> Task<()> {
+        let task = Self::new_local(cx);
+        cx.spawn(async move |cx| {
+            if let Ok(window) = task.await {
+                // Open initial file if provided
+                if let Some(file_path) = initial_file {
+                    if let Ok(app) = cx.update(|cx| AppState::global(cx).clone()) {
+                        if let Ok(buffer) = app.editor_service.open_file(file_path).await {
+                            let _ = window.update(cx, |_root, _window, cx| {
+                                cx.dispatch_action(&AddEditorPanel(buffer));
+                            });
+                        }
+                    }
+                }
+
+                // Set initial folder if provided
+                if let Some(folder_path) = initial_folder {
+                    let _ = window.update(cx, |_root, _window, cx| {
+                        cx.dispatch_action(&SetFileTreeFolder {
+                            path: folder_path.to_string_lossy().to_string(),
+                        });
+                    });
+                }
+            }
+        })
     }
 }
 

@@ -258,6 +258,16 @@ impl FileTreePanel {
         self.load_root(path, cx);
         cx.notify();
     }
+
+    fn on_action_set_file_tree_folder(
+        &mut self,
+        action: &crate::actions::SetFileTreeFolder,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let path = PathBuf::from(&action.path);
+        self.set_root_path(path, cx);
+    }
 }
 
 impl Render for FileTreePanel {
@@ -303,6 +313,7 @@ impl Render for FileTreePanel {
             .on_action(cx.listener(Self::on_action_rename))
             .on_action(cx.listener(Self::on_action_select_item))
             .on_action(cx.listener(Self::on_action_close_folder))
+            .on_action(cx.listener(Self::on_action_set_file_tree_folder))
             .gap_5()
             .size_full()
             .child(
