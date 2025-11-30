@@ -20,7 +20,6 @@ fn main() {
 
     // Parse command line arguments
     let args: Vec<String> = std::env::args().collect();
-    let path_arg = args.get(1).map(|s| std::path::PathBuf::from(s));
 
     let app = Application::new().with_assets(Assets);
 
@@ -33,21 +32,22 @@ fn main() {
         ui::file_tree_panel::init(cx);
         ui::editor_panel::init(cx);
 
-        // Determine what to open based on command line argument
-        let (file_to_open, folder_to_open) = if let Some(path) = path_arg {
+        // Parse command line arguments (skip the first one which is the program name)
+        let mut files_to_open = Vec::new();
+        let mut folder_to_open = None;
+
+        for arg in args.iter().skip(1) {
+            let path = std::path::PathBuf::from(arg);
             if path.is_file() {
-                (Some(path), None)
+                files_to_open.push(path);
             } else if path.is_dir() {
-                (None, Some(path))
+                // Use the last directory as the folder to open
+                folder_to_open = Some(path);
             } else {
                 eprintln!("Warning: Path does not exist: {}", path.display());
-                (None, None)
             }
-        } else {
-            // No argument: open empty buffer
-            (None, None)
-        };
+        }
 
-        Workspace::open_window(cx, file_to_open, folder_to_open).detach();
+        Workspace::open_window(cx, files_to_open, folder_to_open).detach();
     });
 }

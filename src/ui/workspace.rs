@@ -248,23 +248,25 @@ impl Workspace {
         .detach();
     }
 
-    /// Opens a new workspace window with the specified file and folder.
+    /// Opens a new workspace window with the specified files and folder.
     /// This is the main public API for creating workspace windows.
     pub fn open_window(
         cx: &mut App,
-        initial_file: Option<PathBuf>,
+        initial_files: Vec<PathBuf>,
         initial_folder: Option<PathBuf>,
     ) -> Task<()> {
         let task = Self::new_local(cx);
         cx.spawn(async move |cx| {
             if let Ok(window) = task.await {
-                // Open initial file if provided
-                if let Some(file_path) = initial_file {
+                // Open all initial files if provided
+                if !initial_files.is_empty() {
                     if let Ok(app) = cx.update(|cx| AppState::global(cx).clone()) {
-                        if let Ok(buffer) = app.editor_service.open_file(file_path).await {
-                            let _ = window.update(cx, |_root, _window, cx| {
-                                cx.dispatch_action(&AddEditorPanel(buffer));
-                            });
+                        for file_path in initial_files {
+                            if let Ok(buffer) = app.editor_service.open_file(file_path).await {
+                                let _ = window.update(cx, |_root, _window, cx| {
+                                    cx.dispatch_action(&AddEditorPanel(buffer));
+                                });
+                            }
                         }
                     }
                 }
