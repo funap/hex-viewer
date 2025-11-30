@@ -25,6 +25,26 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("enter", Rename, Some(CONTEXT)),
         KeyBinding::new("space", SelectItem, Some(CONTEXT)),
     ]);
+
+    gpui_component::dock::register_panel(cx, "FileTreePanel", |_, _, info, _window, cx| {
+        let state = match info {
+            gpui_component::dock::PanelInfo::Panel(value) => {
+                FileTreePanelState::from_value(value.clone())
+            }
+            _ => None,
+        };
+
+        let view = cx.new(|cx| {
+            let mut panel = FileTreePanel::new("File Tree", cx);
+            if let Some(state) = state {
+                if let Some(path) = state.root_path {
+                    panel.set_root_path(path, cx);
+                }
+            }
+            panel
+        });
+        Box::new(view)
+    });
 }
 
 pub struct FileTreePanel {
@@ -396,4 +416,28 @@ impl Panel for FileTreePanel {
     fn set_active(&mut self, _active: bool, _window: &mut Window, _cx: &mut App) {}
 
     fn set_zoomed(&mut self, _zoomed: bool, _window: &mut Window, _cx: &mut App) {}
+
+    fn dump(&self, _cx: &App) -> gpui_component::dock::PanelState {
+        let mut state = gpui_component::dock::PanelState::new(self);
+        let panel_state = FileTreePanelState {
+            root_path: self.root_path.clone(),
+        };
+        state.info = gpui_component::dock::PanelInfo::panel(panel_state.to_value());
+        state
+    }
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct FileTreePanelState {
+    pub root_path: Option<PathBuf>,
+}
+
+impl FileTreePanelState {
+    pub fn to_value(&self) -> serde_json::Value {
+        serde_json::to_value(self).unwrap()
+    }
+
+    pub fn from_value(value: serde_json::Value) -> Option<Self> {
+        serde_json::from_value(value).ok()
+    }
 }
