@@ -235,13 +235,20 @@ impl Workspace {
     fn on_action_open_file(
         &mut self,
         action: &OpenFile,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let file_path = action.path.clone();
+        let path = std::path::PathBuf::from(&file_path);
+
+        if let Some(focus_handle) = self.find_existing_panel(&path, cx) {
+            focus_handle.focus(window);
+            return;
+        }
 
         cx.spawn(async move |this, cx| {
             let app = cx.update(|cx| AppState::global(cx).clone()).ok().unwrap();
+
             if let Some(add_editor_panel) = this.upgrade() {
                 if let Ok(buffer) = app
                     .editor_service
@@ -255,6 +262,38 @@ impl Workspace {
             }
         })
         .detach();
+    }
+
+    fn find_existing_panel(&self, path: &std::path::Path, cx: &App) -> Option<FocusHandle> {
+        let dock_area = self.dock_area.read(cx);
+        Self::find_panel_in_items(dock_area.items(), path, cx)
+    }
+
+    fn find_panel_in_items(
+        dock_item: &DockItem,
+        path: &std::path::Path,
+        cx: &App,
+    ) -> Option<FocusHandle> {
+        match dock_item {
+            DockItem::Tabs { items, .. } => {
+                for item in items {
+                    if let Ok(panel) = item.view().downcast::<EditorPanel>() {
+                        if panel.read(cx).path() == path {
+                            return Some(panel.read(cx).focus_handle(cx));
+                        }
+                    }
+                }
+            }
+            DockItem::Split { items, .. } => {
+                for item in items {
+                    if let Some(handle) = Self::find_panel_in_items(item, path, cx) {
+                        return Some(handle);
+                    }
+                }
+            }
+            _ => {}
+        }
+        None
     }
 
     /// Opens a new workspace window with the specified files and folder.

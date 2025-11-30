@@ -158,6 +158,10 @@ impl EditorPanel {
         }
     }
 
+    pub fn path(&self) -> &std::path::Path {
+        self.buffer.path()
+    }
+
     fn toggle_search(&mut self, _: &ToggleSearch, window: &mut Window, cx: &mut Context<Self>) {
         self.is_search_visible = !self.is_search_visible;
         if self.is_search_visible {
