@@ -29,11 +29,7 @@ impl EventEmitter<SearchBarEvent> for SearchBar {}
 
 impl SearchBar {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder("Find...")
-                .clean_on_escape()
-        });
+        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Find..."));
 
         // Subscribe to input changes with debouncing
         cx.subscribe(&input, |this, input, event: &input::InputEvent, cx| {
@@ -128,10 +124,10 @@ impl Render for SearchBar {
                         if event.keystroke.modifiers.shift {
                             cx.emit(SearchBarEvent::Prev);
                         } else {
-                            // Enter triggers full search
-                            let query = this.input.read(cx).value().to_string();
-                            cx.emit(SearchBarEvent::FullSearch(query, this.mode));
+                            cx.emit(SearchBarEvent::Next);
                         }
+                    } else if event.keystroke.key == "escape" {
+                        cx.emit(SearchBarEvent::Dismiss);
                     }
                 }),
             )
