@@ -22,6 +22,10 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("cmd-g", SearchNext, Some(CONTEXT)),
         KeyBinding::new("shift-f3", SearchPrev, Some(CONTEXT)),
         KeyBinding::new("cmd-shift-g", SearchPrev, Some(CONTEXT)),
+        // Vi-like keybindings
+        KeyBinding::new("/", ToggleSearch, Some(CONTEXT)),
+        KeyBinding::new("n", SearchNext, Some(CONTEXT)),
+        KeyBinding::new("shift-n", SearchPrev, Some(CONTEXT)),
     ]);
 
     gpui_component::dock::register_panel(cx, "EditorPanel", |_, _, info, window, cx| {

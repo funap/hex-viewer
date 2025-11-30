@@ -71,6 +71,15 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("shift-pagedown", SelectPageDown, Some(CONTEXT)),
         KeyBinding::new("shift-home", SelectHome, Some(CONTEXT)),
         KeyBinding::new("shift-end", SelectEnd, Some(CONTEXT)),
+        // Vi-like navigation
+        KeyBinding::new("h", MoveLeft, Some(CONTEXT)),
+        KeyBinding::new("l", MoveRight, Some(CONTEXT)),
+        KeyBinding::new("k", MoveUp, Some(CONTEXT)),
+        KeyBinding::new("j", MoveDown, Some(CONTEXT)),
+        KeyBinding::new("shift-h", SelectLeft, Some(CONTEXT)),
+        KeyBinding::new("shift-l", SelectRight, Some(CONTEXT)),
+        KeyBinding::new("shift-k", SelectUp, Some(CONTEXT)),
+        KeyBinding::new("shift-j", SelectDown, Some(CONTEXT)),
     ]);
 }
 
