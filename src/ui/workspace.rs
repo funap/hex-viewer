@@ -148,17 +148,12 @@ impl Workspace {
 
         if let Some(dock_area_entity) = dock_area.upgrade() {
             dock_area_entity.update(cx, |dock_area_view, cx| {
-                let left_dock = DockItem::tabs(
-                    vec![Arc::new(file_tree_panel)],
-                    Some(0),
-                    &dock_area,
-                    window,
-                    cx,
-                );
+                let left_dock = DockItem::tab(file_tree_panel, &dock_area, window, cx);
 
-                let center_dock = DockItem::tabs(
-                    vec![Arc::new(editor_panel)],
-                    Some(0),
+                let center_dock = DockItem::split_with_sizes(
+                    Axis::Vertical,
+                    vec![DockItem::tab(editor_panel, &dock_area, window, cx)],
+                    vec![None],
                     &dock_area,
                     window,
                     cx,
