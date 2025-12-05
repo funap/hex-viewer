@@ -30,6 +30,13 @@ pub struct OpenFolder;
 #[derive(Clone, PartialEq, Action)]
 pub struct CloseFolder;
 
+#[derive(Clone, PartialEq, Deserialize, JsonSchema, Action)]
+#[action(namespace = app)]
+#[serde(deny_unknown_fields)]
+pub struct LoadChildren {
+    pub path: String,
+}
+
 #[derive(Clone, PartialEq, Action)]
 pub struct ToggleSearch;
 
@@ -41,6 +48,23 @@ pub struct SearchPrev;
 
 #[derive(Clone, PartialEq, Action)]
 pub struct FocusHexView;
+
+#[derive(Clone, PartialEq, Deserialize, JsonSchema, Action)]
+#[action(namespace = app)]
+#[serde(deny_unknown_fields)]
+pub struct OpenDiff {
+    pub left_path: String,
+    pub right_path: String,
+}
+
+#[derive(Clone, PartialEq, Action)]
+pub struct NextDifference;
+
+#[derive(Clone, PartialEq, Action)]
+pub struct PrevDifference;
+
+#[derive(Clone, PartialEq, Action)]
+pub struct ToggleSyncScroll;
 
 #[derive(Clone)]
 pub struct AddEditorPanel(pub Arc<FileBuffer>);

@@ -30,6 +30,7 @@ fn main() {
         ui::workspace::init(cx);
         ui::file_tree_panel::init(cx);
         ui::editor_panel::init(cx);
+        ui::diff_panel::init(cx);
 
         // Parse command line arguments (skip the first one which is the program name)
         let mut files_to_open = Vec::new();

@@ -259,6 +259,72 @@ impl Workspace {
         .detach();
     }
 
+    fn on_action_open_diff(
+        &mut self,
+        action: &OpenDiff,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let left_path = action.left_path.clone();
+        let right_path = action.right_path.clone();
+
+        cx.spawn_in(window, async move |this, window| {
+            let app = this
+                .update(window, |_, cx| AppState::global(cx).clone())
+                .ok()
+                .unwrap();
+
+            if let Some(workspace) = this.upgrade() {
+                let left_result = app
+                    .editor_service
+                    .open_file(std::path::PathBuf::from(left_path))
+                    .await;
+                let right_result = app
+                    .editor_service
+                    .open_file(std::path::PathBuf::from(right_path))
+                    .await;
+
+                if let (Ok(left_buffer), Ok(right_buffer)) = (left_result, right_result) {
+                    let _ = workspace.update_in(window, |workspace, window, cx| {
+                        let app = AppState::global(cx).clone();
+                        let diff_result_task = app.editor_service.compute_diff(
+                            left_buffer.clone(),
+                            right_buffer.clone(),
+                            cx,
+                        );
+
+                        cx.spawn_in(window, async move |workspace, window| {
+                            let diff_result = diff_result_task.await;
+
+                            let _ = workspace.update_in(window, |_workspace, window, cx| {
+                                use crate::ui::diff_panel::DiffPanel;
+                                let diff_view = cx.new(|cx| {
+                                    let mut view =
+                                        DiffPanel::new(left_buffer, right_buffer, window, cx);
+                                    view.set_diff_result(diff_result, cx);
+                                    view
+                                });
+                                let panel = Arc::new(diff_view);
+
+                                _workspace.dock_area.update(cx, |dock_area, cx| {
+                                    dock_area.add_panel(
+                                        panel,
+                                        DockPlacement::Center,
+                                        None,
+                                        window,
+                                        cx,
+                                    );
+                                });
+                            });
+                        })
+                        .detach();
+                    });
+                }
+            }
+        })
+        .detach();
+    }
+
     fn find_existing_panel(&self, path: &std::path::Path, cx: &App) -> Option<FocusHandle> {
         let dock_area = self.dock_area.read(cx);
         Self::find_panel_in_items(dock_area.items(), path, cx)
@@ -333,6 +399,7 @@ impl Render for Workspace {
             .id("workspace")
             .on_action(cx.listener(Self::on_action_open_file))
             .on_action(cx.listener(Self::on_action_add_editor_panel))
+            .on_action(cx.listener(Self::on_action_open_diff))
             .relative()
             .size_full()
             .flex()

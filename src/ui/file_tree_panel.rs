@@ -1,4 +1,6 @@
-use crate::actions::{CloseFolder, OpenFile, OpenFolder, Rename, SelectItem};
+use crate::actions::{
+    CloseFolder, LoadChildren, OpenDiff, OpenFile, OpenFolder, Rename, SelectItem,
+};
 use std::collections::HashSet;
 use std::path::PathBuf;
 
@@ -15,6 +17,7 @@ use gpui_component::{
     h_flex,
     label::Label,
     list::ListItem,
+    menu::ContextMenuExt,
     tree::{TreeItem, TreeState, tree},
     v_flex,
 };
@@ -50,6 +53,7 @@ pub(crate) fn init(cx: &mut App) {
 pub struct FileTreePanel {
     tree_state: Entity<TreeState>,
     selected_item: Option<TreeItem>,
+    selected_items: Vec<TreeItem>, // 複数選択用
     title: SharedString,
     focus_handle: FocusHandle,
     root_path: Option<PathBuf>,
@@ -118,6 +122,7 @@ impl FileTreePanel {
         let this = Self {
             tree_state: tree_state.clone(),
             selected_item: None,
+            selected_items: Vec::new(),
             title: title.into(),
             focus_handle: cx.focus_handle(),
             root_path: None,
@@ -268,6 +273,24 @@ impl FileTreePanel {
         let path = PathBuf::from(&action.path);
         self.set_root_path(path, cx);
     }
+
+    fn on_action_load_children(
+        &mut self,
+        action: &LoadChildren,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.load_children(&action.path, cx);
+    }
+
+    fn toggle_selection(&mut self, item: TreeItem, cx: &mut Context<Self>) {
+        if let Some(pos) = self.selected_items.iter().position(|i| i.id == item.id) {
+            self.selected_items.remove(pos);
+        } else {
+            self.selected_items.push(item);
+        }
+        cx.notify();
+    }
 }
 
 impl Render for FileTreePanel {
@@ -314,60 +337,139 @@ impl Render for FileTreePanel {
             .on_action(cx.listener(Self::on_action_select_item))
             .on_action(cx.listener(Self::on_action_close_folder))
             .on_action(cx.listener(Self::on_action_set_file_tree_folder))
+            .on_action(cx.listener(Self::on_action_load_children))
             .gap_5()
             .size_full()
             .child(
                 div()
                     .v_flex()
                     .child(
-                        tree(
-                            &self.tree_state,
-                            move |ix, entry, _selected, _window, cx| {
-                                view.update(cx, |this, cx| {
-                                    let item = entry.item();
-                                    let icon = if !entry.is_folder() {
-                                        IconName::File
-                                    } else if entry.is_expanded() {
-                                        IconName::FolderOpen
-                                    } else {
-                                        IconName::Folder
-                                    };
+                        tree(&self.tree_state, move |ix, entry, _selected, window, cx| {
+                            let item = entry.item();
+                            let icon = if !entry.is_folder() {
+                                IconName::File
+                            } else if entry.is_expanded() {
+                                IconName::FolderOpen
+                            } else {
+                                IconName::Folder
+                            };
 
-                                    if entry.is_expanded() && entry.is_folder() {
-                                        this.load_children(&item.id, cx);
-                                    }
+                            if entry.is_expanded() && entry.is_folder() {
+                                let item_id = item.id.to_string();
+                                window.dispatch_action(
+                                    Box::new(crate::actions::LoadChildren { path: item_id }),
+                                    cx,
+                                );
+                            }
 
-                                    ListItem::new(ix)
-                                        .w_full()
-                                        .rounded(cx.theme().radius)
-                                        .px_3()
-                                        .pl(px(16.) * entry.depth() + px(12.))
-                                        .child(
-                                            h_flex().gap_2().child(icon).child(item.label.clone()),
-                                        )
-                                        .on_click(cx.listener({
-                                            let item = item.clone();
-                                            move |this, _, window, cx| {
-                                                this.selected_item = Some(item.clone());
-                                                if !item.is_folder() {
-                                                    println!(
-                                                        "Dispatching OpenFile action for path: {}",
-                                                        item.id
-                                                    );
-                                                    cx.focus_self(window);
-                                                    window.dispatch_action(
+                            ListItem::new(ix)
+                                .w_full()
+                                .rounded(cx.theme().radius)
+                                .px_3()
+                                .pl(px(16.) * entry.depth() + px(12.))
+                                .child(
+                                    h_flex()
+                                        .gap_2()
+                                        .child(icon)
+                                        .child(item.label.clone())
+                                        .size_full()
+                                        .context_menu({
+                                            let view = view.clone();
+                                            let item_id = item.id.clone();
+                                            move |menu, _window, cx| {
+                                                let (can_compare, left_path, right_path) = view
+                                                    .update(cx, |this, _cx| {
+                                                        let can_compare = this.selected_items.len()
+                                                            == 2
+                                                            && this
+                                                                .selected_items
+                                                                .iter()
+                                                                .all(|item| !item.is_folder());
+                                                        if can_compare {
+                                                            (
+                                                                true,
+                                                                Some(
+                                                                    this.selected_items[0]
+                                                                        .id
+                                                                        .to_string(),
+                                                                ),
+                                                                Some(
+                                                                    this.selected_items[1]
+                                                                        .id
+                                                                        .to_string(),
+                                                                ),
+                                                            )
+                                                        } else {
+                                                            (false, None, None)
+                                                        }
+                                                    });
+
+                                                let mut menu = menu
+                                                    .menu_with_icon(
+                                                        "Open",
+                                                        IconName::FolderOpen,
                                                         Box::new(OpenFile {
-                                                            path: item.id.to_string(),
+                                                            path: item_id.to_string(),
                                                         }),
-                                                        cx,
+                                                    )
+                                                    .separator();
+
+                                                if can_compare {
+                                                    menu = menu.menu_with_icon(
+                                                        "Compare Files",
+                                                        IconName::Search,
+                                                        Box::new(OpenDiff {
+                                                            left_path: left_path
+                                                                .unwrap_or_default(),
+                                                            right_path: right_path
+                                                                .unwrap_or_default(),
+                                                        }),
+                                                    );
+                                                } else {
+                                                    menu = menu.menu_with_icon_and_disabled(
+                                                        "Compare Files",
+                                                        IconName::Search,
+                                                        Box::new(OpenDiff {
+                                                            left_path: String::new(),
+                                                            right_path: String::new(),
+                                                        }),
+                                                        true,
                                                     );
                                                 }
-                                                cx.notify();
+
+                                                menu.separator().menu("Rename", Box::new(Rename))
                                             }
-                                        }))
-                                })
-                            },
-                        )
+                                        }),
+                                )
+                                .on_click(window.listener_for(&view, {
+                                    let item = item.clone();
+                                    move |this, event: &gpui::ClickEvent, window, cx| {
+                                        // Ctrl/Cmdキーで複数選択
+                                        if event.modifiers().control || event.modifiers().platform {
+                                            this.toggle_selection(item.clone(), cx);
+                                        } else {
+                                            this.selected_items = vec![item.clone()];
+                                            this.selected_item = Some(item.clone());
+                                        }
+
+                                        // ファイルを開く処理（単一選択時のみ）
+                                        if !item.is_folder() && this.selected_items.len() == 1 {
+                                            println!(
+                                                "Dispatching OpenFile action for path: {}",
+                                                item.id
+                                            );
+                                            cx.focus_self(window);
+                                            window.dispatch_action(
+                                                Box::new(OpenFile {
+                                                    path: item.id.to_string(),
+                                                }),
+                                                cx,
+                                            );
+                                        }
+                                        cx.notify();
+                                    }
+                                }))
+                        })
                         .p_1()
                         .border_1()
                         .border_color(cx.theme().border)

@@ -166,6 +166,21 @@ impl HexView {
         cx.notify();
     }
 
+    pub fn set_highlight_ranges(&mut self, ranges: Vec<Range<usize>>, cx: &mut Context<Self>) {
+        let theme = cx.theme();
+        let highlight_color = theme.accent;
+        self.highlights = ranges
+            .into_iter()
+            .map(|range| (range, highlight_color))
+            .collect();
+        cx.notify();
+    }
+
+    pub fn scroll_to_offset(&mut self, byte_offset: usize, cx: &mut Context<Self>) {
+        let row = byte_offset / BYTES_PER_ROW;
+        self.set_scroll_offset(row, cx);
+    }
+
     /// Returns the byte range of the current viewport (visible area).
     /// Returns (start_byte, end_byte) where end_byte is exclusive.
     pub fn viewport_byte_range(&self) -> (usize, usize) {
@@ -180,8 +195,13 @@ impl HexView {
         let row_height = px(ROW_HEIGHT);
         let total_rows = (self.buffer.len() + BYTES_PER_ROW - 1) / BYTES_PER_ROW;
         let max_offset = total_rows.saturating_sub(1);
+        let new_offset = offset.min(max_offset);
 
-        self.scroll_offset = offset.min(max_offset);
+        if self.scroll_offset == new_offset {
+            return;
+        }
+
+        self.scroll_offset = new_offset;
         self.scroll_handle
             .set_offset(point(px(0.), -(self.scroll_offset as f32 * row_height)));
         cx.notify();

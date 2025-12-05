@@ -91,6 +91,19 @@ impl EditorService {
             }
         })
     }
+
+    pub fn compute_diff(
+        &self,
+        left: Arc<FileBuffer>,
+        right: Arc<FileBuffer>,
+        cx: &gpui::App,
+    ) -> gpui::Task<crate::model::diff::DiffResult> {
+        cx.background_executor().spawn(async move {
+            let left_data = left.data();
+            let right_data = right.data();
+            crate::model::diff::compute_simple_diff(left_data, right_data)
+        })
+    }
 }
 impl Default for EditorService {
     fn default() -> Self {
