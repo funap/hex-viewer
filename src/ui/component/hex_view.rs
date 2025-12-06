@@ -644,8 +644,10 @@ impl Render for HexView {
         // Ensure at least one line is shown, even for empty buffer
         let total_rows = ((self.buffer.len() + BYTES_PER_ROW - 1) / BYTES_PER_ROW).max(1);
 
-        // Total height is just header + all data rows, no extra padding needed
-        let total_height = row_height * total_rows as f32;
+        let visible_rows = self.get_visible_rows();
+        let extra_scroll_rows = visible_rows.saturating_sub(1);
+        let header_height = if self.show_header { px(HEADER_HEIGHT) } else { px(0.) };
+        let total_height = header_height + row_height * (total_rows + extra_scroll_rows) as f32;
 
         let handle_y = self.scroll_handle.offset().y;
         let handle_row = ((-handle_y).max(px(0.)) / row_height).round() as usize;
