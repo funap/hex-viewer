@@ -52,12 +52,7 @@ impl FileBuffer {
 
     /// Searches for a byte pattern in the buffer and returns all matching offsets.
     /// The limit parameter controls how many results to return.
-    pub fn search_bytes(
-        &self,
-        pattern: &[u8],
-        limit: crate::model::search::SearchLimit,
-        range: Option<std::ops::Range<usize>>,
-    ) -> Vec<usize> {
+    pub fn search_bytes(&self, pattern: &[u8], limit: crate::model::search::SearchLimit, range: Option<std::ops::Range<usize>>) -> Vec<usize> {
         if pattern.is_empty() || pattern.len() > self.data.len() {
             return Vec::new();
         }
@@ -118,12 +113,7 @@ impl FileBuffer {
 
     /// Searches for a UTF-8 text string in the buffer and returns all matching offsets.
     /// The limit parameter controls how many results to return.
-    pub fn search_text(
-        &self,
-        text: &str,
-        limit: crate::model::search::SearchLimit,
-        range: Option<std::ops::Range<usize>>,
-    ) -> Vec<usize> {
+    pub fn search_text(&self, text: &str, limit: crate::model::search::SearchLimit, range: Option<std::ops::Range<usize>>) -> Vec<usize> {
         self.search_bytes(text.as_bytes(), limit, range)
     }
 }

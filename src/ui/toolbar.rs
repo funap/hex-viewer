@@ -8,16 +8,14 @@ pub struct AppTitleBar {
 
 impl Render for AppTitleBar {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        TitleBar::new()
-            .child(div().flex().items_center().child(self.app_menu_bar.clone()))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_end()
-                    .gap_2()
-                    .child(Button::new("settings").ghost().icon(IconName::Settings))
-                    .child(Button::new("help").ghost().icon(IconName::Info)),
-            )
+        TitleBar::new().child(div().flex().items_center().child(self.app_menu_bar.clone())).child(
+            div()
+                .flex()
+                .items_center()
+                .justify_end()
+                .gap_2()
+                .child(Button::new("settings").ghost().icon(IconName::Settings))
+                .child(Button::new("help").ghost().icon(IconName::Info)),
+        )
     }
 }

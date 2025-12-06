@@ -1,14 +1,11 @@
-use crate::actions::{
-    CloseFolder, LoadChildren, OpenDiff, OpenFile, OpenFolder, Rename, SelectItem,
-};
+use crate::actions::{CloseFolder, LoadChildren, OpenDiff, OpenFile, OpenFolder, Rename, SelectItem};
 use std::collections::HashSet;
 use std::path::PathBuf;
 
 use autocorrect::ignorer::Ignorer;
 use gpui::{
-    App, AppContext, AsyncApp, Context, Entity, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, KeyBinding, ParentElement, Render, SharedString, Styled,
-    WeakEntity, Window, div, prelude::FluentBuilder as _, px,
+    App, AppContext, AsyncApp, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement, Render,
+    SharedString, Styled, WeakEntity, Window, div, prelude::FluentBuilder as _, px,
 };
 
 use gpui_component::{
@@ -31,9 +28,7 @@ pub(crate) fn init(cx: &mut App) {
 
     gpui_component::dock::register_panel(cx, "FileTreePanel", |_, _, info, _window, cx| {
         let state = match info {
-            gpui_component::dock::PanelInfo::Panel(value) => {
-                FileTreePanelState::from_value(value.clone())
-            }
+            gpui_component::dock::PanelInfo::Panel(value) => FileTreePanelState::from_value(value.clone()),
             _ => None,
         };
 
@@ -67,39 +62,23 @@ fn build_file_items(ignorer: &Ignorer, root: &PathBuf, path: &PathBuf) -> Vec<Tr
         for entry in entries.flatten() {
             let path = entry.path();
             let relative_path = path.strip_prefix(root).unwrap_or(&path);
-            if ignorer.is_ignored(&relative_path.to_string_lossy())
-                || relative_path.ends_with(".git")
-            {
+            if ignorer.is_ignored(&relative_path.to_string_lossy()) || relative_path.ends_with(".git") {
                 continue;
             }
-            let file_name = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("Unknown")
-                .to_string();
+            let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("Unknown").to_string();
             let id = path.to_string_lossy().to_string();
             if path.is_dir() {
-                items.push(
-                    TreeItem::new(id, file_name).child(TreeItem::new("loading", "Loading...")),
-                );
+                items.push(TreeItem::new(id, file_name).child(TreeItem::new("loading", "Loading...")));
             } else {
                 items.push(TreeItem::new(id, file_name));
             }
         }
     }
-    items.sort_by(|a, b| {
-        b.is_folder()
-            .cmp(&a.is_folder())
-            .then(a.label.cmp(&b.label))
-    });
+    items.sort_by(|a, b| b.is_folder().cmp(&a.is_folder()).then(a.label.cmp(&b.label)));
     items
 }
 
-fn update_item_children_recursive(
-    items: &mut Vec<TreeItem>,
-    target_id: &str,
-    children: Vec<TreeItem>,
-) -> bool {
+fn update_item_children_recursive(items: &mut Vec<TreeItem>, target_id: &str, children: Vec<TreeItem>) -> bool {
     for item in items.iter_mut() {
         if item.id == target_id {
             item.children = children;
@@ -167,15 +146,10 @@ impl FileTreePanel {
                 async move {
                     if let Some(root_path) = root_path {
                         let ignorer = Ignorer::new(&root_path.to_string_lossy());
-                        let children =
-                            build_file_items(&ignorer, &root_path, &PathBuf::from(&item_id_clone));
+                        let children = build_file_items(&ignorer, &root_path, &PathBuf::from(&item_id_clone));
 
                         view.update(&mut cx, |this, cx| {
-                            if update_item_children_recursive(
-                                &mut this.items,
-                                &item_id_clone,
-                                children,
-                            ) {
+                            if update_item_children_recursive(&mut this.items, &item_id_clone, children) {
                                 this.tree_state.update(cx, |state, cx| {
                                     state.set_items(this.items.clone(), cx);
                                 });
@@ -191,12 +165,7 @@ impl FileTreePanel {
         }
     }
 
-    fn on_action_select_item(
-        &mut self,
-        _: &SelectItem,
-        _: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
+    fn on_action_select_item(&mut self, _: &SelectItem, _: &mut Window, cx: &mut gpui::Context<Self>) {
         if let Some(entry) = self.tree_state.read(cx).selected_entry() {
             self.selected_item = Some(entry.item().clone());
             cx.notify();
@@ -210,12 +179,7 @@ impl FileTreePanel {
         }
     }
 
-    fn on_action_open_folder(
-        &mut self,
-        _: &OpenFolder,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
+    fn on_action_open_folder(&mut self, _: &OpenFolder, window: &mut Window, cx: &mut gpui::Context<Self>) {
         let path = cx.prompt_for_paths(gpui::PathPromptOptions {
             files: false,
             directories: true,
@@ -241,12 +205,7 @@ impl FileTreePanel {
         .detach();
     }
 
-    fn on_action_close_folder(
-        &mut self,
-        _: &CloseFolder,
-        _: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
+    fn on_action_close_folder(&mut self, _: &CloseFolder, _: &mut Window, cx: &mut gpui::Context<Self>) {
         self.root_path = None;
         self.loaded_paths.clear();
         self.items.clear();
@@ -264,22 +223,12 @@ impl FileTreePanel {
         cx.notify();
     }
 
-    fn on_action_set_file_tree_folder(
-        &mut self,
-        action: &crate::actions::SetFileTreeFolder,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn on_action_set_file_tree_folder(&mut self, action: &crate::actions::SetFileTreeFolder, _: &mut Window, cx: &mut Context<Self>) {
         let path = PathBuf::from(&action.path);
         self.set_root_path(path, cx);
     }
 
-    fn on_action_load_children(
-        &mut self,
-        action: &LoadChildren,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn on_action_load_children(&mut self, action: &LoadChildren, _: &mut Window, cx: &mut Context<Self>) {
         self.load_children(&action.path, cx);
     }
 
@@ -295,11 +244,7 @@ impl FileTreePanel {
 
 impl Render for FileTreePanel {
     // Renamed from TreeStory
-    fn render(
-        &mut self,
-        _: &mut gpui::Window,
-        cx: &mut gpui::Context<Self>,
-    ) -> impl gpui::IntoElement {
+    fn render(&mut self, _: &mut gpui::Window, cx: &mut gpui::Context<Self>) -> impl gpui::IntoElement {
         let view = cx.entity();
 
         if self.root_path.is_none() {
@@ -345,8 +290,7 @@ impl Render for FileTreePanel {
                     .v_flex()
                     .child(
                         tree(&self.tree_state, {
-                            let selected_ids: HashSet<_> =
-                                self.selected_items.iter().map(|i| i.id.clone()).collect();
+                            let selected_ids: HashSet<_> = self.selected_items.iter().map(|i| i.id.clone()).collect();
                             move |ix, entry, _selected, window, cx| {
                                 let item = entry.item();
                                 let icon = if !entry.is_folder() {
@@ -361,10 +305,7 @@ impl Render for FileTreePanel {
 
                                 if entry.is_expanded() && entry.is_folder() {
                                     let item_id = item.id.to_string();
-                                    window.dispatch_action(
-                                        Box::new(crate::actions::LoadChildren { path: item_id }),
-                                        cx,
-                                    );
+                                    window.dispatch_action(Box::new(crate::actions::LoadChildren { path: item_id }), cx);
                                 }
 
                                 ListItem::new(ix)
@@ -373,90 +314,52 @@ impl Render for FileTreePanel {
                                     .rounded(cx.theme().radius)
                                     .px_3()
                                     .pl(px(16.) * entry.depth() + px(12.))
-                                    .child(
-                                        h_flex()
-                                            .gap_2()
-                                            .child(icon)
-                                            .child(item.label.clone())
-                                            .size_full()
-                                            .context_menu({
-                                                let view = view.clone();
-                                                let item_id = item.id.clone();
-                                                move |menu, _window, cx| {
-                                                    let (can_compare, left_path, right_path) = view
-                                                        .update(cx, |this, _cx| {
-                                                            let can_compare = this
-                                                                .selected_items
-                                                                .len()
-                                                                == 2
-                                                                && this
-                                                                    .selected_items
-                                                                    .iter()
-                                                                    .all(|item| !item.is_folder());
-                                                            if can_compare {
-                                                                (
-                                                                    true,
-                                                                    Some(
-                                                                        this.selected_items[0]
-                                                                            .id
-                                                                            .to_string(),
-                                                                    ),
-                                                                    Some(
-                                                                        this.selected_items[1]
-                                                                            .id
-                                                                            .to_string(),
-                                                                    ),
-                                                                )
-                                                            } else {
-                                                                (false, None, None)
-                                                            }
-                                                        });
-
-                                                    let mut menu = menu
-                                                        .menu_with_icon(
-                                                            "Open",
-                                                            IconName::FolderOpen,
-                                                            Box::new(OpenFile {
-                                                                path: item_id.to_string(),
-                                                            }),
-                                                        )
-                                                        .separator();
-
-                                                    if can_compare {
-                                                        menu = menu.menu_with_icon(
-                                                            "Compare Files",
-                                                            IconName::Search,
-                                                            Box::new(OpenDiff {
-                                                                left_path: left_path
-                                                                    .unwrap_or_default(),
-                                                                right_path: right_path
-                                                                    .unwrap_or_default(),
-                                                            }),
-                                                        );
-                                                    } else {
-                                                        menu = menu.menu_with_icon_and_disabled(
-                                                            "Compare Files",
-                                                            IconName::Search,
-                                                            Box::new(OpenDiff {
-                                                                left_path: String::new(),
-                                                                right_path: String::new(),
-                                                            }),
-                                                            true,
-                                                        );
-                                                    }
-
-                                                    menu.separator()
-                                                        .menu("Rename", Box::new(Rename))
+                                    .child(h_flex().gap_2().child(icon).child(item.label.clone()).size_full().context_menu({
+                                        let view = view.clone();
+                                        let item_id = item.id.clone();
+                                        move |menu, _window, cx| {
+                                            let (can_compare, left_path, right_path) = view.update(cx, |this, _cx| {
+                                                let can_compare = this.selected_items.len() == 2 && this.selected_items.iter().all(|item| !item.is_folder());
+                                                if can_compare {
+                                                    (true, Some(this.selected_items[0].id.to_string()), Some(this.selected_items[1].id.to_string()))
+                                                } else {
+                                                    (false, None, None)
                                                 }
-                                            }),
-                                    )
+                                            });
+
+                                            let mut menu = menu
+                                                .menu_with_icon("Open", IconName::FolderOpen, Box::new(OpenFile { path: item_id.to_string() }))
+                                                .separator();
+
+                                            if can_compare {
+                                                menu = menu.menu_with_icon(
+                                                    "Compare Files",
+                                                    IconName::Search,
+                                                    Box::new(OpenDiff {
+                                                        left_path: left_path.unwrap_or_default(),
+                                                        right_path: right_path.unwrap_or_default(),
+                                                    }),
+                                                );
+                                            } else {
+                                                menu = menu.menu_with_icon_and_disabled(
+                                                    "Compare Files",
+                                                    IconName::Search,
+                                                    Box::new(OpenDiff {
+                                                        left_path: String::new(),
+                                                        right_path: String::new(),
+                                                    }),
+                                                    true,
+                                                );
+                                            }
+
+                                            menu.separator().menu("Rename", Box::new(Rename))
+                                        }
+                                    }))
                                     .on_click(window.listener_for(&view, {
                                         let item = item.clone();
                                         move |this, event: &gpui::ClickEvent, window, cx| {
                                             // Ctrl/Cmdキーで複数選択
-                                            if event.modifiers().control
-                                                || event.modifiers().platform
-                                            {
+                                            if event.modifiers().control || event.modifiers().platform {
                                                 this.toggle_selection(item.clone(), cx);
                                             } else {
                                                 this.selected_items = vec![item.clone()];
@@ -465,17 +368,9 @@ impl Render for FileTreePanel {
 
                                             // ファイルを開く処理（単一選択時のみ）
                                             if !item.is_folder() && this.selected_items.len() == 1 {
-                                                println!(
-                                                    "Dispatching OpenFile action for path: {}",
-                                                    item.id
-                                                );
+                                                println!("Dispatching OpenFile action for path: {}", item.id);
                                                 cx.focus_self(window);
-                                                window.dispatch_action(
-                                                    Box::new(OpenFile {
-                                                        path: item.id.to_string(),
-                                                    }),
-                                                    cx,
-                                                );
+                                                window.dispatch_action(Box::new(OpenFile { path: item.id.to_string() }), cx);
                                             }
                                             cx.notify();
                                         }
@@ -493,17 +388,8 @@ impl Render for FileTreePanel {
                             .w_full()
                             .justify_between()
                             .gap_3()
-                            .children(
-                                self.tree_state
-                                    .read(cx)
-                                    .selected_index()
-                                    .map(|ix| format!("Selected Index: {}", ix)),
-                            )
-                            .children(
-                                self.selected_item
-                                    .as_ref()
-                                    .map(|item| Label::new("Selected:").secondary(item.id.clone())),
-                            ),
+                            .children(self.tree_state.read(cx).selected_index().map(|ix| format!("Selected Index: {}", ix)))
+                            .children(self.selected_item.as_ref().map(|item| Label::new("Selected:").secondary(item.id.clone()))),
                     ),
             )
     }

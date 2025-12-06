@@ -48,46 +48,40 @@ impl EditorPanel {
         let hex_view = cx.new(|cx| HexView::new(cx).buffer(buffer.clone()));
         let search_bar = cx.new(|cx| SearchBar::new(window, cx));
 
-        cx.subscribe(
-            &search_bar,
-            |this, _, event: &SearchBarEvent, cx| match event {
-                SearchBarEvent::IncrementalSearch(query, mode) => {
-                    this.perform_incremental_search(query, *mode, cx);
-                }
-                SearchBarEvent::FullSearch(query, mode) => {
-                    this.perform_full_search(query, *mode, cx);
-                }
-                SearchBarEvent::Next => {
-                    this.perform_search_next(cx);
-                }
-                SearchBarEvent::Prev => {
-                    this.perform_search_prev(cx);
-                }
-                SearchBarEvent::Dismiss => {
-                    this.is_search_visible = false;
-                    cx.dispatch_action(&FocusHexView);
-                    cx.notify();
-                }
-            },
-        )
+        cx.subscribe(&search_bar, |this, _, event: &SearchBarEvent, cx| match event {
+            SearchBarEvent::IncrementalSearch(query, mode) => {
+                this.perform_incremental_search(query, *mode, cx);
+            }
+            SearchBarEvent::FullSearch(query, mode) => {
+                this.perform_full_search(query, *mode, cx);
+            }
+            SearchBarEvent::Next => {
+                this.perform_search_next(cx);
+            }
+            SearchBarEvent::Prev => {
+                this.perform_search_prev(cx);
+            }
+            SearchBarEvent::Dismiss => {
+                this.is_search_visible = false;
+                cx.dispatch_action(&FocusHexView);
+                cx.notify();
+            }
+        })
         .detach();
 
         // Subscribe to HexView scroll events to update highlights when scrolling
-        cx.subscribe(
-            &hex_view,
-            |this, _, event: &crate::ui::component::hex_view::HexViewEvent, cx| {
-                if let crate::ui::component::hex_view::HexViewEvent::Scrolled(_) = event {
-                    // Update highlights if there's an active search
-                    if this.is_search_visible {
-                        if !this.is_full_search_complete {
-                            this.perform_viewport_search(cx);
-                        } else if !this.search_results.is_empty() {
-                            this.update_viewport_highlights(cx);
-                        }
+        cx.subscribe(&hex_view, |this, _, event: &crate::ui::component::hex_view::HexViewEvent, cx| {
+            if let crate::ui::component::hex_view::HexViewEvent::Scrolled(_) = event {
+                // Update highlights if there's an active search
+                if this.is_search_visible {
+                    if !this.is_full_search_complete {
+                        this.perform_viewport_search(cx);
+                    } else if !this.search_results.is_empty() {
+                        this.update_viewport_highlights(cx);
                     }
                 }
-            },
-        )
+            }
+        })
         .detach();
 
         Self {
@@ -122,12 +116,7 @@ impl EditorPanel {
         cx.notify();
     }
 
-    fn perform_incremental_search(
-        &mut self,
-        query: &str,
-        mode: SearchMode,
-        cx: &mut Context<Self>,
-    ) {
+    fn perform_incremental_search(&mut self, query: &str, mode: SearchMode, cx: &mut Context<Self>) {
         if query.is_empty() {
             self.search_results.clear();
             self.current_result_index = None;
@@ -166,10 +155,7 @@ impl EditorPanel {
             range: Some(start..end),
         };
 
-        let search_task =
-            app_state
-                .editor_service
-                .search(self.buffer.clone(), query.clone(), options, cx);
+        let search_task = app_state.editor_service.search(self.buffer.clone(), query.clone(), options, cx);
 
         let task = cx.spawn(async move |this, cx| {
             let results = search_task.await;
@@ -203,10 +189,7 @@ impl EditorPanel {
             limit: crate::model::search::SearchLimit::Unlimited,
             range: None,
         };
-        let search_task =
-            app_state
-                .editor_service
-                .search(self.buffer.clone(), query_string.clone(), options, cx);
+        let search_task = app_state.editor_service.search(self.buffer.clone(), query_string.clone(), options, cx);
 
         // Spawn task to handle search results
         let task = cx.spawn(async move |this, cx| {
@@ -257,8 +240,7 @@ impl EditorPanel {
                 let pattern_len = match mode {
                     SearchMode::Text => query.len(),
                     SearchMode::Hex => {
-                        let hex_str: String =
-                            query.chars().filter(|c| c.is_ascii_hexdigit()).collect();
+                        let hex_str: String = query.chars().filter(|c| c.is_ascii_hexdigit()).collect();
                         hex_str.len() / 2
                     }
                 };
@@ -271,8 +253,7 @@ impl EditorPanel {
 
                 // If preserving scroll, filter to viewport range
                 let all_highlights: Vec<_> = if preserve_scroll {
-                    let (viewport_start, viewport_end) =
-                        self.hex_view.read(cx).viewport_byte_range();
+                    let (viewport_start, viewport_end) = self.hex_view.read(cx).viewport_byte_range();
                     self.search_results
                         .iter()
                         .filter(|&&pos| pos >= viewport_start && pos < viewport_end)
@@ -363,11 +344,7 @@ impl EditorPanel {
         }
 
         if let Some(index) = self.current_result_index {
-            self.current_result_index = Some(if index == 0 {
-                self.search_results.len() - 1
-            } else {
-                index - 1
-            });
+            self.current_result_index = Some(if index == 0 { self.search_results.len() - 1 } else { index - 1 });
         } else {
             self.current_result_index = Some(0);
         }
@@ -452,9 +429,7 @@ impl Render for EditorPanel {
             .on_action(cx.listener(Self::search_next))
             .on_action(cx.listener(Self::search_prev))
             .on_action(cx.listener(Self::focus_hex_view))
-            .when(self.is_search_visible, |this| {
-                this.child(self.search_bar.clone())
-            })
+            .when(self.is_search_visible, |this| this.child(self.search_bar.clone()))
             .child(self.hex_view.clone())
     }
 }

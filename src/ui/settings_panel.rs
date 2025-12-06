@@ -1,7 +1,4 @@
-use gpui::{
-    App, Context, FocusHandle, Focusable, IntoElement, ParentElement, Render, SharedString, Window,
-    div, EventEmitter,
-};
+use gpui::{App, Context, EventEmitter, FocusHandle, Focusable, IntoElement, ParentElement, Render, SharedString, Window, div};
 use gpui_component::dock::{Panel, PanelEvent};
 
 /// A simple panel for demonstration purposes.

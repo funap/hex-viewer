@@ -10,10 +10,7 @@ use std::sync::Arc;
 
 pub enum HexViewEvent {
     Scrolled(usize),
-    SelectionChanged {
-        start: Option<usize>,
-        end: Option<usize>,
-    },
+    SelectionChanged { start: Option<usize>, end: Option<usize> },
 }
 
 actions!(
@@ -49,6 +46,7 @@ pub const HEX_BYTE_WIDTH: f32 = 22.0;
 pub const HEX_GAP: f32 = 4.0;
 pub const SECTION_GAP: f32 = 16.0;
 pub const OFFSET_X_START: f32 = 4.0;
+pub const SELECTION_PADDING: f32 = 2.0;
 pub const BYTES_PER_ROW: usize = 16;
 pub const FONT_FAMILY: &str = "Menlo";
 
@@ -157,11 +155,7 @@ impl HexView {
         self
     }
 
-    pub fn set_highlights(
-        &mut self,
-        highlights: Vec<(Range<usize>, Hsla)>,
-        cx: &mut Context<Self>,
-    ) {
+    pub fn set_highlights(&mut self, highlights: Vec<(Range<usize>, Hsla)>, cx: &mut Context<Self>) {
         self.highlights = highlights;
         cx.notify();
     }
@@ -169,10 +163,7 @@ impl HexView {
     pub fn set_highlight_ranges(&mut self, ranges: Vec<Range<usize>>, cx: &mut Context<Self>) {
         let theme = cx.theme();
         let highlight_color = theme.accent;
-        self.highlights = ranges
-            .into_iter()
-            .map(|range| (range, highlight_color))
-            .collect();
+        self.highlights = ranges.into_iter().map(|range| (range, highlight_color)).collect();
         cx.notify();
     }
 
@@ -202,8 +193,7 @@ impl HexView {
         }
 
         self.scroll_offset = new_offset;
-        self.scroll_handle
-            .set_offset(point(px(0.), -(self.scroll_offset as f32 * row_height)));
+        self.scroll_handle.set_offset(point(px(0.), -(self.scroll_offset as f32 * row_height)));
         cx.notify();
         cx.emit(HexViewEvent::Scrolled(self.scroll_offset));
     }
@@ -234,24 +224,15 @@ impl HexView {
         } else if cursor_row >= self.scroll_offset + visible_rows {
             self.scroll_offset = cursor_row.saturating_sub(visible_rows - 1);
         }
-        self.scroll_handle
-            .set_offset(point(px(0.), -(self.scroll_offset as f32 * row_height)));
+        self.scroll_handle.set_offset(point(px(0.), -(self.scroll_offset as f32 * row_height)));
         cx.emit(HexViewEvent::Scrolled(self.scroll_offset));
     }
 
     fn byte_pos_from_point(&self, point: Point<Pixels>) -> Option<usize> {
         let bounds = self.last_bounds?;
-        let header_height = if self.show_header {
-            px(HEADER_HEIGHT)
-        } else {
-            px(0.)
-        };
+        let header_height = if self.show_header { px(HEADER_HEIGHT) } else { px(0.) };
         let row_height = px(ROW_HEIGHT);
-        let offset_width = if self.show_offset {
-            px(OFFSET_WIDTH)
-        } else {
-            px(0.)
-        };
+        let offset_width = if self.show_offset { px(OFFSET_WIDTH) } else { px(0.) };
         let hex_start_x = bounds.left() + px(OFFSET_X_START) + offset_width + px(SECTION_GAP);
 
         let hex_byte_width = px(HEX_BYTE_WIDTH);
@@ -285,12 +266,7 @@ impl HexView {
         Some(byte_pos)
     }
 
-    fn on_mouse_down(
-        &mut self,
-        event: &MouseDownEvent,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn on_mouse_down(&mut self, event: &MouseDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
         if let Some(byte_pos) = self.byte_pos_from_point(event.position) {
             self.is_dragging = true;
             self.cursor_offset = byte_pos;
@@ -306,17 +282,9 @@ impl HexView {
 
     fn byte_pos_from_point_clamped(&self, point: Point<Pixels>) -> Option<usize> {
         let bounds = self.last_bounds?;
-        let header_height = if self.show_header {
-            px(HEADER_HEIGHT)
-        } else {
-            px(0.)
-        };
+        let header_height = if self.show_header { px(HEADER_HEIGHT) } else { px(0.) };
         let row_height = px(ROW_HEIGHT);
-        let offset_width = if self.show_offset {
-            px(OFFSET_WIDTH)
-        } else {
-            px(0.)
-        };
+        let offset_width = if self.show_offset { px(OFFSET_WIDTH) } else { px(0.) };
         let hex_start_x = bounds.left() + px(OFFSET_X_START) + offset_width + px(SECTION_GAP);
 
         let hex_byte_width = px(HEX_BYTE_WIDTH);
@@ -339,12 +307,7 @@ impl HexView {
 
     const SCROLL_TRIGGER_MARGIN: f32 = 32.0;
 
-    fn on_mouse_move(
-        &mut self,
-        event: &MouseMoveEvent,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn on_mouse_move(&mut self, event: &MouseMoveEvent, _window: &mut Window, cx: &mut Context<Self>) {
         // Sync scroll handle to scroll offset if changed by scrollbar drag
         let row_height = px(ROW_HEIGHT);
         let handle_y = self.scroll_handle.offset().y;
@@ -358,11 +321,7 @@ impl HexView {
 
         if self.is_dragging {
             if let Some(bounds) = self.last_bounds {
-                let header_height = if self.show_header {
-                    px(HEADER_HEIGHT)
-                } else {
-                    px(0.)
-                };
+                let header_height = if self.show_header { px(HEADER_HEIGHT) } else { px(0.) };
                 let top_edge = bounds.top() + header_height;
 
                 let bottom_edge = bounds.bottom();
@@ -372,19 +331,16 @@ impl HexView {
                 if event.position.y < top_edge + margin {
                     if self.scroll_offset > 0 {
                         self.scroll_offset -= 1;
-                        self.scroll_handle
-                            .set_offset(point(px(0.), -(self.scroll_offset as f32 * row_height)));
+                        self.scroll_handle.set_offset(point(px(0.), -(self.scroll_offset as f32 * row_height)));
                         cx.notify();
                         cx.emit(HexViewEvent::Scrolled(self.scroll_offset));
                     }
                 } else if event.position.y > bottom_edge - margin {
-                    let visible_rows =
-                        ((bounds.size.height - header_height) / row_height).floor() as usize;
+                    let visible_rows = ((bounds.size.height - header_height) / row_height).floor() as usize;
                     let max_scroll = total_rows.saturating_sub(visible_rows);
                     if self.scroll_offset < max_scroll {
                         self.scroll_offset += 1;
-                        self.scroll_handle
-                            .set_offset(point(px(0.), -(self.scroll_offset as f32 * row_height)));
+                        self.scroll_handle.set_offset(point(px(0.), -(self.scroll_offset as f32 * row_height)));
                         cx.notify();
                         cx.emit(HexViewEvent::Scrolled(self.scroll_offset));
                     }
@@ -419,12 +375,7 @@ impl HexView {
         }
     }
 
-    fn on_scroll_wheel(
-        &mut self,
-        event: &ScrollWheelEvent,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn on_scroll_wheel(&mut self, event: &ScrollWheelEvent, _window: &mut Window, cx: &mut Context<Self>) {
         let row_height = px(ROW_HEIGHT);
         let total_rows = (self.buffer.len() + BYTES_PER_ROW - 1) / BYTES_PER_ROW;
         let max_offset = total_rows.saturating_sub(1).max(0) as i32;
@@ -433,8 +384,7 @@ impl HexView {
         let new_scroll_offset = self.scroll_offset as i32 - delta_y;
 
         self.scroll_offset = cmp::max(0, cmp::min(new_scroll_offset, max_offset)) as usize;
-        self.scroll_handle
-            .set_offset(point(px(0.), -(self.scroll_offset as f32 * row_height)));
+        self.scroll_handle.set_offset(point(px(0.), -(self.scroll_offset as f32 * row_height)));
         cx.notify();
         cx.emit(HexViewEvent::Scrolled(self.scroll_offset));
     }
@@ -632,12 +582,7 @@ impl HexView {
         });
     }
 
-    fn select_page_down(
-        &mut self,
-        _: &SelectPageDown,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn select_page_down(&mut self, _: &SelectPageDown, _window: &mut Window, cx: &mut Context<Self>) {
         if self.selection_start.is_none() {
             self.selection_start = Some(self.cursor_offset);
         }
@@ -695,13 +640,12 @@ impl Focusable for HexView {
 
 impl Render for HexView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let header_height = px(HEADER_HEIGHT);
         let row_height = px(ROW_HEIGHT);
         // Ensure at least one line is shown, even for empty buffer
         let total_rows = ((self.buffer.len() + BYTES_PER_ROW - 1) / BYTES_PER_ROW).max(1);
 
         // Total height is just header + all data rows, no extra padding needed
-        let total_height = header_height + row_height * total_rows as f32;
+        let total_height = row_height * total_rows as f32;
 
         let handle_y = self.scroll_handle.offset().y;
         let handle_row = ((-handle_y).max(px(0.)) / row_height).round() as usize;
@@ -824,11 +768,7 @@ impl Element for HexViewElement {
     ) -> (LayoutId, Self::RequestLayoutState) {
         // Ensure at least one line is shown, even for empty buffer
         let line_count = ((self.buffer.len() + BYTES_PER_ROW - 1) / BYTES_PER_ROW).max(1);
-        let header_height = if self.show_header {
-            px(HEADER_HEIGHT)
-        } else {
-            px(0.)
-        };
+        let header_height = if self.show_header { px(HEADER_HEIGHT) } else { px(0.) };
 
         let row_height = px(ROW_HEIGHT);
         let total_height = header_height + row_height * line_count as f32;
@@ -867,11 +807,7 @@ impl Element for HexViewElement {
 
         // Ensure at least one line is shown, even for empty buffer
         let line_count = ((buffer.len() + BYTES_PER_ROW - 1) / BYTES_PER_ROW).max(1);
-        let header_height = if self.show_header {
-            px(HEADER_HEIGHT)
-        } else {
-            px(0.)
-        };
+        let header_height = if self.show_header { px(HEADER_HEIGHT) } else { px(0.) };
 
         let row_height = px(ROW_HEIGHT);
 
@@ -884,23 +820,14 @@ impl Element for HexViewElement {
         let mut data_lines = Vec::new();
         let mut selection_quads = Vec::new();
 
-        let offset_width = if self.show_offset {
-            px(OFFSET_WIDTH)
-        } else {
-            px(0.)
-        };
+        let offset_width = if self.show_offset { px(OFFSET_WIDTH) } else { px(0.) };
         let hex_start_x = bounds.left() + px(OFFSET_X_START) + offset_width + px(SECTION_GAP);
 
         let hex_byte_width = px(HEX_BYTE_WIDTH);
         let hex_gap = px(HEX_GAP);
 
-        let (min_sel, max_sel) = if let (Some(start), Some(end)) = (selection_start, selection_end)
-        {
-            if start <= end {
-                (start, end)
-            } else {
-                (end, start)
-            }
+        let (min_sel, max_sel) = if let (Some(start), Some(end)) = (selection_start, selection_end) {
+            if start <= end { (start, end) } else { (end, start) }
         } else {
             (usize::MAX, usize::MIN)
         };
@@ -925,13 +852,12 @@ impl Element for HexViewElement {
                     let end_in_line = cmp::min(line_end, range_end) - line_start;
 
                     let x_start = hex_start_x + (hex_byte_width + hex_gap) * start_in_line as f32;
-                    let x_end =
-                        hex_start_x + (hex_byte_width + hex_gap) * end_in_line as f32 - hex_gap;
+                    let x_end = hex_start_x + (hex_byte_width + hex_gap) * end_in_line as f32 - hex_gap;
                     // Adjust width to cover the gap if it's a continuous range within the line
                     let width = x_end - x_start;
 
                     selection_quads.push(fill(
-                        Bounds::new(point(x_start, y_pos), size(width, row_height)),
+                        Bounds::new(point(x_start - px(SELECTION_PADDING), y_pos), size(width + px(SELECTION_PADDING), row_height)),
                         *color,
                     ));
                 }
@@ -945,12 +871,11 @@ impl Element for HexViewElement {
                 let end_in_line = cmp::min(line_end, max_sel) - line_start;
 
                 let x_start = hex_start_x + (hex_byte_width + hex_gap) * start_in_line as f32;
-                let x_end =
-                    hex_start_x + (hex_byte_width + hex_gap) * end_in_line as f32 + hex_byte_width;
+                let x_end = hex_start_x + (hex_byte_width + hex_gap) * end_in_line as f32 + hex_byte_width;
                 let width = x_end - x_start;
 
                 selection_quads.push(fill(
-                    Bounds::new(point(x_start, y_pos), size(width, row_height)),
+                    Bounds::new(point(x_start - px(SELECTION_PADDING), y_pos), size(width + px(SELECTION_PADDING), row_height)),
                     selection_bg_color,
                 ));
             }
@@ -965,22 +890,14 @@ impl Element for HexViewElement {
                 strikethrough: None,
             };
             let offset_line = if self.show_offset {
-                window
-                    .text_system()
-                    .shape_line(offset_str.into(), font_size, &[offset_run], None)
+                window.text_system().shape_line(offset_str.into(), font_size, &[offset_run], None)
             } else {
-                window
-                    .text_system()
-                    .shape_line("".into(), font_size, &[], None)
+                window.text_system().shape_line("".into(), font_size, &[], None)
             };
 
             let mut hex_lines = Vec::new();
             for (_byte_idx, byte) in chunk.iter().enumerate() {
-                let color = if *byte == 0 {
-                    hex_null_color
-                } else {
-                    hex_byte_color
-                };
+                let color = if *byte == 0 { hex_null_color } else { hex_byte_color };
 
                 let hex_str = format!("{:02x}", byte);
                 let hex_run = TextRun {
@@ -991,10 +908,7 @@ impl Element for HexViewElement {
                     underline: None,
                     strikethrough: None,
                 };
-                let hex_line =
-                    window
-                        .text_system()
-                        .shape_line(hex_str.into(), font_size, &[hex_run], None);
+                let hex_line = window.text_system().shape_line(hex_str.into(), font_size, &[hex_run], None);
                 hex_lines.push(hex_line);
             }
 
@@ -1046,13 +960,9 @@ impl Element for HexViewElement {
             }
 
             let ascii_line = if self.show_ascii {
-                window
-                    .text_system()
-                    .shape_line(ascii_str.into(), font_size, &ascii_runs, None)
+                window.text_system().shape_line(ascii_str.into(), font_size, &ascii_runs, None)
             } else {
-                window
-                    .text_system()
-                    .shape_line("".into(), font_size, &[], None)
+                window.text_system().shape_line("".into(), font_size, &[], None)
             };
 
             data_lines.push(DataLine {
@@ -1068,16 +978,8 @@ impl Element for HexViewElement {
 
             // Show cursor if focused, even for empty buffer
             if focus_handle.is_focused(window) {
-                let cursor_row = if buffer.len() > 0 {
-                    cursor_offset / 16
-                } else {
-                    0
-                };
-                let byte_in_row = if buffer.len() > 0 {
-                    cursor_offset % 16
-                } else {
-                    0
-                };
+                let cursor_row = if buffer.len() > 0 { cursor_offset / 16 } else { 0 };
+                let byte_in_row = if buffer.len() > 0 { cursor_offset % 16 } else { 0 };
                 // Adjust for current scroll offset
                 let visible_cursor_row = if cursor_row >= self.scroll_offset {
                     cursor_row - self.scroll_offset
@@ -1109,13 +1011,9 @@ impl Element for HexViewElement {
                 strikethrough: None,
             };
             let offset = if self.show_offset {
-                window
-                    .text_system()
-                    .shape_line("Offset".into(), font_size, &[offset_run], None)
+                window.text_system().shape_line("Offset".into(), font_size, &[offset_run], None)
             } else {
-                window
-                    .text_system()
-                    .shape_line("".into(), font_size, &[], None)
+                window.text_system().shape_line("".into(), font_size, &[], None)
             };
 
             let mut hex_bytes = Vec::new();
@@ -1129,11 +1027,7 @@ impl Element for HexViewElement {
                     underline: None,
                     strikethrough: None,
                 };
-                hex_bytes.push(
-                    window
-                        .text_system()
-                        .shape_line(s.into(), font_size, &[run], None),
-                );
+                hex_bytes.push(window.text_system().shape_line(s.into(), font_size, &[run], None));
             }
 
             let ascii_run = TextRun {
@@ -1145,20 +1039,12 @@ impl Element for HexViewElement {
                 strikethrough: None,
             };
             let ascii = if self.show_ascii {
-                window
-                    .text_system()
-                    .shape_line("ASCII".into(), font_size, &[ascii_run], None)
+                window.text_system().shape_line("ASCII".into(), font_size, &[ascii_run], None)
             } else {
-                window
-                    .text_system()
-                    .shape_line("".into(), font_size, &[], None)
+                window.text_system().shape_line("".into(), font_size, &[], None)
             };
 
-            HeaderParts {
-                offset,
-                hex_bytes,
-                ascii,
-            }
+            HeaderParts { offset, hex_bytes, ascii }
         };
 
         PrepaintState {
@@ -1179,23 +1065,14 @@ impl Element for HexViewElement {
         window: &mut Window,
         cx: &mut App,
     ) {
-        let header_height = if self.show_header {
-            px(HEADER_HEIGHT)
-        } else {
-            px(0.)
-        };
+        let header_height = if self.show_header { px(HEADER_HEIGHT) } else { px(0.) };
         let row_height = px(ROW_HEIGHT);
-        let offset_width = if self.show_offset {
-            px(OFFSET_WIDTH)
-        } else {
-            px(0.)
-        };
+        let offset_width = if self.show_offset { px(OFFSET_WIDTH) } else { px(0.) };
 
         let hex_start_x = bounds.left() + px(OFFSET_X_START) + offset_width + px(SECTION_GAP);
         let hex_byte_width = px(HEX_BYTE_WIDTH);
         let hex_gap = px(HEX_GAP);
-        let ascii_start_x =
-            hex_start_x + (hex_byte_width + hex_gap) * BYTES_PER_ROW as f32 + px(SECTION_GAP);
+        let ascii_start_x = hex_start_x + (hex_byte_width + hex_gap) * BYTES_PER_ROW as f32 + px(SECTION_GAP);
 
         let theme = cx.theme();
         let bg_color = theme.background;
@@ -1206,10 +1083,7 @@ impl Element for HexViewElement {
 
         window.paint_quad(fill(
             Bounds::new(
-                point(
-                    bounds.left() + px(OFFSET_X_START),
-                    bounds.top() + header_height - px(1.),
-                ),
+                point(bounds.left() + px(OFFSET_X_START), bounds.top() + header_height - px(1.)),
                 size(bounds.size.width - px(OFFSET_X_START), px(1.)),
             ),
             border_color,
@@ -1222,28 +1096,17 @@ impl Element for HexViewElement {
                 prepaint
                     .header
                     .offset
-                    .paint(
-                        point(bounds.left() + px(OFFSET_X_START), header_y),
-                        header_height,
-                        window,
-                        cx,
-                    )
+                    .paint(point(bounds.left() + px(OFFSET_X_START), header_y), header_height, window, cx)
                     .ok();
             }
 
             for (i, hex_header) in prepaint.header.hex_bytes.iter().enumerate() {
                 let x_pos = hex_start_x + (hex_byte_width + hex_gap) * i as f32;
-                hex_header
-                    .paint(point(x_pos, header_y), header_height, window, cx)
-                    .ok();
+                hex_header.paint(point(x_pos, header_y), header_height, window, cx).ok();
             }
 
             if self.show_ascii {
-                prepaint
-                    .header
-                    .ascii
-                    .paint(point(ascii_start_x, header_y), header_height, window, cx)
-                    .ok();
+                prepaint.header.ascii.paint(point(ascii_start_x, header_y), header_height, window, cx).ok();
             }
         }
 
@@ -1257,27 +1120,17 @@ impl Element for HexViewElement {
             if self.show_offset {
                 data_line
                     .offset_line
-                    .paint(
-                        point(bounds.left() + px(OFFSET_X_START), y_pos),
-                        row_height,
-                        window,
-                        cx,
-                    )
+                    .paint(point(bounds.left() + px(OFFSET_X_START), y_pos), row_height, window, cx)
                     .ok();
             }
 
             for (byte_idx, hex_line) in data_line.hex_lines.iter().enumerate() {
                 let x_pos = hex_start_x + (hex_byte_width + hex_gap) * byte_idx as f32;
-                hex_line
-                    .paint(point(x_pos, y_pos), row_height, window, cx)
-                    .ok();
+                hex_line.paint(point(x_pos, y_pos), row_height, window, cx).ok();
             }
 
             if self.show_ascii {
-                data_line
-                    .ascii_line
-                    .paint(point(ascii_start_x, y_pos), row_height, window, cx)
-                    .ok();
+                data_line.ascii_line.paint(point(ascii_start_x, y_pos), row_height, window, cx).ok();
             }
         }
 
@@ -1291,17 +1144,11 @@ impl Element for HexViewElement {
 
             // Draw cursor border for better visibility
             // Top border
-            window.paint_quad(fill(
-                Bounds::new(cursor_bounds.origin, size(cursor_bounds.size.width, px(2.))),
-                accent_color,
-            ));
+            window.paint_quad(fill(Bounds::new(cursor_bounds.origin, size(cursor_bounds.size.width, px(2.))), accent_color));
             // Bottom border
             window.paint_quad(fill(
                 Bounds::new(
-                    point(
-                        cursor_bounds.origin.x,
-                        cursor_bounds.origin.y + cursor_bounds.size.height - px(2.),
-                    ),
+                    point(cursor_bounds.origin.x, cursor_bounds.origin.y + cursor_bounds.size.height - px(2.)),
                     size(cursor_bounds.size.width, px(2.)),
                 ),
                 accent_color,
@@ -1309,7 +1156,7 @@ impl Element for HexViewElement {
             // Left border
             window.paint_quad(fill(
                 Bounds::new(
-                    cursor_bounds.origin,
+                    point(cursor_bounds.origin.x - px(SELECTION_PADDING), cursor_bounds.origin.y),
                     size(px(2.), cursor_bounds.size.height),
                 ),
                 accent_color,
@@ -1317,10 +1164,7 @@ impl Element for HexViewElement {
             // Right border
             window.paint_quad(fill(
                 Bounds::new(
-                    point(
-                        cursor_bounds.origin.x + cursor_bounds.size.width - px(2.),
-                        cursor_bounds.origin.y,
-                    ),
+                    point(cursor_bounds.origin.x + cursor_bounds.size.width - px(2.), cursor_bounds.origin.y),
                     size(px(2.), cursor_bounds.size.height),
                 ),
                 accent_color,

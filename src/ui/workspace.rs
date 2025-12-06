@@ -39,8 +39,7 @@ pub fn init(cx: &mut App) {
 
 impl Workspace {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let dock_area =
-            cx.new(|cx| DockArea::new(MAIN_DOCK_AREA_ID, Some(MAIN_DOCK_AREA_VERSION), window, cx));
+        let dock_area = cx.new(|cx| DockArea::new(MAIN_DOCK_AREA_ID, Some(MAIN_DOCK_AREA_VERSION), window, cx));
         let weak_dock_area = dock_area.downgrade();
 
         let app_menu_bar = AppMenuBar::new(window, cx);
@@ -56,14 +55,10 @@ impl Workspace {
             }
         };
 
-        cx.subscribe_in(
-            &dock_area,
-            window,
-            |this, dock_area, ev: &DockEvent, window, cx| match ev {
-                DockEvent::LayoutChanged => this.save_layout(dock_area, window, cx),
-                _ => {}
-            },
-        )
+        cx.subscribe_in(&dock_area, window, |this, dock_area, ev: &DockEvent, window, cx| match ev {
+            DockEvent::LayoutChanged => this.save_layout(dock_area, window, cx),
+            _ => {}
+        })
         .detach();
 
         cx.on_app_quit({
@@ -85,12 +80,7 @@ impl Workspace {
         }
     }
 
-    fn save_layout(
-        &mut self,
-        dock_area: &Entity<DockArea>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn save_layout(&mut self, dock_area: &Entity<DockArea>, window: &mut Window, cx: &mut Context<Self>) {
         let dock_area = dock_area.clone();
         self._save_layout_task = Some(cx.spawn_in(window, async move |story, window| {
             Timer::after(Duration::from_secs(10)).await;
@@ -116,11 +106,7 @@ impl Workspace {
         Ok(())
     }
 
-    fn load_layout(
-        dock_area: Entity<DockArea>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> anyhow::Result<()> {
+    fn load_layout(dock_area: Entity<DockArea>, window: &mut Window, cx: &mut Context<Self>) -> anyhow::Result<()> {
         let json = std::fs::read_to_string(STATE_FILE)?;
         let state = serde_json::from_str::<DockAreaState>(&json)?;
 
@@ -136,11 +122,7 @@ impl Workspace {
         })
     }
 
-    fn reset_default_layout(
-        dock_area: WeakEntity<DockArea>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn reset_default_layout(dock_area: WeakEntity<DockArea>, window: &mut Window, cx: &mut Context<Self>) {
         // Create empty buffer and file tree panel
         let buffer = Arc::new(crate::model::file_buffer::FileBuffer::empty());
         let file_tree_panel = cx.new(|cx| FileTreePanel::new(FILE_TREE_PANEL_TITLE, cx));
@@ -212,12 +194,7 @@ impl Workspace {
         })
     }
 
-    fn on_action_add_editor_panel(
-        &mut self,
-        action: &AddEditorPanel,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn on_action_add_editor_panel(&mut self, action: &AddEditorPanel, window: &mut Window, cx: &mut Context<Self>) {
         let buffer = action.0.clone();
         let editor_panel = cx.new(|cx| EditorPanel::new(buffer, window, cx));
         let panel = Arc::new(editor_panel);
@@ -227,12 +204,7 @@ impl Workspace {
         });
     }
 
-    fn on_action_open_file(
-        &mut self,
-        action: &OpenFile,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn on_action_open_file(&mut self, action: &OpenFile, window: &mut Window, cx: &mut Context<Self>) {
         let file_path = action.path.clone();
         let path = std::path::PathBuf::from(&file_path);
 
@@ -245,11 +217,7 @@ impl Workspace {
             let app = cx.update(|cx| AppState::global(cx).clone()).ok().unwrap();
 
             if let Some(add_editor_panel) = this.upgrade() {
-                if let Ok(buffer) = app
-                    .editor_service
-                    .open_file(std::path::PathBuf::from(file_path))
-                    .await
-                {
+                if let Ok(buffer) = app.editor_service.open_file(std::path::PathBuf::from(file_path)).await {
                     let _ = add_editor_panel.update(cx, |_, cx| {
                         cx.dispatch_action(&AddEditorPanel(buffer));
                     });
@@ -259,39 +227,21 @@ impl Workspace {
         .detach();
     }
 
-    fn on_action_open_diff(
-        &mut self,
-        action: &OpenDiff,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn on_action_open_diff(&mut self, action: &OpenDiff, window: &mut Window, cx: &mut Context<Self>) {
         let left_path = action.left_path.clone();
         let right_path = action.right_path.clone();
 
         cx.spawn_in(window, async move |this, window| {
-            let app = this
-                .update(window, |_, cx| AppState::global(cx).clone())
-                .ok()
-                .unwrap();
+            let app = this.update(window, |_, cx| AppState::global(cx).clone()).ok().unwrap();
 
             if let Some(workspace) = this.upgrade() {
-                let left_result = app
-                    .editor_service
-                    .open_file(std::path::PathBuf::from(left_path))
-                    .await;
-                let right_result = app
-                    .editor_service
-                    .open_file(std::path::PathBuf::from(right_path))
-                    .await;
+                let left_result = app.editor_service.open_file(std::path::PathBuf::from(left_path)).await;
+                let right_result = app.editor_service.open_file(std::path::PathBuf::from(right_path)).await;
 
                 if let (Ok(left_buffer), Ok(right_buffer)) = (left_result, right_result) {
                     let _ = workspace.update_in(window, |workspace, window, cx| {
                         let app = AppState::global(cx).clone();
-                        let diff_result_task = app.editor_service.compute_diff(
-                            left_buffer.clone(),
-                            right_buffer.clone(),
-                            cx,
-                        );
+                        let diff_result_task = app.editor_service.compute_diff(left_buffer.clone(), right_buffer.clone(), cx);
 
                         cx.spawn_in(window, async move |workspace, window| {
                             let diff_result = diff_result_task.await;
@@ -299,21 +249,14 @@ impl Workspace {
                             let _ = workspace.update_in(window, |_workspace, window, cx| {
                                 use crate::ui::diff_panel::DiffPanel;
                                 let diff_view = cx.new(|cx| {
-                                    let mut view =
-                                        DiffPanel::new(left_buffer, right_buffer, window, cx);
+                                    let mut view = DiffPanel::new(left_buffer, right_buffer, window, cx);
                                     view.set_diff_result(diff_result, cx);
                                     view
                                 });
                                 let panel = Arc::new(diff_view);
 
                                 _workspace.dock_area.update(cx, |dock_area, cx| {
-                                    dock_area.add_panel(
-                                        panel,
-                                        DockPlacement::Center,
-                                        None,
-                                        window,
-                                        cx,
-                                    );
+                                    dock_area.add_panel(panel, DockPlacement::Center, None, window, cx);
                                 });
                             });
                         })
@@ -330,11 +273,7 @@ impl Workspace {
         Self::find_panel_in_items(dock_area.items(), path, cx)
     }
 
-    fn find_panel_in_items(
-        dock_item: &DockItem,
-        path: &std::path::Path,
-        cx: &App,
-    ) -> Option<FocusHandle> {
+    fn find_panel_in_items(dock_item: &DockItem, path: &std::path::Path, cx: &App) -> Option<FocusHandle> {
         match dock_item {
             DockItem::Tabs { items, .. } => {
                 for item in items {
@@ -359,11 +298,7 @@ impl Workspace {
 
     /// Opens a new workspace window with the specified files and folder.
     /// This is the main public API for creating workspace windows.
-    pub fn open_window(
-        cx: &mut App,
-        initial_files: Vec<PathBuf>,
-        initial_folder: Option<PathBuf>,
-    ) -> Task<()> {
+    pub fn open_window(cx: &mut App, initial_files: Vec<PathBuf>, initial_folder: Option<PathBuf>) -> Task<()> {
         let task = Self::new_local(cx);
         cx.spawn(async move |cx| {
             if let Ok(window) = task.await {

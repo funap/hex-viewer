@@ -48,22 +48,14 @@ impl EditorService {
 
     /// Searches for a query in the given buffer based on the search options.
     /// Returns a Task that executes the search in the background.
-    pub fn search(
-        &self,
-        buffer: Arc<FileBuffer>,
-        query: String,
-        options: crate::model::search::SearchOptions,
-        cx: &gpui::App,
-    ) -> gpui::Task<Vec<usize>> {
+    pub fn search(&self, buffer: Arc<FileBuffer>, query: String, options: crate::model::search::SearchOptions, cx: &gpui::App) -> gpui::Task<Vec<usize>> {
         cx.background_executor().spawn(async move {
             if query.is_empty() {
                 return Vec::new();
             }
 
             match options.mode {
-                crate::model::search::SearchMode::Text => {
-                    buffer.search_text(&query, options.limit, options.range.clone())
-                }
+                crate::model::search::SearchMode::Text => buffer.search_text(&query, options.limit, options.range.clone()),
                 crate::model::search::SearchMode::Hex => {
                     // Parse hex string (remove spaces and keep only valid hex characters)
                     let hex_str: String = query.chars().filter(|c| c.is_ascii_hexdigit()).collect();
@@ -81,9 +73,7 @@ impl EditorService {
                             .collect();
 
                         match bytes {
-                            Ok(pattern) => {
-                                buffer.search_bytes(&pattern, options.limit, options.range.clone())
-                            }
+                            Ok(pattern) => buffer.search_bytes(&pattern, options.limit, options.range.clone()),
                             Err(_) => Vec::new(),
                         }
                     }
@@ -92,12 +82,7 @@ impl EditorService {
         })
     }
 
-    pub fn compute_diff(
-        &self,
-        left: Arc<FileBuffer>,
-        right: Arc<FileBuffer>,
-        cx: &gpui::App,
-    ) -> gpui::Task<crate::model::diff::DiffResult> {
+    pub fn compute_diff(&self, left: Arc<FileBuffer>, right: Arc<FileBuffer>, cx: &gpui::App) -> gpui::Task<crate::model::diff::DiffResult> {
         cx.background_executor().spawn(async move {
             let left_data = left.data();
             let right_data = right.data();

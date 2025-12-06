@@ -11,10 +11,7 @@ mod ui;
 use ui::workspace::Workspace;
 
 fn main() {
-    let rt = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .unwrap();
+    let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
     let _guard = rt.enter();
 
     // Parse command line arguments

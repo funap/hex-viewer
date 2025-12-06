@@ -95,13 +95,7 @@ mod tests {
 
         assert_eq!(result.total_differences, 0);
         assert_eq!(result.chunks.len(), 1);
-        assert_eq!(
-            result.chunks[0],
-            DiffChunk::Equal {
-                offset: 0,
-                length: 11
-            }
-        );
+        assert_eq!(result.chunks[0], DiffChunk::Equal { offset: 0, length: 11 });
     }
 
     #[test]
@@ -112,13 +106,7 @@ mod tests {
 
         assert_eq!(result.total_differences, 4);
         assert_eq!(result.chunks.len(), 1);
-        assert_eq!(
-            result.chunks[0],
-            DiffChunk::Modified {
-                offset: 0,
-                length: 4
-            }
-        );
+        assert_eq!(result.chunks[0], DiffChunk::Modified { offset: 0, length: 4 });
     }
 
     #[test]
