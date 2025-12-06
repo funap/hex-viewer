@@ -41,7 +41,7 @@ const CONTEXT: &str = "HexView";
 // HexView layout constants
 pub const HEADER_HEIGHT: f32 = 32.0;
 pub const ROW_HEIGHT: f32 = 24.0;
-pub const OFFSET_WIDTH: f32 = 96.0;
+pub const OFFSET_WIDTH: f32 = 80.0;
 pub const HEX_BYTE_WIDTH: f32 = 22.0;
 pub const HEX_GAP: f32 = 4.0;
 pub const SECTION_GAP: f32 = 16.0;
