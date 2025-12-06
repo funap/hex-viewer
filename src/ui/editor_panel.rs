@@ -27,59 +27,6 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("n", SearchNext, Some(CONTEXT)),
         KeyBinding::new("shift-n", SearchPrev, Some(CONTEXT)),
     ]);
-
-    gpui_component::dock::register_panel(cx, "EditorPanel", |_, _, info, window, cx| {
-        let state = match info {
-            gpui_component::dock::PanelInfo::Panel(value) => {
-                EditorPanelState::from_value(value.clone())
-            }
-            _ => None,
-        };
-
-        let view = cx.new(|cx| {
-            let buffer = if let Some(state) = state {
-                if let Some(path) = state.path {
-                    // TODO: This is synchronous, but opening file is async.
-                    // We need a way to handle this. For now, we can try to load it synchronously or use a placeholder.
-                    // Since we are in the UI thread, we shouldn't block.
-                    // Ideally, we should use `AppState::global(cx).editor_service` but `open_file` is async.
-                    // Let's create an empty buffer and trigger load.
-                    // Or better, let's just create an empty buffer for now and fix it later properly.
-                    // Actually, we can spawn a task to load it.
-
-                    // NOTE: This is a limitation of the current architecture.
-                    // We will create an empty buffer and try to load the file in background.
-                    let buffer = Arc::new(FileBuffer::empty());
-                    let path_clone = path.clone();
-                    cx.spawn(|_this: WeakEntity<EditorPanel>, cx: &mut AsyncApp| {
-                        let cx = cx.clone();
-                        async move {
-                            let app = cx.update(|cx| AppState::global(cx).clone()).ok();
-                            if let Some(app) = app {
-                                if let Ok(_loaded) = app.editor_service.open_file(path_clone).await
-                                {
-                                    // We need to update the panel with the new buffer.
-                                    // But EditorPanel doesn't expose a way to set buffer.
-                                    // This requires further refactoring of EditorPanel.
-                                    // For now, we just return empty buffer.
-                                }
-                            }
-                        }
-                    })
-                    .detach();
-
-                    buffer
-                } else {
-                    Arc::new(FileBuffer::empty())
-                }
-            } else {
-                Arc::new(FileBuffer::empty())
-            };
-
-            EditorPanel::new(buffer, window, cx)
-        });
-        Box::new(view)
-    });
 }
 
 pub struct EditorPanel {
