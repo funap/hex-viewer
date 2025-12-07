@@ -12,6 +12,7 @@ use std::sync::Arc;
 pub enum HexViewEvent {
     Scrolled(usize),
     SelectionChanged { start: Option<usize>, end: Option<usize> },
+    CursorMoved(usize),
 }
 
 actions!(
@@ -98,7 +99,6 @@ pub struct HexView {
     last_bounds: Option<Bounds<Pixels>>,
     cursor_offset: usize,
     scroll_offset: usize,
-    scrollbar_state: ScrollbarState,
     scroll_handle: ScrollHandle,
     highlights: Vec<(Range<usize>, Hsla)>,
     show_offset: bool,
@@ -119,7 +119,6 @@ impl HexView {
             last_bounds: None,
             cursor_offset: 0,
             scroll_offset: 0,
-            scrollbar_state: ScrollbarState::default(),
             scroll_handle: ScrollHandle::new(),
             highlights: Vec::new(),
             show_offset: true,
@@ -161,6 +160,10 @@ impl HexView {
     pub fn buffer(mut self, buffer: Arc<FileBuffer>) -> Self {
         self.buffer = buffer;
         self
+    }
+
+    pub fn cursor_offset(&self) -> usize {
+        self.cursor_offset
     }
 
     pub fn set_highlights(&mut self, highlights: Vec<(Range<usize>, Hsla)>, cx: &mut Context<Self>) {
@@ -721,7 +724,7 @@ impl Render for HexView {
             })
             .child(
                 div().absolute().top_0().right_0().bottom_0().w_4().child(
-                    Scrollbar::vertical(&self.scrollbar_state, &self.scroll_handle)
+                    Scrollbar::vertical(&self.scroll_handle)
                         .axis(ScrollbarAxis::Vertical)
                         .scroll_size(size(px(0.), total_height)),
                 ),

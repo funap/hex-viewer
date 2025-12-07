@@ -35,7 +35,7 @@ impl Panel for SettingsPanel {
         "SettingsPanel"
     }
 
-    fn title(&self, _window: &Window, _cx: &App) -> gpui::AnyElement {
+    fn title(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         self.title.clone().into_any_element()
     }
 
@@ -51,7 +51,7 @@ impl Panel for SettingsPanel {
         true
     }
 
-    fn set_active(&mut self, _active: bool, _window: &mut Window, _cx: &mut App) {}
+    fn set_active(&mut self, _active: bool, _window: &mut Window, _cx: &mut Context<Self>) {}
 
-    fn set_zoomed(&mut self, _zoomed: bool, _window: &mut Window, _cx: &mut App) {}
+    fn set_zoomed(&mut self, _zoomed: bool, _window: &mut Window, _cx: &mut Context<Self>) {}
 }

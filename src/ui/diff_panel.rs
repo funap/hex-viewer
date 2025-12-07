@@ -180,7 +180,7 @@ impl Panel for DiffPanel {
         "DiffPanel"
     }
 
-    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
+    fn title(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         let left_name = self.left_path().file_name().and_then(|n| n.to_str()).unwrap_or("Unknown");
         let right_name = self.right_path().file_name().and_then(|n| n.to_str()).unwrap_or("Unknown");
 
@@ -199,9 +199,9 @@ impl Panel for DiffPanel {
         true
     }
 
-    fn set_active(&mut self, _active: bool, _window: &mut Window, _cx: &mut App) {}
+    fn set_active(&mut self, _active: bool, _window: &mut Window, _cx: &mut Context<Self>) {}
 
-    fn set_zoomed(&mut self, _zoomed: bool, _window: &mut Window, _cx: &mut App) {}
+    fn set_zoomed(&mut self, _zoomed: bool, _window: &mut Window, _cx: &mut Context<Self>) {}
 
     fn dump(&self, _cx: &App) -> gpui_component::dock::PanelState {
         let mut state = gpui_component::dock::PanelState::new(self);

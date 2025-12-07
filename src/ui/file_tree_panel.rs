@@ -388,7 +388,7 @@ impl Panel for FileTreePanel {
         "FileTreePanel"
     }
 
-    fn title(&self, _window: &Window, _cx: &App) -> gpui::AnyElement {
+    fn title(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         self.title.clone().into_any_element()
     }
 
@@ -404,18 +404,9 @@ impl Panel for FileTreePanel {
         true
     }
 
-    fn set_active(&mut self, _active: bool, _window: &mut Window, _cx: &mut App) {}
+    fn set_active(&mut self, _active: bool, _window: &mut Window, _cx: &mut Context<Self>) {}
 
-    fn set_zoomed(&mut self, _zoomed: bool, _window: &mut Window, _cx: &mut App) {}
-
-    fn dump(&self, _cx: &App) -> gpui_component::dock::PanelState {
-        let mut state = gpui_component::dock::PanelState::new(self);
-        let panel_state = FileTreePanelState {
-            root_path: self.root_path.clone(),
-        };
-        state.info = gpui_component::dock::PanelInfo::panel(panel_state.to_value());
-        state
-    }
+    fn set_zoomed(&mut self, _zoomed: bool, _window: &mut Window, _cx: &mut Context<Self>) {}
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]

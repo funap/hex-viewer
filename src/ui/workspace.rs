@@ -10,23 +10,19 @@ use crate::ui::toolbar::AppTitleBar;
 
 use crate::app_state::AppState;
 use gpui_component::Root;
-use gpui_component::dock::{DockArea, DockAreaState, DockEvent, DockItem, DockPlacement};
+use gpui_component::dock::{DockArea, DockItem, DockPlacement};
 use gpui_component::menu::AppMenuBar;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
 
 pub struct Workspace {
     pub dock_area: Entity<DockArea>,
     pub title_bar: Entity<AppTitleBar>,
-    pub last_layout_state: Option<DockAreaState>,
-    pub _save_layout_task: Option<Task<()>>,
 }
 
 const MAIN_DOCK_AREA_ID: &str = "main_dock_area";
 const MAIN_DOCK_AREA_VERSION: usize = 1;
 const FILE_TREE_PANEL_TITLE: &str = "File Tree";
-const STATE_FILE: &str = "dock_layout.json";
 
 pub fn init(cx: &mut App) {
     cx.bind_keys(vec![
@@ -45,81 +41,9 @@ impl Workspace {
         let app_menu_bar = AppMenuBar::new(window, cx);
         let title_bar = cx.new(|_cx| AppTitleBar { app_menu_bar });
 
-        match Self::load_layout(dock_area.clone(), window, cx) {
-            Ok(_) => {
-                println!("load layout success");
-            }
-            Err(err) => {
-                eprintln!("load layout error: {:?}", err);
-                Self::reset_default_layout(weak_dock_area, window, cx);
-            }
-        };
+        Self::reset_default_layout(weak_dock_area, window, cx);
 
-        cx.subscribe_in(&dock_area, window, |this, dock_area, ev: &DockEvent, window, cx| match ev {
-            DockEvent::LayoutChanged => this.save_layout(dock_area, window, cx),
-            _ => {}
-        })
-        .detach();
-
-        cx.on_app_quit({
-            let dock_area = dock_area.clone();
-            move |_, cx| {
-                let state = dock_area.read(cx).dump(cx);
-                cx.background_executor().spawn(async move {
-                    Self::save_state(&state).unwrap();
-                })
-            }
-        })
-        .detach();
-
-        Self {
-            dock_area,
-            title_bar,
-            last_layout_state: None,
-            _save_layout_task: None,
-        }
-    }
-
-    fn save_layout(&mut self, dock_area: &Entity<DockArea>, window: &mut Window, cx: &mut Context<Self>) {
-        let dock_area = dock_area.clone();
-        self._save_layout_task = Some(cx.spawn_in(window, async move |story, window| {
-            Timer::after(Duration::from_secs(10)).await;
-
-            _ = story.update_in(window, move |this, _, cx| {
-                let dock_area = dock_area.read(cx);
-                let state = dock_area.dump(cx);
-
-                let last_layout_state = this.last_layout_state.clone();
-                if Some(&state) == last_layout_state.as_ref() {
-                    return;
-                }
-
-                Self::save_state(&state).ok();
-                this.last_layout_state = Some(state);
-            });
-        }));
-    }
-
-    fn save_state(state: &DockAreaState) -> anyhow::Result<()> {
-        let json = serde_json::to_string_pretty(state)?;
-        std::fs::write(STATE_FILE, json)?;
-        Ok(())
-    }
-
-    fn load_layout(dock_area: Entity<DockArea>, window: &mut Window, cx: &mut Context<Self>) -> anyhow::Result<()> {
-        let json = std::fs::read_to_string(STATE_FILE)?;
-        let state = serde_json::from_str::<DockAreaState>(&json)?;
-
-        // Check version if needed, similar to sample
-        if state.version != Some(MAIN_DOCK_AREA_VERSION) {
-            // For now, just error out to trigger reset, or handle migration
-            return Err(anyhow::anyhow!("Version mismatch"));
-        }
-
-        dock_area.update(cx, |dock_area, cx| {
-            dock_area.load(state, window, cx)?;
-            Ok::<(), anyhow::Error>(())
-        })
+        Self { dock_area, title_bar }
     }
 
     fn reset_default_layout(dock_area: WeakEntity<DockArea>, window: &mut Window, cx: &mut Context<Self>) {

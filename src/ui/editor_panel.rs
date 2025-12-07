@@ -369,7 +369,7 @@ impl Panel for EditorPanel {
         "EditorPanel"
     }
 
-    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
+    fn title(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         let title = self
             .buffer
             .path()
@@ -391,9 +391,9 @@ impl Panel for EditorPanel {
         true
     }
 
-    fn set_active(&mut self, _active: bool, _window: &mut Window, _cx: &mut App) {}
+    fn set_active(&mut self, _active: bool, _window: &mut Window, _cx: &mut Context<Self>) {}
 
-    fn set_zoomed(&mut self, _zoomed: bool, _window: &mut Window, _cx: &mut App) {}
+    fn set_zoomed(&mut self, _zoomed: bool, _window: &mut Window, _cx: &mut Context<Self>) {}
 
     fn dump(&self, _cx: &App) -> gpui_component::dock::PanelState {
         let mut state = gpui_component::dock::PanelState::new(self);
