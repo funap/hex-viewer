@@ -35,53 +35,39 @@ pub struct DiffPanel {
 }
 
 impl DiffPanel {
-    pub fn new(
-        left_buffer: Arc<FileBuffer>,
-        right_buffer: Arc<FileBuffer>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
+    pub fn new(left_buffer: Arc<FileBuffer>, right_buffer: Arc<FileBuffer>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let left_view = cx.new(|cx| HexView::new(cx).buffer(left_buffer.clone()));
         let right_view = cx.new(|cx| HexView::new(cx).buffer(right_buffer.clone()));
 
         let focus_handle = cx.focus_handle();
 
-        cx.on_focus_in(&focus_handle, window, |_this, _window, _cx| {})
-            .detach();
+        cx.on_focus_in(&focus_handle, window, |_this, _window, _cx| {}).detach();
 
         let mut subscriptions = Vec::new();
 
-        subscriptions.push(cx.subscribe_in(
-            &left_view,
-            window,
-            |this, _left_view, event, _window, cx| {
-                if this.sync_scroll && !this.is_syncing {
-                    if let HexViewEvent::Scrolled(offset) = event {
-                        this.is_syncing = true;
-                        this.right_view.update(cx, |view, cx| {
-                            view.set_scroll_offset(*offset, cx);
-                        });
-                        this.is_syncing = false;
-                    }
+        subscriptions.push(cx.subscribe_in(&left_view, window, |this, _left_view, event, _window, cx| {
+            if this.sync_scroll && !this.is_syncing {
+                if let HexViewEvent::Scrolled(offset) = event {
+                    this.is_syncing = true;
+                    this.right_view.update(cx, |view, cx| {
+                        view.set_scroll_offset(*offset, cx);
+                    });
+                    this.is_syncing = false;
                 }
-            },
-        ));
+            }
+        }));
 
-        subscriptions.push(cx.subscribe_in(
-            &right_view,
-            window,
-            |this, _right_view, event, _window, cx| {
-                if this.sync_scroll && !this.is_syncing {
-                    if let HexViewEvent::Scrolled(offset) = event {
-                        this.is_syncing = true;
-                        this.left_view.update(cx, |view, cx| {
-                            view.set_scroll_offset(*offset, cx);
-                        });
-                        this.is_syncing = false;
-                    }
+        subscriptions.push(cx.subscribe_in(&right_view, window, |this, _right_view, event, _window, cx| {
+            if this.sync_scroll && !this.is_syncing {
+                if let HexViewEvent::Scrolled(offset) = event {
+                    this.is_syncing = true;
+                    this.left_view.update(cx, |view, cx| {
+                        view.set_scroll_offset(*offset, cx);
+                    });
+                    this.is_syncing = false;
                 }
-            },
-        ));
+            }
+        }));
 
         Self {
             left_buffer,
@@ -125,18 +111,9 @@ impl DiffPanel {
         }
     }
 
-    fn next_difference(
-        &mut self,
-        _: &NextDifference,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn next_difference(&mut self, _: &NextDifference, _window: &mut Window, cx: &mut Context<Self>) {
         if let Some(diff_result) = &self.diff_result {
-            let modified_chunks: Vec<_> = diff_result
-                .chunks
-                .iter()
-                .filter(|c| matches!(c, DiffChunk::Modified { .. }))
-                .collect();
+            let modified_chunks: Vec<_> = diff_result.chunks.iter().filter(|c| matches!(c, DiffChunk::Modified { .. })).collect();
 
             if !modified_chunks.is_empty() {
                 self.current_diff_index = (self.current_diff_index + 1) % modified_chunks.len();
@@ -145,18 +122,9 @@ impl DiffPanel {
         }
     }
 
-    fn prev_difference(
-        &mut self,
-        _: &PrevDifference,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn prev_difference(&mut self, _: &PrevDifference, _window: &mut Window, cx: &mut Context<Self>) {
         if let Some(diff_result) = &self.diff_result {
-            let modified_chunks: Vec<_> = diff_result
-                .chunks
-                .iter()
-                .filter(|c| matches!(c, DiffChunk::Modified { .. }))
-                .collect();
+            let modified_chunks: Vec<_> = diff_result.chunks.iter().filter(|c| matches!(c, DiffChunk::Modified { .. })).collect();
 
             if !modified_chunks.is_empty() {
                 if self.current_diff_index == 0 {
@@ -169,27 +137,16 @@ impl DiffPanel {
         }
     }
 
-    fn toggle_sync_scroll(
-        &mut self,
-        _: &ToggleSyncScroll,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn toggle_sync_scroll(&mut self, _: &ToggleSyncScroll, _window: &mut Window, cx: &mut Context<Self>) {
         self.sync_scroll = !self.sync_scroll;
         cx.notify();
     }
 
     fn scroll_to_current_diff(&mut self, cx: &mut Context<Self>) {
         if let Some(diff_result) = &self.diff_result {
-            let modified_chunks: Vec<_> = diff_result
-                .chunks
-                .iter()
-                .filter(|c| matches!(c, DiffChunk::Modified { .. }))
-                .collect();
+            let modified_chunks: Vec<_> = diff_result.chunks.iter().filter(|c| matches!(c, DiffChunk::Modified { .. })).collect();
 
-            if let Some(DiffChunk::Modified { offset, .. }) =
-                modified_chunks.get(self.current_diff_index)
-            {
+            if let Some(DiffChunk::Modified { offset, .. }) = modified_chunks.get(self.current_diff_index) {
                 let offset = *offset;
                 self.left_view.update(cx, |view, cx| {
                     view.scroll_to_offset(offset, cx);
@@ -224,20 +181,10 @@ impl Panel for DiffPanel {
     }
 
     fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
-        let left_name = self
-            .left_path()
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("Unknown");
-        let right_name = self
-            .right_path()
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("Unknown");
+        let left_name = self.left_path().file_name().and_then(|n| n.to_str()).unwrap_or("Unknown");
+        let right_name = self.right_path().file_name().and_then(|n| n.to_str()).unwrap_or("Unknown");
 
-        div()
-            .child(format!("Diff: {} ↔ {}", left_name, right_name))
-            .into_any_element()
+        div().child(format!("Diff: {} ↔ {}", left_name, right_name)).into_any_element()
     }
 
     fn closable(&self, _cx: &App) -> bool {
@@ -262,8 +209,7 @@ impl Panel for DiffPanel {
             left_path: self.left_path().to_string_lossy().to_string(),
             right_path: self.right_path().to_string_lossy().to_string(),
         };
-        state.info =
-            gpui_component::dock::PanelInfo::panel(serde_json::to_value(diff_state).unwrap());
+        state.info = gpui_component::dock::PanelInfo::panel(serde_json::to_value(diff_state).unwrap());
         state
     }
 }
@@ -281,18 +227,9 @@ impl Render for DiffPanel {
         let diff_count = self
             .diff_result
             .as_ref()
-            .map(|r| {
-                r.chunks
-                    .iter()
-                    .filter(|c| matches!(c, DiffChunk::Modified { .. }))
-                    .count()
-            })
+            .map(|r| r.chunks.iter().filter(|c| matches!(c, DiffChunk::Modified { .. })).count())
             .unwrap_or(0);
-        let current_index = if diff_count > 0 {
-            self.current_diff_index + 1
-        } else {
-            0
-        };
+        let current_index = if diff_count > 0 { self.current_diff_index + 1 } else { 0 };
 
         div()
             .flex()
@@ -312,15 +249,9 @@ impl Render for DiffPanel {
                     .border_color(theme.border)
                     .child(
                         if sync_scroll {
-                            Button::new("sync-scroll")
-                                .icon(IconName::Check)
-                                .primary()
-                                .label("Sync")
+                            Button::new("sync-scroll").icon(IconName::Check).primary().label("Sync")
                         } else {
-                            Button::new("sync-scroll")
-                                .icon(IconName::Minus)
-                                .ghost()
-                                .label("Sync")
+                            Button::new("sync-scroll").icon(IconName::Minus).ghost().label("Sync")
                         }
                         .on_click(cx.listener(|this, _, _window, cx| {
                             this.sync_scroll = !this.sync_scroll;
@@ -357,14 +288,7 @@ impl Render for DiffPanel {
                     .flex_row()
                     .flex_1()
                     .min_h_0()
-                    .child(
-                        div()
-                            .flex_1()
-                            .h_full()
-                            .border_r_1()
-                            .border_color(theme.border)
-                            .child(self.left_view.clone()),
-                    )
+                    .child(div().flex_1().h_full().border_r_1().border_color(theme.border).child(self.left_view.clone()))
                     .child(div().flex_1().h_full().child(self.right_view.clone())),
             )
             .on_action(cx.listener(Self::next_difference))
