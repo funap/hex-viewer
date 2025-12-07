@@ -166,6 +166,16 @@ impl HexView {
         self.cursor_offset
     }
 
+    pub fn selection_range(&self) -> Option<Range<usize>> {
+        if let (Some(start), Some(end)) = (self.selection_start, self.selection_end) {
+            let min = cmp::min(start, end);
+            let max = cmp::max(start, end);
+            Some(min..max + 1)
+        } else {
+            None
+        }
+    }
+
     pub fn set_highlights(&mut self, highlights: Vec<(Range<usize>, Hsla)>, cx: &mut Context<Self>) {
         self.highlights = highlights;
         cx.notify();
@@ -215,6 +225,7 @@ impl HexView {
         self.cursor_offset = offset.min(self.buffer.len().saturating_sub(1));
         self.ensure_cursor_visible(cx);
         cx.notify();
+        cx.emit(HexViewEvent::CursorMoved(self.cursor_offset));
     }
 
     fn ensure_cursor_visible(&mut self, cx: &mut Context<Self>) {
@@ -407,6 +418,7 @@ impl HexView {
             self.cursor_offset -= 1;
             self.ensure_cursor_visible(cx);
             cx.notify();
+            cx.emit(HexViewEvent::CursorMoved(self.cursor_offset));
         }
     }
 
@@ -417,6 +429,7 @@ impl HexView {
             self.cursor_offset += 1;
             self.ensure_cursor_visible(cx);
             cx.notify();
+            cx.emit(HexViewEvent::CursorMoved(self.cursor_offset));
         }
     }
 
@@ -427,6 +440,7 @@ impl HexView {
             self.cursor_offset -= 16;
             self.ensure_cursor_visible(cx);
             cx.notify();
+            cx.emit(HexViewEvent::CursorMoved(self.cursor_offset));
         }
     }
 
@@ -438,6 +452,7 @@ impl HexView {
             self.cursor_offset = new_offset;
             self.ensure_cursor_visible(cx);
             cx.notify();
+            cx.emit(HexViewEvent::CursorMoved(self.cursor_offset));
         }
     }
 
@@ -540,6 +555,7 @@ impl HexView {
         }
         self.ensure_cursor_visible(cx);
         cx.notify();
+        cx.emit(HexViewEvent::CursorMoved(self.cursor_offset));
     }
 
     fn page_down(&mut self, _: &PageDown, _window: &mut Window, cx: &mut Context<Self>) {
@@ -555,6 +571,7 @@ impl HexView {
         }
         self.ensure_cursor_visible(cx);
         cx.notify();
+        cx.emit(HexViewEvent::CursorMoved(self.cursor_offset));
     }
 
     fn home(&mut self, _: &Home, _window: &mut Window, cx: &mut Context<Self>) {
@@ -563,6 +580,7 @@ impl HexView {
         self.cursor_offset = 0;
         self.ensure_cursor_visible(cx);
         cx.notify();
+        cx.emit(HexViewEvent::CursorMoved(self.cursor_offset));
     }
 
     fn end(&mut self, _: &End, _window: &mut Window, cx: &mut Context<Self>) {
@@ -571,6 +589,7 @@ impl HexView {
         self.cursor_offset = self.buffer.len().saturating_sub(1);
         self.ensure_cursor_visible(cx);
         cx.notify();
+        cx.emit(HexViewEvent::CursorMoved(self.cursor_offset));
     }
 
     fn select_page_up(&mut self, _: &SelectPageUp, _window: &mut Window, cx: &mut Context<Self>) {

@@ -65,6 +65,12 @@ impl EditorPanel {
         })
         .detach();
 
+        let hex_focus_handle = hex_view.read(cx).focus_handle(cx);
+        cx.on_focus_in(&hex_focus_handle, window, |this: &mut Self, _window: &mut Window, cx: &mut Context<Self>| {
+            this.update_global_status(cx);
+        })
+        .detach();
+
         // Subscribe to HexView scroll events to update highlights when scrolling
         cx.subscribe(&hex_view, |this, _, event: &crate::ui::component::hex_view::HexViewEvent, cx| {
             if let crate::ui::component::hex_view::HexViewEvent::Scrolled(_) = event {
@@ -76,6 +82,10 @@ impl EditorPanel {
                         this.update_viewport_highlights(cx);
                     }
                 }
+            } else if let crate::ui::component::hex_view::HexViewEvent::CursorMoved(_) | crate::ui::component::hex_view::HexViewEvent::SelectionChanged { .. } =
+                event
+            {
+                this.update_global_status(cx);
             }
         })
         .detach();
@@ -93,6 +103,26 @@ impl EditorPanel {
             viewport_search_task: None,
             is_full_search_complete: false,
         }
+    }
+
+    fn update_global_status(&self, cx: &mut Context<Self>) {
+        let hex_view = self.hex_view.read(cx);
+        let cursor_offset = hex_view.cursor_offset();
+        let selection_count = hex_view.selection_range().map(|range| range.len());
+        let buffer = self.buffer.clone();
+
+        // Only update if this panel has focus or window is active?
+        // For now, update whenever this method is called (on focus or cursor move).
+
+        let app_state = AppState::global(cx);
+        let editor_status = app_state.editor_status.clone();
+        editor_status.update(cx, |status, cx| {
+            status.cursor_offset = cursor_offset;
+            status.total_size = buffer.len();
+            status.value_at_cursor = buffer.data().get(cursor_offset).copied();
+            status.selection_count = selection_count;
+            cx.notify();
+        });
     }
 
     pub fn path(&self) -> &std::path::Path {

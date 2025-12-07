@@ -9,6 +9,7 @@ use crate::ui::file_tree_panel::FileTreePanel;
 use crate::ui::toolbar::AppTitleBar;
 
 use crate::app_state::AppState;
+use crate::ui::status_bar::StatusBar;
 use gpui_component::Root;
 use gpui_component::dock::{DockArea, DockItem, DockPlacement};
 use gpui_component::menu::AppMenuBar;
@@ -18,6 +19,7 @@ use std::sync::Arc;
 pub struct Workspace {
     pub dock_area: Entity<DockArea>,
     pub title_bar: Entity<AppTitleBar>,
+    pub status_bar: Entity<StatusBar>,
 }
 
 const MAIN_DOCK_AREA_ID: &str = "main_dock_area";
@@ -41,9 +43,16 @@ impl Workspace {
         let app_menu_bar = AppMenuBar::new(window, cx);
         let title_bar = cx.new(|_cx| AppTitleBar { app_menu_bar });
 
+        let editor_status = AppState::global(cx).editor_status.clone();
+        let status_bar = cx.new(|cx| StatusBar::new(editor_status, cx));
+
         Self::reset_default_layout(weak_dock_area, window, cx);
 
-        Self { dock_area, title_bar }
+        Self {
+            dock_area,
+            title_bar,
+            status_bar,
+        }
     }
 
     fn reset_default_layout(dock_area: WeakEntity<DockArea>, window: &mut Window, cx: &mut Context<Self>) {
@@ -265,5 +274,6 @@ impl Render for Workspace {
             .flex_col()
             .child(self.title_bar.clone())
             .child(self.dock_area.clone())
+            .child(self.status_bar.clone())
     }
 }
