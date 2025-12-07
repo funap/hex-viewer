@@ -48,7 +48,7 @@ pub(crate) fn init(cx: &mut App) {
 pub struct FileTreePanel {
     tree_state: Entity<TreeState>,
     selected_item: Option<TreeItem>,
-    selected_items: Vec<TreeItem>, // 複数選択用
+    selected_items: Vec<TreeItem>,
     title: SharedString,
     focus_handle: FocusHandle,
     root_path: Option<PathBuf>,
@@ -94,7 +94,6 @@ fn update_item_children_recursive(items: &mut Vec<TreeItem>, target_id: &str, ch
 }
 
 impl FileTreePanel {
-    // Renamed from TreeStory
     pub fn new(title: impl Into<SharedString>, cx: &mut Context<Self>) -> Self {
         let tree_state = cx.new(|cx| TreeState::new(cx));
 
@@ -243,7 +242,6 @@ impl FileTreePanel {
 }
 
 impl Render for FileTreePanel {
-    // Renamed from TreeStory
     fn render(&mut self, _: &mut gpui::Window, cx: &mut gpui::Context<Self>) -> impl gpui::IntoElement {
         let view = cx.entity();
 
@@ -355,7 +353,6 @@ impl Render for FileTreePanel {
                             .on_click(window.listener_for(&view, {
                                 let item = item.clone();
                                 move |this, event: &gpui::ClickEvent, window, cx| {
-                                    // Ctrl/Cmdキーで複数選択
                                     if event.modifiers().control || event.modifiers().platform {
                                         this.toggle_selection(item.clone(), cx);
                                     } else {
@@ -363,7 +360,6 @@ impl Render for FileTreePanel {
                                         this.selected_item = Some(item.clone());
                                     }
 
-                                    // ファイルを開く処理（単一選択時のみ）
                                     if !item.is_folder() && this.selected_items.len() == 1 {
                                         println!("Dispatching OpenFile action for path: {}", item.id);
                                         cx.focus_self(window);
