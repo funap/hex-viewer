@@ -22,10 +22,6 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("cmd-g", SearchNext, Some(CONTEXT)),
         KeyBinding::new("shift-f3", SearchPrev, Some(CONTEXT)),
         KeyBinding::new("cmd-shift-g", SearchPrev, Some(CONTEXT)),
-        // Vi-like keybindings
-        KeyBinding::new("/", ToggleSearch, Some(CONTEXT)),
-        KeyBinding::new("n", SearchNext, Some(CONTEXT)),
-        KeyBinding::new("shift-n", SearchPrev, Some(CONTEXT)),
     ]);
 }
 
@@ -331,6 +327,7 @@ impl EditorPanel {
         }
 
         self.highlight_current_result(false, cx);
+        self.update_search_bar_results(cx);
         cx.notify();
     }
 
@@ -350,6 +347,7 @@ impl EditorPanel {
         }
 
         self.highlight_current_result(false, cx);
+        self.update_search_bar_results(cx);
         cx.notify();
     }
 

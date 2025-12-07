@@ -374,9 +374,7 @@ impl Render for FileTreePanel {
                             }))
                     }
                 })
-                .p_1()
-                .border_1()
-                .border_color(cx.theme().border),
+                .bg(cx.theme().sidebar),
             )
     }
 }

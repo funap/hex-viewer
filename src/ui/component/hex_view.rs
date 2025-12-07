@@ -1,3 +1,4 @@
+use crate::actions::{SearchNext, SearchPrev, ToggleSearch};
 use crate::model::file_buffer::FileBuffer;
 use gpui::prelude::*;
 use gpui::*;
@@ -32,7 +33,10 @@ actions!(
         SelectPageUp,
         SelectPageDown,
         SelectHome,
-        SelectEnd
+        SelectEnd,
+        TriggerSearch,
+        TriggerSearchNext,
+        TriggerSearchPrev
     ]
 );
 
@@ -78,6 +82,10 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("shift-l", SelectRight, Some(CONTEXT)),
         KeyBinding::new("shift-k", SelectUp, Some(CONTEXT)),
         KeyBinding::new("shift-j", SelectDown, Some(CONTEXT)),
+        // Vi-like search commands (only when HexView is focused)
+        KeyBinding::new("/", TriggerSearch, Some(CONTEXT)),
+        KeyBinding::new("n", TriggerSearchNext, Some(CONTEXT)),
+        KeyBinding::new("shift-n", TriggerSearchPrev, Some(CONTEXT)),
     ]);
 }
 
@@ -630,6 +638,18 @@ impl HexView {
             end: self.selection_end,
         });
     }
+
+    fn trigger_search(&mut self, _: &TriggerSearch, window: &mut Window, cx: &mut Context<Self>) {
+        window.dispatch_action(ToggleSearch.boxed_clone(), cx);
+    }
+
+    fn trigger_search_next(&mut self, _: &TriggerSearchNext, window: &mut Window, cx: &mut Context<Self>) {
+        window.dispatch_action(SearchNext.boxed_clone(), cx);
+    }
+
+    fn trigger_search_prev(&mut self, _: &TriggerSearchPrev, window: &mut Window, cx: &mut Context<Self>) {
+        window.dispatch_action(SearchPrev.boxed_clone(), cx);
+    }
 }
 
 impl Focusable for HexView {
@@ -681,6 +701,7 @@ impl Render for HexView {
             .on_action(cx.listener(Self::select_page_down))
             .on_action(cx.listener(Self::select_home))
             .on_action(cx.listener(Self::select_end))
+            .on_action(cx.listener(Self::trigger_search))
             .on_scroll_wheel(cx.listener(Self::on_scroll_wheel))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
