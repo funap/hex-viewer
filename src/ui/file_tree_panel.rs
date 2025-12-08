@@ -9,10 +9,9 @@ use gpui::{
 };
 
 use gpui_component::{
-    ActiveTheme as _, IconName, StyledExt as _,
+    ActiveTheme as _, IconName,
     dock::{Panel, PanelEvent},
     h_flex,
-    label::Label,
     list::ListItem,
     menu::ContextMenuExt,
     tree::{TreeItem, TreeState, tree},
@@ -415,6 +414,7 @@ pub struct FileTreePanelState {
 }
 
 impl FileTreePanelState {
+    #[allow(dead_code)]
     pub fn to_value(&self) -> serde_json::Value {
         serde_json::to_value(self).unwrap()
     }

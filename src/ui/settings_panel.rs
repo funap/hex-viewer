@@ -2,12 +2,14 @@ use gpui::{App, Context, EventEmitter, FocusHandle, Focusable, IntoElement, Pare
 use gpui_component::dock::{Panel, PanelEvent};
 
 /// A simple panel for demonstration purposes.
+#[allow(dead_code)]
 pub struct SettingsPanel {
     title: SharedString,
     focus_handle: FocusHandle,
 }
 
 impl SettingsPanel {
+    #[allow(dead_code)]
     pub fn new(title: impl Into<SharedString>, cx: &mut Context<Self>) -> Self {
         Self {
             title: title.into(),

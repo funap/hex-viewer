@@ -24,7 +24,7 @@ pub struct Workspace {
 
 const MAIN_DOCK_AREA_ID: &str = "main_dock_area";
 const MAIN_DOCK_AREA_VERSION: usize = 1;
-const FILE_TREE_PANEL_TITLE: &str = "File Tree";
+const FILE_TREE_PANEL_TITLE: &str = "FILES";
 
 pub fn init(cx: &mut App) {
     cx.bind_keys(vec![
@@ -172,8 +172,7 @@ impl Workspace {
                 let right_result = app.editor_service.open_file(std::path::PathBuf::from(right_path)).await;
 
                 if let (Ok(left_buffer), Ok(right_buffer)) = (left_result, right_result) {
-                    let _ = workspace.update_in(window, |workspace, window, cx| {
-                        let app = AppState::global(cx).clone();
+                                                let _ = workspace.update_in(window, |_, window, cx| {                        let app = AppState::global(cx).clone();
                         let diff_result_task = app.editor_service.compute_diff(left_buffer.clone(), right_buffer.clone(), cx);
 
                         cx.spawn_in(window, async move |workspace, window| {

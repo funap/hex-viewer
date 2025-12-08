@@ -5,6 +5,7 @@ pub enum SearchMode {
 }
 
 #[derive(Clone, Copy, Debug)]
+#[allow(dead_code)]
 pub enum SearchLimit {
     /// Limit to a maximum number of results
     Count(usize),
@@ -15,12 +16,14 @@ pub enum SearchLimit {
 }
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct SearchOptions {
     pub mode: SearchMode,
     pub limit: SearchLimit,
     pub range: Option<std::ops::Range<usize>>,
 }
 
+#[allow(dead_code)]
 impl SearchOptions {
     pub fn new(mode: SearchMode) -> Self {
         Self {

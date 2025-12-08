@@ -8,6 +8,7 @@ use gpui_component::{
 
 use crate::model::search::SearchMode;
 
+#[allow(dead_code)]
 pub enum SearchBarEvent {
     IncrementalSearch(String, SearchMode),
     FullSearch(String, SearchMode),
@@ -119,7 +120,7 @@ impl Render for SearchBar {
             .border_b_1()
             .border_color(cx.theme().border)
             .on_key_down(
-                cx.listener(|this, event: &gpui::KeyDownEvent, _window, cx| {
+                cx.listener(|_this, event: &gpui::KeyDownEvent, _window, cx| {
                     if event.keystroke.key == "enter" {
                         if event.keystroke.modifiers.shift {
                             cx.emit(SearchBarEvent::Prev);

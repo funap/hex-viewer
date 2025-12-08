@@ -9,6 +9,7 @@ use std::cmp;
 use std::ops::Range;
 use std::sync::Arc;
 
+#[allow(dead_code)]
 pub enum HexViewEvent {
     Scrolled(usize),
     SelectionChanged { start: Option<usize>, end: Option<usize> },
@@ -90,6 +91,7 @@ pub fn init(cx: &mut App) {
     ]);
 }
 
+#[allow(dead_code)]
 pub struct HexView {
     buffer: Arc<FileBuffer>,
     focus_handle: FocusHandle,
@@ -108,6 +110,7 @@ pub struct HexView {
 
 impl EventEmitter<HexViewEvent> for HexView {}
 
+#[allow(dead_code)]
 impl HexView {
     pub fn new(cx: &mut Context<Self>) -> Self {
         Self {

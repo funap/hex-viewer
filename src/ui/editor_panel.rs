@@ -9,7 +9,7 @@ use crate::app_state::AppState;
 use crate::model::search::SearchMode;
 use crate::ui::component::hex_view::{self, HexView};
 use crate::ui::component::search_bar::{SearchBar, SearchBarEvent};
-use gpui_component::ActiveTheme;
+use gpui_component::{ActiveTheme, Icon, IconName, h_flex};
 
 const CONTEXT: &str = "EditorPanel";
 
@@ -399,14 +399,27 @@ impl Panel for EditorPanel {
         "EditorPanel"
     }
 
-    fn title(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn title(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let title = self
             .buffer
             .path()
             .file_name()
             .map(|name| name.to_string_lossy().to_string())
             .unwrap_or_else(|| "(untitled)".to_string());
-        title.into_any_element()
+
+        let theme = cx.theme();
+
+        h_flex().gap_2().items_center().child(title).child(
+            div()
+                .id("close-icon")
+                .cursor_pointer()
+                .rounded_md()
+                .hover(|style| style.bg(theme.accent).text_color(theme.accent_foreground))
+                .on_click(cx.listener(|_, _, _, cx| {
+                    cx.dispatch_action(&gpui_component::dock::ClosePanel);
+                }))
+                .child(Icon::new(IconName::Close).size(px(14.0))),
+        )
     }
 
     fn closable(&self, _cx: &App) -> bool {
@@ -468,10 +481,12 @@ pub struct EditorPanelState {
 }
 
 impl EditorPanelState {
+    #[allow(dead_code)]
     pub fn to_value(&self) -> serde_json::Value {
         serde_json::to_value(self).unwrap()
     }
 
+    #[allow(dead_code)]
     pub fn from_value(value: serde_json::Value) -> Option<Self> {
         serde_json::from_value(value).ok()
     }
