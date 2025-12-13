@@ -44,6 +44,10 @@ pub(crate) fn init(cx: &mut App) {
     });
 }
 
+pub enum FileTreeEvent {
+    OpenFile(PathBuf),
+}
+
 pub struct FileTreePanel {
     tree_state: Entity<TreeState>,
     selected_item: Option<TreeItem>,
@@ -351,7 +355,7 @@ impl Render for FileTreePanel {
                             }))
                             .on_click(window.listener_for(&view, {
                                 let item = item.clone();
-                                move |this, event: &gpui::ClickEvent, window, cx| {
+                                move |this, event: &gpui::ClickEvent, _window, cx| {
                                     if event.modifiers().control || event.modifiers().platform {
                                         this.toggle_selection(item.clone(), cx);
                                     } else {
@@ -360,9 +364,10 @@ impl Render for FileTreePanel {
                                     }
 
                                     if !item.is_folder() && this.selected_items.len() == 1 {
-                                        println!("Dispatching OpenFile action for path: {}", item.id);
-                                        cx.focus_self(window);
-                                        window.dispatch_action(Box::new(OpenFile { path: item.id.to_string() }), cx);
+                                        println!("Emitting FileTreeEvent::OpenFile for path: {}", item.id);
+                                        // cx.focus_self(window);
+                                        // window.dispatch_action(Box::new(OpenFile { path: item.id.to_string() }), cx);
+                                        cx.emit(FileTreeEvent::OpenFile(PathBuf::from(item.id.to_string())));
                                     }
                                     cx.notify();
                                 }
@@ -375,6 +380,7 @@ impl Render for FileTreePanel {
 }
 
 impl EventEmitter<PanelEvent> for FileTreePanel {}
+impl EventEmitter<FileTreeEvent> for FileTreePanel {}
 
 impl Focusable for FileTreePanel {
     fn focus_handle(&self, _cx: &App) -> gpui::FocusHandle {

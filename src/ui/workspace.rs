@@ -1,5 +1,6 @@
 use gpui::prelude::*;
 use gpui::*;
+use gpui_component::ActiveTheme;
 
 use crate::actions::*;
 
@@ -13,11 +14,14 @@ use crate::ui::status_bar::StatusBar;
 use gpui_component::Root;
 use gpui_component::dock::{DockArea, DockItem, DockPlacement};
 use gpui_component::menu::AppMenuBar;
+use gpui_component::resizable::{h_resizable, resizable_panel};
 use std::path::PathBuf;
 use std::sync::Arc;
 
 pub struct Workspace {
     pub dock_area: Entity<DockArea>,
+    pub file_tree: Entity<FileTreePanel>,
+    pub is_file_tree_visible: bool,
     pub title_bar: Entity<AppTitleBar>,
     pub status_bar: Entity<StatusBar>,
 }
@@ -29,7 +33,7 @@ const FILE_TREE_PANEL_TITLE: &str = "FILES";
 pub fn init(cx: &mut App) {
     cx.bind_keys(vec![
         KeyBinding::new("shift-escape", gpui_component::dock::ToggleZoom, None),
-        KeyBinding::new("ctrl-w", gpui_component::dock::ClosePanel, None),
+        KeyBinding::new("ctrl-w", CloseActiveTab, None),
     ]);
 
     cx.activate(true);
@@ -40,42 +44,47 @@ impl Workspace {
         let dock_area = cx.new(|cx| DockArea::new(MAIN_DOCK_AREA_ID, Some(MAIN_DOCK_AREA_VERSION), window, cx));
         let weak_dock_area = dock_area.downgrade();
 
+        cx.observe(&dock_area, |_, _, cx| cx.notify()).detach();
+
         let app_menu_bar = AppMenuBar::new(window, cx);
         let title_bar = cx.new(|_cx| AppTitleBar { app_menu_bar });
 
         let editor_status = AppState::global(cx).editor_status.clone();
         let status_bar = cx.new(|cx| StatusBar::new(editor_status, cx));
+        cx.subscribe(&status_bar, |this, _, event, cx| match event {
+            crate::ui::status_bar::StatusBarEvent::ToggleFileTree => {
+                this.is_file_tree_visible = !this.is_file_tree_visible;
+                cx.notify();
+            }
+        })
+        .detach();
+
+        let file_tree = cx.new(|cx| FileTreePanel::new(FILE_TREE_PANEL_TITLE, cx));
+        cx.subscribe(&file_tree, |_, _, event, cx| match event {
+            crate::ui::file_tree_panel::FileTreeEvent::OpenFile(path) => {
+                cx.dispatch_action(&crate::actions::OpenFile {
+                    path: path.to_string_lossy().to_string(),
+                });
+            }
+        })
+        .detach();
 
         Self::reset_default_layout(weak_dock_area, window, cx);
 
         Self {
             dock_area,
+            file_tree,
+            is_file_tree_visible: true,
             title_bar,
             status_bar,
         }
     }
 
     fn reset_default_layout(dock_area: WeakEntity<DockArea>, window: &mut Window, cx: &mut Context<Self>) {
-        // Create empty buffer and file tree panel
-        let buffer = Arc::new(crate::model::file_buffer::FileBuffer::empty());
-        let file_tree_panel = cx.new(|cx| FileTreePanel::new(FILE_TREE_PANEL_TITLE, cx));
-        let editor_panel = cx.new(|cx| EditorPanel::new(buffer.clone(), window, cx));
-
         if let Some(dock_area_entity) = dock_area.upgrade() {
             dock_area_entity.update(cx, |dock_area_view, cx| {
-                let left_dock = DockItem::tab(file_tree_panel, &dock_area, window, cx);
-
-                let center_dock = DockItem::split_with_sizes(
-                    Axis::Vertical,
-                    vec![DockItem::tab(editor_panel, &dock_area, window, cx)],
-                    vec![None],
-                    &dock_area,
-                    window,
-                    cx,
-                );
-
-                dock_area_view.set_left_dock(left_dock, None, true, window, cx);
-                dock_area_view.set_center(center_dock, window, cx);
+                // Center dock starts empty
+                dock_area_view.set_center(DockItem::split(Axis::Vertical, vec![], &dock_area, window, cx), window, cx);
             });
         }
     }
@@ -172,7 +181,8 @@ impl Workspace {
                 let right_result = app.editor_service.open_file(std::path::PathBuf::from(right_path)).await;
 
                 if let (Ok(left_buffer), Ok(right_buffer)) = (left_result, right_result) {
-                                                let _ = workspace.update_in(window, |_, window, cx| {                        let app = AppState::global(cx).clone();
+                    let _ = workspace.update_in(window, |_, window, cx| {
+                        let app = AppState::global(cx).clone();
                         let diff_result_task = app.editor_service.compute_diff(left_buffer.clone(), right_buffer.clone(), cx);
 
                         cx.spawn_in(window, async move |workspace, window| {
@@ -198,6 +208,11 @@ impl Workspace {
             }
         })
         .detach();
+    }
+
+    fn on_action_toggle_file_tree(&mut self, _: &ToggleFileTree, _: &mut Window, cx: &mut Context<Self>) {
+        self.is_file_tree_visible = !self.is_file_tree_visible;
+        cx.notify();
     }
 
     fn find_existing_panel(&self, path: &std::path::Path, cx: &App) -> Option<FocusHandle> {
@@ -258,6 +273,107 @@ impl Workspace {
             }
         })
     }
+
+    fn on_action_close_panel_by_id(&mut self, action: &ClosePanelById, window: &mut Window, cx: &mut Context<Self>) {
+        println!("on_action_close_panel_by_id: view_id={}", action.view_id);
+        let dock_area = self.dock_area.read(cx);
+        if let Some(panel) = Self::find_panel_by_id(dock_area.items(), action.view_id) {
+            println!("Panel found, attempting to remove: {:?}", panel.panel_name());
+            self.dock_area.update(cx, |dock_area, cx| {
+                dock_area.remove_panel(panel, gpui_component::dock::DockPlacement::Center, window, cx);
+            });
+        } else {
+            println!("Panel not found for id: {}", action.view_id);
+        }
+    }
+
+    fn find_panel_by_id(dock_item: &DockItem, view_id: u64) -> Option<std::sync::Arc<dyn gpui_component::dock::PanelView>> {
+        match dock_item {
+            DockItem::Tabs { items, .. } => {
+                for item in items {
+                    // println!("Checking item: {:?} id={}", item.panel_name(), item.view().entity_id().as_u64());
+                    if item.view().entity_id().as_u64() == view_id {
+                        return Some(item.clone());
+                    }
+                }
+            }
+            DockItem::Split { items, .. } => {
+                for item in items {
+                    if let Some(found) = Self::find_panel_by_id(item, view_id) {
+                        return Some(found);
+                    }
+                }
+            }
+            _ => {}
+        }
+        None
+    }
+
+    fn on_action_close_active_tab(&mut self, _: &CloseActiveTab, window: &mut Window, cx: &mut Context<Self>) {
+        let dock_area = self.dock_area.read(cx);
+        if let Some(panel) = Self::find_active_panel(dock_area.items(), window, cx) {
+            self.dock_area.update(cx, |dock_area, cx| {
+                dock_area.remove_panel(panel, gpui_component::dock::DockPlacement::Center, window, cx);
+            });
+        }
+    }
+
+    fn find_active_panel(dock_item: &DockItem, window: &Window, cx: &App) -> Option<std::sync::Arc<dyn gpui_component::dock::PanelView>> {
+        match dock_item {
+            DockItem::Tabs { items, .. } => {
+                for item in items {
+                    if let Ok(panel) = item.view().downcast::<EditorPanel>() {
+                        if panel.read(cx).focus_handle(cx).is_focused(window) {
+                            return Some(item.clone());
+                        }
+                    }
+                    if let Ok(panel) = item.view().downcast::<crate::ui::diff_panel::DiffPanel>() {
+                        if panel.read(cx).focus_handle(cx).is_focused(window) {
+                            return Some(item.clone());
+                        }
+                    }
+                }
+            }
+            DockItem::Split { items, .. } => {
+                for item in items {
+                    if let Some(found) = Self::find_active_panel(item, window, cx) {
+                        return Some(found);
+                    }
+                }
+            }
+            _ => {}
+        }
+        None
+    }
+
+    fn check_has_panels(&self, cx: &App) -> bool {
+        let dock_area = self.dock_area.read(cx);
+        Self::has_panels_recursive(dock_area.items())
+    }
+
+    fn has_panels_recursive(dock_item: &DockItem) -> bool {
+        match dock_item {
+            DockItem::Tabs { items, .. } => {
+                for item in items {
+                    if item.view().downcast::<EditorPanel>().is_ok() {
+                        return true;
+                    }
+                    if item.view().downcast::<crate::ui::diff_panel::DiffPanel>().is_ok() {
+                        return true;
+                    }
+                }
+            }
+            DockItem::Split { items, .. } => {
+                for item in items {
+                    if Self::has_panels_recursive(item) {
+                        return true;
+                    }
+                }
+            }
+            _ => {}
+        }
+        false
+    }
 }
 
 impl Render for Workspace {
@@ -267,12 +383,42 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_action_open_file))
             .on_action(cx.listener(Self::on_action_add_editor_panel))
             .on_action(cx.listener(Self::on_action_open_diff))
+            .on_action(cx.listener(Self::on_action_toggle_file_tree))
+            .on_action(cx.listener(Self::on_action_close_panel_by_id))
+            .on_action(cx.listener(Self::on_action_close_active_tab))
             .relative()
             .size_full()
             .flex()
             .flex_col()
             .child(self.title_bar.clone())
-            .child(self.dock_area.clone())
+            .child(
+                h_resizable("workspace-h-resize")
+                    .when(self.is_file_tree_visible, |this| {
+                        this.child(resizable_panel().size(px(250.)).child(self.file_tree.clone()))
+                    })
+                    .child(
+                        resizable_panel().child(
+                            div()
+                                .flex_1()
+                                .relative()
+                                .child(self.dock_area.clone())
+                                .when(!self.check_has_panels(cx), |this| {
+                                    this.child(
+                                        div()
+                                            .absolute()
+                                            .top_0()
+                                            .left_0()
+                                            .size_full()
+                                            .flex()
+                                            .justify_center()
+                                            .items_center()
+                                            .bg(cx.theme().background)
+                                            .child(div().text_xl().text_color(cx.theme().muted_foreground).child("Nothing is open")),
+                                    )
+                                }),
+                        ),
+                    ),
+            )
             .child(self.status_bar.clone())
     }
 }

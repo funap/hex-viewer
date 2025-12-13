@@ -10,9 +10,15 @@ pub struct EditorStatus {
     pub selection_count: Option<usize>,
 }
 
+pub enum StatusBarEvent {
+    ToggleFileTree,
+}
+
 pub struct StatusBar {
     status: Entity<EditorStatus>,
 }
+
+impl EventEmitter<StatusBarEvent> for StatusBar {}
 
 impl StatusBar {
     pub fn new(status: Entity<EditorStatus>, cx: &mut Context<Self>) -> Self {
@@ -52,6 +58,19 @@ impl Render for StatusBar {
             .bg(theme.background)
             .text_sm()
             .font_family("Menlo")
+            .gap_2()
+            .child(
+                div().flex().items_center().gap_1().child(
+                    div()
+                        .id("toggle-sidebar")
+                        .cursor_pointer()
+                        .hover(|style| style.bg(theme.accent).text_color(theme.accent_foreground))
+                        .on_click(cx.listener(|_, _, _window, cx| {
+                            cx.emit(StatusBarEvent::ToggleFileTree);
+                        }))
+                        .child(gpui_component::Icon::new(gpui_component::IconName::Folder).size(px(14.0))),
+                ),
+            )
             .child(
                 div()
                     .flex()

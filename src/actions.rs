@@ -1,7 +1,7 @@
 use crate::model::file_buffer::FileBuffer;
 use gpui::Action;
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 #[derive(Clone, PartialEq, Deserialize, JsonSchema, Action)]
@@ -66,6 +66,17 @@ pub struct PrevDifference;
 #[derive(Clone, PartialEq, Action)]
 pub struct ToggleSyncScroll;
 
+#[derive(Clone, PartialEq, Debug, Action)]
+pub struct CloseActiveTab;
+
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize, JsonSchema, Action)]
+pub struct ClosePanelById {
+    pub view_id: u64,
+}
+
+#[derive(Clone, PartialEq, Action)]
+pub struct ToggleFileTree;
+
 #[derive(Clone)]
 pub struct AddEditorPanel(pub Arc<FileBuffer>);
 
@@ -79,10 +90,7 @@ impl Action for AddEditorPanel {
     }
 
     fn partial_eq(&self, other: &dyn Action) -> bool {
-        other
-            .as_any()
-            .downcast_ref::<Self>()
-            .map_or(false, |other| self == other)
+        other.as_any().downcast_ref::<Self>().map_or(false, |other| self == other)
     }
 
     fn name_for_type() -> &'static str {
