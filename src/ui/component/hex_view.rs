@@ -1,4 +1,5 @@
 use crate::actions::{SearchNext, SearchPrev, ToggleSearch};
+use crate::appearance::Appearance;
 use crate::model::file_buffer::FileBuffer;
 use gpui::prelude::*;
 use gpui::*;
@@ -54,7 +55,7 @@ pub const SECTION_GAP: f32 = 16.0;
 pub const OFFSET_X_START: f32 = 4.0;
 pub const SELECTION_PADDING: f32 = 2.0;
 pub const BYTES_PER_ROW: usize = 16;
-pub const FONT_FAMILY: &str = "Menlo";
+// pub const FONT_FAMILY: &str = "Menlo"; // Removed in favor of global Appearance
 
 pub fn init(cx: &mut App) {
     cx.bind_keys([
@@ -705,7 +706,7 @@ impl Render for HexView {
             .flex()
             .flex_col()
             .bg(cx.theme().background)
-            .font_family(FONT_FAMILY)
+            .font_family(cx.global::<Appearance>().font_family.clone())
             .size_full()
             .key_context(CONTEXT)
             .track_focus(&self.focus_handle(cx))

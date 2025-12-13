@@ -3,6 +3,7 @@ use gpui_component_assets::Assets;
 
 mod actions;
 mod app_state;
+mod appearance;
 mod model;
 mod service;
 mod theme;
@@ -21,6 +22,7 @@ fn main() {
 
     app.run(move |cx| {
         app_state::AppState::init(cx);
+        appearance::init(cx);
 
         gpui_component::init(cx);
         theme::init(cx);

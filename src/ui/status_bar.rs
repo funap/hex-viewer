@@ -1,3 +1,4 @@
+use crate::appearance::Appearance;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::ActiveTheme;
@@ -57,7 +58,7 @@ impl Render for StatusBar {
             .border_color(theme.border)
             .bg(theme.background)
             .text_sm()
-            .font_family("Menlo")
+            .font_family(cx.global::<Appearance>().font_family.clone())
             .gap_2()
             .child(
                 div().flex().items_center().gap_1().child(
