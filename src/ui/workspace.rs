@@ -49,6 +49,22 @@ impl Workspace {
         let app_menu_bar = AppMenuBar::new(window, cx);
         let title_bar = cx.new(|_cx| AppTitleBar { app_menu_bar });
 
+        cx.subscribe(&title_bar, |_, _, event, cx| match event {
+            crate::ui::toolbar::AppTitleBarEvent::OpenSettings => {
+                // Workspace::new takes &mut Window, we need it here.
+                // But subscribe callback doesn't provide window directly in cx?
+                // Wait, cx is Context<Workspace>, which derefs to App?
+                // Context<T> does NOT provide window directly in subscribe callback.
+                // However, subscribe callback signature is `|this: &mut T, entity: Entity<E>, event: &E, cx: &mut Context<T>|`.
+                // We don't have Window here!
+                // But we can dispatch action which handles window implicitly?
+                // OR we can't call open_settings_panel because it needs Window.
+                // Plan: Dispatch action from here, which WILL work because we are in Workspace context.
+                cx.dispatch_action(&OpenSettings);
+            }
+        })
+        .detach();
+
         let editor_status = AppState::global(cx).editor_status.clone();
         let status_bar = cx.new(|cx| StatusBar::new(editor_status, cx));
         cx.subscribe(&status_bar, |this, _, event, cx| match event {
@@ -215,6 +231,53 @@ impl Workspace {
         cx.notify();
     }
 
+    fn on_action_open_settings(&mut self, _: &OpenSettings, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_settings_panel(window, cx);
+    }
+
+    fn open_settings_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        println!("Opening settings panel");
+        use crate::ui::settings_panel::SettingsPanel;
+
+        // Check if settings panel is already open
+        let dock_area = self.dock_area.read(cx);
+        let existing_panel = Self::check_has_settings_panel(dock_area.items());
+
+        if let Some(panel) = existing_panel {
+            let focus_handle = panel.read(cx).focus_handle(cx);
+            focus_handle.focus(window);
+            return;
+        }
+
+        let settings_panel = cx.new(|cx| SettingsPanel::new("Settings", cx));
+        let panel = Arc::new(settings_panel);
+
+        self.dock_area.update(cx, |dock_area, cx| {
+            dock_area.add_panel(panel, DockPlacement::Center, None, window, cx);
+        });
+    }
+
+    fn check_has_settings_panel(dock_item: &DockItem) -> Option<Entity<crate::ui::settings_panel::SettingsPanel>> {
+        match dock_item {
+            DockItem::Tabs { items, .. } => {
+                for item in items {
+                    if let Ok(panel) = item.view().downcast::<crate::ui::settings_panel::SettingsPanel>() {
+                        return Some(panel);
+                    }
+                }
+            }
+            DockItem::Split { items, .. } => {
+                for item in items {
+                    if let Some(panel) = Self::check_has_settings_panel(item) {
+                        return Some(panel);
+                    }
+                }
+            }
+            _ => {}
+        }
+        None
+    }
+
     fn find_existing_panel(&self, path: &std::path::Path, cx: &App) -> Option<FocusHandle> {
         let dock_area = self.dock_area.read(cx);
         Self::find_panel_in_items(dock_area.items(), path, cx)
@@ -324,6 +387,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_action_add_editor_panel))
             .on_action(cx.listener(Self::on_action_open_diff))
             .on_action(cx.listener(Self::on_action_toggle_file_tree))
+            .on_action(cx.listener(Self::on_action_open_settings))
             .relative()
             .size_full()
             .flex()

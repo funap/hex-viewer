@@ -69,6 +69,9 @@ pub struct ToggleSyncScroll;
 #[derive(Clone, PartialEq, Action)]
 pub struct ToggleFileTree;
 
+#[derive(Clone, PartialEq, Action)]
+pub struct OpenSettings;
+
 #[derive(Clone)]
 pub struct AddEditorPanel(pub Arc<FileBuffer>);
 
