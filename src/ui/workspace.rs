@@ -33,7 +33,7 @@ const FILE_TREE_PANEL_TITLE: &str = "FILES";
 pub fn init(cx: &mut App) {
     cx.bind_keys(vec![
         KeyBinding::new("shift-escape", gpui_component::dock::ToggleZoom, None),
-        KeyBinding::new("ctrl-w", CloseActiveTab, None),
+        KeyBinding::new("ctrl-w", gpui_component::dock::ClosePanel, None),
     ]);
 
     cx.activate(true);
@@ -274,90 +274,6 @@ impl Workspace {
         })
     }
 
-    fn on_action_close_panel_by_id(&mut self, action: &ClosePanelById, window: &mut Window, cx: &mut Context<Self>) {
-        let dock_area = self.dock_area.read(cx);
-        if let Some(panel) = Self::find_panel_by_id(dock_area.items(), action.view_id) {
-            self.dock_area.update(cx, |dock_area, cx| {
-                dock_area.remove_panel(panel, gpui_component::dock::DockPlacement::Center, window, cx);
-            });
-        }
-    }
-
-    fn find_panel_by_id(dock_item: &DockItem, view_id: u64) -> Option<std::sync::Arc<dyn gpui_component::dock::PanelView>> {
-        match dock_item {
-            DockItem::Tabs { items, .. } => {
-                for item in items {
-                    if item.view().entity_id().as_u64() == view_id {
-                        return Some(item.clone());
-                    }
-                }
-            }
-            DockItem::Split { items, .. } => {
-                for item in items {
-                    if let Some(found) = Self::find_panel_by_id(item, view_id) {
-                        return Some(found);
-                    }
-                }
-            }
-            DockItem::Panel { view, .. } => {
-                if view.view().entity_id().as_u64() == view_id {
-                    return Some(view.clone());
-                }
-            }
-            _ => {}
-        }
-        None
-    }
-
-    fn on_action_close_active_tab(&mut self, _: &CloseActiveTab, window: &mut Window, cx: &mut Context<Self>) {
-        let dock_area = self.dock_area.read(cx);
-        if let Some(panel) = Self::find_active_panel(dock_area.items(), window, cx) {
-            self.dock_area.update(cx, |dock_area, cx| {
-                dock_area.remove_panel(panel, gpui_component::dock::DockPlacement::Center, window, cx);
-            });
-        }
-    }
-
-    fn find_active_panel(dock_item: &DockItem, window: &Window, cx: &App) -> Option<std::sync::Arc<dyn gpui_component::dock::PanelView>> {
-        match dock_item {
-            DockItem::Tabs { items, .. } => {
-                for item in items {
-                    if let Ok(panel) = item.view().downcast::<EditorPanel>() {
-                        if panel.read(cx).focus_handle(cx).is_focused(window) {
-                            return Some(item.clone());
-                        }
-                    }
-                    if let Ok(panel) = item.view().downcast::<crate::ui::diff_panel::DiffPanel>() {
-                        if panel.read(cx).focus_handle(cx).is_focused(window) {
-                            return Some(item.clone());
-                        }
-                    }
-                }
-            }
-            DockItem::Split { items, .. } => {
-                for item in items {
-                    if let Some(found) = Self::find_active_panel(item, window, cx) {
-                        return Some(found);
-                    }
-                }
-            }
-            DockItem::Panel { view, .. } => {
-                if let Ok(panel) = view.view().downcast::<EditorPanel>() {
-                    if panel.read(cx).focus_handle(cx).is_focused(window) {
-                        return Some(view.clone());
-                    }
-                }
-                if let Ok(panel) = view.view().downcast::<crate::ui::diff_panel::DiffPanel>() {
-                    if panel.read(cx).focus_handle(cx).is_focused(window) {
-                        return Some(view.clone());
-                    }
-                }
-            }
-            _ => {}
-        }
-        None
-    }
-
     fn check_has_panels(&self, cx: &App) -> bool {
         let dock_area = self.dock_area.read(cx);
         Self::has_panels_recursive(dock_area.items())
@@ -382,6 +298,11 @@ impl Workspace {
                     }
                 }
             }
+            DockItem::Tiles { items, .. } => {
+                if !items.is_empty() {
+                    return true;
+                }
+            }
             DockItem::Panel { view, .. } => {
                 if view.view().downcast::<EditorPanel>().is_ok() {
                     return true;
@@ -390,7 +311,6 @@ impl Workspace {
                     return true;
                 }
             }
-            _ => {}
         }
         false
     }
@@ -404,8 +324,6 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_action_add_editor_panel))
             .on_action(cx.listener(Self::on_action_open_diff))
             .on_action(cx.listener(Self::on_action_toggle_file_tree))
-            .on_action(cx.listener(Self::on_action_close_panel_by_id))
-            .on_action(cx.listener(Self::on_action_close_active_tab))
             .relative()
             .size_full()
             .flex()

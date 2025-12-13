@@ -1,7 +1,7 @@
 use crate::model::file_buffer::FileBuffer;
 use gpui::Action;
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::sync::Arc;
 
 #[derive(Clone, PartialEq, Deserialize, JsonSchema, Action)]
@@ -65,14 +65,6 @@ pub struct PrevDifference;
 
 #[derive(Clone, PartialEq, Action)]
 pub struct ToggleSyncScroll;
-
-#[derive(Clone, PartialEq, Debug, Action)]
-pub struct CloseActiveTab;
-
-#[derive(Clone, PartialEq, Debug, Serialize, Deserialize, JsonSchema, Action)]
-pub struct ClosePanelById {
-    pub view_id: u64,
-}
 
 #[derive(Clone, PartialEq, Action)]
 pub struct ToggleFileTree;
