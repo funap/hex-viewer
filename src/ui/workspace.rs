@@ -275,15 +275,11 @@ impl Workspace {
     }
 
     fn on_action_close_panel_by_id(&mut self, action: &ClosePanelById, window: &mut Window, cx: &mut Context<Self>) {
-        println!("on_action_close_panel_by_id: view_id={}", action.view_id);
         let dock_area = self.dock_area.read(cx);
         if let Some(panel) = Self::find_panel_by_id(dock_area.items(), action.view_id) {
-            println!("Panel found, attempting to remove: {:?}", panel.panel_name());
             self.dock_area.update(cx, |dock_area, cx| {
                 dock_area.remove_panel(panel, gpui_component::dock::DockPlacement::Center, window, cx);
             });
-        } else {
-            println!("Panel not found for id: {}", action.view_id);
         }
     }
 
@@ -291,7 +287,6 @@ impl Workspace {
         match dock_item {
             DockItem::Tabs { items, .. } => {
                 for item in items {
-                    // println!("Checking item: {:?} id={}", item.panel_name(), item.view().entity_id().as_u64());
                     if item.view().entity_id().as_u64() == view_id {
                         return Some(item.clone());
                     }
@@ -302,6 +297,11 @@ impl Workspace {
                     if let Some(found) = Self::find_panel_by_id(item, view_id) {
                         return Some(found);
                     }
+                }
+            }
+            DockItem::Panel { view, .. } => {
+                if view.view().entity_id().as_u64() == view_id {
+                    return Some(view.clone());
                 }
             }
             _ => {}
@@ -341,6 +341,18 @@ impl Workspace {
                     }
                 }
             }
+            DockItem::Panel { view, .. } => {
+                if let Ok(panel) = view.view().downcast::<EditorPanel>() {
+                    if panel.read(cx).focus_handle(cx).is_focused(window) {
+                        return Some(view.clone());
+                    }
+                }
+                if let Ok(panel) = view.view().downcast::<crate::ui::diff_panel::DiffPanel>() {
+                    if panel.read(cx).focus_handle(cx).is_focused(window) {
+                        return Some(view.clone());
+                    }
+                }
+            }
             _ => {}
         }
         None
@@ -368,6 +380,14 @@ impl Workspace {
                     if Self::has_panels_recursive(item) {
                         return true;
                     }
+                }
+            }
+            DockItem::Panel { view, .. } => {
+                if view.view().downcast::<EditorPanel>().is_ok() {
+                    return true;
+                }
+                if view.view().downcast::<crate::ui::diff_panel::DiffPanel>().is_ok() {
+                    return true;
                 }
             }
             _ => {}
