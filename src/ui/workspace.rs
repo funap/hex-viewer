@@ -404,8 +404,10 @@ impl Render for Workspace {
                     .child(
                         resizable_panel().child(
                             div()
-                                .flex_1()
                                 .relative()
+                                .size_full()
+                                .flex()
+                                .flex_col()
                                 .child(self.dock_area.clone())
                                 .when(!self.check_has_panels(cx), |this| {
                                     this.child(
