@@ -395,9 +395,12 @@ impl Render for Workspace {
             .child(self.title_bar.clone())
             .child(
                 h_resizable("workspace-h-resize")
-                    .when(self.is_file_tree_visible, |this| {
-                        this.child(resizable_panel().size(px(250.)).child(self.file_tree.clone()))
-                    })
+                    .child(
+                        resizable_panel()
+                            .visible(self.is_file_tree_visible)
+                            .size(px(250.))
+                            .child(self.file_tree.clone())
+                    )
                     .child(
                         resizable_panel().child(
                             div()
@@ -418,7 +421,7 @@ impl Render for Workspace {
                                             .child(div().text_xl().text_color(cx.theme().muted_foreground).child("Nothing is open")),
                                     )
                                 }),
-                        ),
+                        )
                     ),
             )
             .child(self.status_bar.clone())
