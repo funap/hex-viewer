@@ -1,223 +1,132 @@
-- 回答は日本語でしてください。
-- コードベースの理解・編集は serena に委任にすること
-− gpui, gpui-componentのインターフェースは、WebFetch / google_web_search  を使うより前に serena で確認してください
-- Cargo.toml の dependenciesのバージョンは下げることは禁止。
-- コードの構成や内容を要約するようなコメントは書かないでください。コメントは、コードが特定の方法で書かれている理由が複雑または分かりにくい場合に、「なぜ」そのように書かれているのかを説明するためだけに記述するべきです。
-- タスクが完了する際に `cargo check` を実行して、コンパイルエラーがないことを確認してください。
+# 開発ガイドライン
 
-# Rust coding guidelines
+このドキュメントは、プロジェクトにおける開発の進め方、コーディング規約、アーキテクチャ、そして利用するフレームワークについてのガイドラインを定義します。
 
-* Prioritize code correctness and clarity. Speed and efficiency are secondary priorities unless otherwise specified.
-* Do not write organizational or comments that summarize the code. Comments should only be written in order to explain "why" the code is written in some way in the case there is a reason that is tricky / non-obvious.
-* Prefer implementing functionality in existing files unless it is a new logical component. Avoid creating many small files.
-* Avoid using functions that panic like `unwrap()`, instead use mechanisms like `?` to propagate errors.
-* Be careful with operations like indexing which may panic if the indexes are out of bounds.
-* Never silently discard errors with `let _ =` on fallible operations. Always handle errors appropriately:
-  - Propagate errors with `?` when the calling function should handle them
-  - Use `.log_err()` or similar when you need to ignore errors but want visibility
-  - Use explicit error handling with `match` or `if let Err(...)` when you need custom logic
-  - Example: avoid `let _ = client.request(...).await?;` - use `client.request(...).await?;` instead
-* When implementing async operations that may fail, ensure errors propagate to the UI layer so users get meaningful feedback.
-* Never create files with `mod.rs` paths - prefer `src/some_module.rs` instead of `src/some_module/mod.rs`.
-* When creating new crates, prefer specifying the library root path in `Cargo.toml` using `[lib] path = "...rs"` instead of the default `lib.rs`, to maintain consistent and descriptive naming (e.g., `gpui.rs` or `main.rs`).
-* Avoid creative additions unless explicitly requested
-* Use full words for variable names (no abbreviations like "q" for "queue")
-* Use variable shadowing to scope clones in async contexts for clarity, minimizing the lifetime of borrowed references.
-  Example:
-  ```rust
-  executor.spawn({
-      let task_ran = task_ran.clone();
-      async move {
-          *task_ran.borrow_mut() = true;
-      }
-  });
+## 1. 開発全般のルール
 
-  ```
-- cx.spawnを使った例
+プロジェクトに参加するすべての開発者は、以下のルールを遵守してください。
+
+- **言語**: このドキュメントやコミュニケーションは、原則として日本語を使用します。
+- **コードの理解と編集**: コードベースの分析や大規模な変更は、AIアシスタント(`serena`)に委任することを推奨します。
+- **外部情報の参照**: `gpui`や`gpui-component`のAPI仕様など、プロジェクト内の技術情報を調査する際は、まず`serena`に問い合わせてください。Web検索(`WebFetch`, `google_web_search`)はその次善策とします。
+- **依存関係のバージョン**: `Cargo.toml`に記載されている依存ライブラリのバージョンは、原則として**変更しないでください**。特に、バージョンを下げることは禁止します。
+- **コメント**: コードの動作を要約するコメントは避け、コードだけでは理解が難しい「なぜ」その実装になっているのか、という理由を説明する場合にのみコメントを記述してください。
+- **ビルド確認**: タスクの完了時には`cargo check`を実行し、コンパイルエラーがないことを必ず確認してください。
+
+---
+
+## 2. コーディング原則とアーキテクチャ
+
+品質の高いコードを維持するための、コーディング上の原則とアーキテクチャに関する指針です。
+
+### 2.1. 基本原則
+
+- **正確性と明確性**: コードのパフォーマンスよりも、まず第一に**正確性**と**明確性**を優先してください。
+- **エラーハンドリング**: 
+    - `unwrap()`のようなパニックを引き起こす可能性のある関数は避け、`?`演算子などを用いてエラーを適切に伝播させてください。
+    - インデックスアクセスなど、範囲外アクセスの可能性がある操作には特に注意してください。
+    - エラーを決して`let _ = ...`のように無視しないでください。エラーは、`?`による伝播、ログ出力(`log_err()`)、あるいは`match`文による明示的なハンドリングなど、状況に応じて適切に処理する必要があります。
+- **非同期処理**:
+    - ファイルI/Oや計算量の多い処理など、UIスレッドをブロックする可能性のある操作は、必ず非同期タスクとして実行してください。
+    - 非同期処理内でエラーが発生した場合は、そのエラーがUI層まで伝播するように設計し、ユーザーにフィードバックが返るようにしてください。
+- **命名**: 変数名には`q`のような省略形を使わず、`queue`のような完全な単語を使用してください。
+- **モジュール構成**:
+    - 新しい論理コンポーネントでない限り、既存のファイルに機能を追加することを検討してください。小さなファイルを不必要に増やすことは避けましょう。
+    - `mod.rs`というファイル名は使用せず、`some_module.rs`のように、モジュール自体に名前を付ける形式を推奨します。
+
+### 2.2. アーキテクチャ原則
+
+- **データとUIの分離 (MVC/MVVM)**:
+    - **Model (`data/`)**: コアとなるデータとロジックのみを扱い、UIライブラリへの依存を排除します。
+    - **View/ViewModel (`ui/`)**: データの表示とユーザー入力のハンドリングに特化します。
+    - **呼び出しフロー**: **UI (`View`) → Service → Logic/Data** の流れを基本とします。
+- **リアクティブな状態管理**: アプリケーションの状態はGPUIの`Entity`を用いてリアクティブに管理します。例えば、`FileBuffer`のデータが変更された場合、関連する`EditorView`が自動的に再描画されるように設計します。
+- **非同期処理の徹底**:
+    - 時間のかかる可能性のあるすべての操作（ファイルI/O、検索、Diff計算など）は、GPUIの非同期機能 (`cx.spawn`) を利用してバックグラウンドで実行し、UIのフリーズを防ぎます。
+    - これらのタスクの管理は、原則として**Service層**が責任を持ちます。
+
+---
+
+## 3. GPUIフレームワークガイド
+
+`GPUI`は、UIだけでなく、状態管理や非同期処理のためのプリミティブも提供するフレームワークです。
+
+### 3.1. 主要な概念
+
+- **Context (`cx`)**: グローバルな状態、ウィンドウ、エンティティ、システムサービスへのアクセスを提供します。通常、関数の引数として`cx`という名前で渡されます。
+- **Window**: アプリケーションウィンドウの状態を管理します。フォーカス制御、アクションのディスパッチ、ユーザー入力の取得などに使用します。
+- **Entity (`Entity<T>`)**: `T`という型の状態へのハンドルです。`Model<T>`や`View<T>`は廃止され、`Entity<T>`に統一されました。
+    - `entity.read(cx)`: 状態を不変で参照します。
+    - `entity.update(cx, |this, cx| ...)`: 状態を可変で更新します。このクロージャ内では、内側の`cx`を使用する必要があります。
+    - `WeakEntity<T>`: 循環参照によるメモリリークを避けるための弱いハンドルです。エンティティが存在しない可能性を考慮し、常に`anyhow::Result`を返します。
+
+### 3.2. 非同期処理 (`Concurrency`)
+
+- UIレンダリングやエンティティの操作は、すべて単一のフォアグラウンドスレッドで実行されます。
+- `cx.spawn(async move |cx| ...)`: フォアグラウンドスレッドで非同期タスクを実行します。
+- `cx.background_spawn(async move { ... })`: バックグラウンドスレッドで重い処理を実行します。結果はフォアグラウンドのタスクで待機し、UI状態を更新するのが一般的です。
+- `Task<R>`: `spawn`系のメソッドは`Task`を返します。この`Task`がドロップされると処理はキャンセルされるため、`task.detach()`で分離するか、`await`するか、フィールドに保持するなどの管理が必要です。
+
+#### コード例: `cx.spawn`
+
 ```rust
-cx.spawn(async move |this, cx| {
-  // async work
-  if let Some(this) = this.upgrade() {
-      this.update(cx, |this, cx| {
-          // update state
-      }).ok();
-  }
+// `Context<T>`内から呼び出す例
+cx.spawn(|this, cx| async move {
+    // 非同期処理を実行
+    // ...
+    if let Some(this) = this.upgrade() {
+        this.update(&cx, |this, cx| {
+            // 状態を更新
+        }).ok();
+    }
 })
 ```
 
-# GPUI
+### 3.3. レンダリング (`Elements`)
 
-GPUI is a UI framework which also provides primitives for state and concurrency management.
+- `Render`トレイトを実装することで、状態をElementツリーに変換します。
+- `div()`, `child()`などのメソッドチェーンでUIを構築します。スタイリングはTailwind CSSに似ています。
+- `.when(condition, |this| ...)` や `.when_some(option, |this, value| ...)` を使うことで、条件に応じたレンダリングが可能です。
 
-## Context
+### 3.4. イベントとアクション
 
-Context types allow interaction with global state, windows, entities, and system services. They are typically passed to functions as the argument named `cx`. When a function takes callbacks they come after the `cx` parameter.
+- **入力イベント**: `.on_click(|event, window, cx| ...)` のように、Elementにイベントハンドラを登録します。
+- **`cx.listener`**: `Context<T>`内のエンティティを更新したい場合、`.on_click(cx.listener(|this, event, window, cx| ...))` のように使用すると便利です。
+- **アクション**:
+    - `actions!(some_namespace, [SomeAction])` マクロで定義します。
+    - `window.dispatch_action(...)` でアクションを発行します。
+    - `.on_action(|action, window, cx| ...)` でアクションをハンドルします。
 
-* `App` is the root context type, providing access to global state and read and update of entities.
-* `Context<T>` is provided when updating an `Entity<T>`. This context dereferences into `App`, so functions which take `&App` can also take `&Context<T>`.
-* `AsyncApp` and `AsyncWindowContext` are provided by `cx.spawn` and `cx.spawn_in`. These can be held across await points.
+### 3.5. 状態変更の通知
 
-## `Window`
+- **`cx.notify()`**: Viewの状態が変更され、再描画が必要な場合に呼び出します。
+- **`cx.subscribe()`**: あるエンティティが別のエンティティのイベントを購読するための仕組みです。`cx.emit(event)`で発行されたイベントをハンドルできます。返り値の`Subscription`がドロップされると購読も解除されるため、`Vec<Subscription>`フィールドに保持するのが一般的です。
 
-`Window` provides access to the state of an application window. It is passed to functions as an argument named `window` and comes before `cx` when present. It is used for managing focus, dispatching actions, directly drawing, getting user input state, etc.
+### 3.6. 最近のAPI変更（重要）
 
-## Entities
+古いAPIは使用せず、常に新しいAPIを使用してください。
 
-An `Entity<T>` is a handle to state of type `T`. With `thing: Entity<T>`:
+- `Model<T>`, `View<T>` は廃止されたので使いません。代わりに`Entity<T>`を使用してください。
+- `AppContext`, `ModelContext<T>` は廃止されたので使いません。代わりに**`App` / `Context<T>`**を使用してください。
+- `WindowContext` や `ViewContext<T>` は廃止されました。`Window`が明示的に引数で渡されるようになりました。
 
-* `thing.entity_id()` returns `EntityId`
-* `thing.downgrade()` returns `WeakEntity<T>`
-* `thing.read(cx: &App)` returns `&T`.
-* `thing.read_with(cx, |thing: &T, cx: &App| ...)` returns the closure's return value.
-* `thing.update(cx, |thing: &mut T, cx: &mut Context<T>| ...)` allows the closure to mutate the state, and provides a `Context<T>` for interacting with the entity. It returns the closure's return value.
-* `thing.update_in(cx, |thing: &mut T, window: &mut Window, cx: &mut Context<T>| ...)` takes a `AsyncWindowContext` or `VisualTestContext`. It's the same as `update` while also providing the `Window`.
+---
 
-Within the closures, the inner `cx` provided to the closure must be used instead of the outer `cx` to avoid issues with multiple borrows.
+## 4. プロジェクトの構造と責務
 
-Trying to update an entity while it's already being updated must be avoided as this will cause a panic.
+`src`ディレクトリ内の各モジュールは、単一責任の原則に基づき、以下の責務を持ちます。
 
-When  `read_with`, `update`, or `update_in` are used with an async context, the closure's return value is wrapped in an `anyhow::Result`.
-
-`WeakEntity<T>` is a weak handle. It has `read_with`, `update`, and `update_in` methods that work the same, but always return an `anyhow::Result` so that they can fail if the entity no longer exists. This can be useful to avoid memory leaks - if entities have mutually recursive handles to each other they will never be dropped.
-
-## Concurrency
-
-All use of entities and UI rendering occurs on a single foreground thread.
-
-`cx.spawn(async move |cx| ...)` runs an async closure on the foreground thread. Within the closure, `cx` is an async context like `AsyncApp` or `AsyncWindowContext`.
-
-When the outer cx is a `Context<T>`, the use of `spawn` instead looks like `cx.spawn(async move |handle, cx| ...)`, where `handle: WeakEntity<T>`.
-
-To do work on other threads, `cx.background_spawn(async move { ... })` is used. Often this background task is awaited on by a foreground task which uses the results to update state.
-
-Both `cx.spawn` and `cx.background_spawn` return a `Task<R>`, which is a future that can be awaited upon. If this task is dropped, then its work is cancelled. To prevent this one of the following must be done:
-
-* Awaiting the task in some other async context.
-* Detaching the task via `task.detach()` or `task.detach_and_log_err(cx)`, allowing it to run indefinitely.
-* Storing the task in a field, if the work should be halted when the struct is dropped.
-
-A task which doesn't do anything but provide a value can be created with `Task::ready(value)`.
-
-## Elements
-
-The `Render` trait is used to render some state into an element tree that is laid out using flexbox layout. An `Entity<T>` where `T` implements `Render` is sometimes called a "view".
-
-Example:
-
-```
-struct TextWithBorder(SharedString);
-
-impl Render for TextWithBorder {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        div().border_1().child(self.0.clone())
-    }
-}
-```
-
-Since `impl IntoElement for SharedString` exists, it can be used as an argument to `child`. `SharedString` is used to avoid copying strings, and is either an `&'static str` or `Arc<str>`.
-
-UI components that are constructed just to be turned into elements can instead implement the `RenderOnce` trait, which is similar to `Render`, but its `render` method takes ownership of `self`. Types that implement this trait can use `#[derive(IntoElement)]` to use them directly as children.
-
-The style methods on elements are similar to those used by Tailwind CSS.
-
-If some attributes or children of an element tree are conditional, `.when(condition, |this| ...)` can be used to run the closure only when `condition` is true. Similarly, `.when_some(option, |this, value| ...)` runs the closure when the `Option` has a value.
-
-## Input events
-
-Input event handlers can be registered on an element via methods like `.on_click(|event, window, cx: &mut App| ...)`.
-
-Often event handlers will want to update the entity that's in the current `Context<T>`. The `cx.listener` method provides this - its use looks like `.on_click(cx.listener(|this: &mut T, event, window, cx: &mut Context<T>| ...)`.
-
-## Actions
-
-Actions are dispatched via user keyboard interaction or in code via `window.dispatch_action(SomeAction.boxed_clone(), cx)` or `focus_handle.dispatch_action(&SomeAction, window, cx)`.
-
-Actions with no data defined with the `actions!(some_namespace, [SomeAction, AnotherAction])` macro call. Otherwise the `Action` derive macro is used. Doc comments on actions are displayed to the user.
-
-Action handlers can be registered on an element via the event handler `.on_action(|action, window, cx| ...)`. Like other event handlers, this is often used with `cx.listener`.
-
-## Notify
-
-When a view's state has changed in a way that may affect its rendering, it should call `cx.notify()`. This will cause the view to be rerendered. It will also cause any observe callbacks registered for the entity with `cx.observe` to be called.
-
-## Entity events
-
-While updating an entity (`cx: Context<T>`), it can emit an event using `cx.emit(event)`. Entities register which events they can emit by declaring `impl EventEmittor<EventType> for EntityType {}`.
-
-Other entities can then register a callback to handle these events by doing `cx.subscribe(other_entity, |this, other_entity, event, cx| ...)`. This will return a `Subscription` which deregisters the callback when dropped.  Typically `cx.subscribe` happens when creating a new entity and the subscriptions are stored in a `_subscriptions: Vec<Subscription>` field.
-
-## Recent API changes
-
-GPUI has had some changes to its APIs. Always write code using the new APIs:
-
-* `spawn` methods now take async closures (`AsyncFn`), and so should be called like `cx.spawn(async move |cx| ...)`.
-* Use `Entity<T>`. This replaces `Model<T>` and `View<T>` which no longer exist and should NEVER be used.
-* Use `App` references. This replaces `AppContext` which no longer exists and should NEVER be used.
-* Use `Context<T>` references. This replaces `ModelContext<T>` which no longer exists and should NEVER be used.
-* `Window` is now passed around explicitly. The new interface adds a `Window` reference parameter to some methods, and adds some new "*_in" methods for plumbing `Window`. The old types `WindowContext` and `ViewContext<T>` should NEVER be used.
-
-
-本ドキュメントは、GPUIを用いたHex Editorプロジェクトにおけるファイル構成、モジュールの責務、および主要な設計原則を定義するものです。
-
-1. ディレクトリ構造と命名規則すべてのコードは src/ ディレクトリ内に配置し、機能ごとに独立したモジュールとして管理します。
-
-| パス | 責務の概要 | 命名規則 |
-|------|-----------|----------|
-| src/main.rs | アプリケーションのエントリーポイント。GPUI初期化とAppモデルの起動のみ。 | - |
-| src/actions.rs | アプリケーション全体で使用されるアクション定義。OpenFile, AddEditorPanel など。 | - |
-| src/app_state.rs | グローバル状態管理。AppState 構造体と Global トレイトの実装。 | - |
-| src/keybindings.rs | キーバインディングの登録とアプリケーション初期化。 | - |
-| src/ui/ | ユーザーインターフェース (GPUI View/Model)。描画とイベントハンドリング。 | ui::* モジュール、*View / *Model 構造体 |
-| src/data/ | バイナリデータとI/O処理。ファイルシステムとのやり取り。 | data::* モジュール、FileBuffer 構造体 |
-| src/service/ | ワークフローのオーケストレーション、非同期タスクの統合管理。 | service::* モジュール |
-| src/analysis/ | バイナリの高度な解析ロジック。状態を持たない純粋関数を推奨。 | analysis::* モジュール |
-| src/search/ | 検索・Grepロジック。 | search::* モジュール |
-| src/checksum/ | ハッシュ・チェックサム計算ロジック。 | checksum::* モジュール |
-| src/util/ | 共通ユーティリティ、定数、トレイト定義など。 | util::* モジュール |
-
-2. モジュールの責務 (Single Responsibility Principle)
-
-各モジュールは以下の責務を厳守すること。
-
-2.1. データ層(src/data/)
-
-data::file_buffer:  大規模なバイナリファイルに効率的にアクセスするための抽象化レイヤー（例: メモリマップトファイル (mmap) の利用）。ファイルの読み込み、特定範囲のバイト列取得、編集操作（未実装の場合はプレースホルダーを置く）。UI層はこのモジュールを経由せずに直接ファイルI/Oを行うことを禁止する。
-
-data::encoding: バイト列を指定されたエンコーディング（UTF-8, SJISなど）に対応する文字列に変換する責務。エンコーディング判別ロジックもここに含める。
- 
- 2.2. UI層 (src/ui/)
- 
- ui::workspace:  GPUIのメインウィンドウ管理。ドッキングシステム、タブ、ペインの作成・破棄・フォーカス管理。複数ファイル表示、単一ファイルの分割表示のロジックはここで管理する。
- 
- 2.3. 解析・計算層 (src/analysis/, src/search/, src/checksum/)
- 
- これらのモジュールは、UIとは完全に分離された純粋な計算ロジックを提供する。入力はバイト列またはファイルコンテキスト、出力は計算結果オブジェクト（Diff結果、検索結果リスト、ハッシュ値など）とする。計算はUIスレッドをブロックしないよう、GPUIの非同期タスク (cx.spawn) または別途スレッドプールを利用して実行することを原則とする。
- 
- 2.4. サービス層 (src/service/) 
-
-service::editor_service:
-
-ワークフローのオーケストレーション: UIからのリクエスト（例: 「このファイルとあのファイルをDiffせよ」）を受け取り、data/、analysis/、search/モジュールを呼び出し、結果をまとめてAppまたはPaneの状態に反映させる。
-
-非同期タスクの統合管理: Diff、Grepなどの重い処理を非同期で実行し、進捗状況を監視する。
-
-データフローの制御: 複雑なロジック（例: バイナリ編集後の元に戻す/やり直す機能の管理）をFileBufferと連携して制御する。
-
-
-3. アーキテクチャ原則
-
-非同期処理の徹底:
-
-ファイルI/O、検索、Diff計算、ハッシュ計算など、時間がかかる可能性のあるすべての操作は、GPUIの非同期処理 (Task / cx.spawn) を用いてバックグラウンドで実行し、UIスレッドのフリーズ（ブロック）を回避する。これらのタスクの実行と結果のハンドリングは、Service層を通じて行うことを推奨する。
-
-リアクティブな状態管理:
-
-アプリケーションの状態はGPUIのModelとViewを用いてリアクティブに管理する。特に、FileBufferのデータ変更は、EditorViewに自動的に通知され、再描画されるように設計する。
-
-データとUIの分離 (MVC/MVVM):
-
-data/ (Model) はコアな情報のみを扱い、UIライブラリに依存しない。
-
-ui/ (View/ViewModel) はデータの表示とユーザー入力の処理のみに集中する。
-
-呼び出しパス: UI (View) -> Service -> Logic/Data
+| パス | 責務の概要 |
+| :--- | :--- |
+| `src/main.rs` | アプリケーションのエントリーポイント。GPUIの初期化と`AppState`の起動。 |
+| `src/actions.rs` | アプリケーション全体で使用されるアクション定義 (`OpenFile`など)。 |
+| `src/app_state.rs` | グローバルな状態管理 (`AppState`構造体)。 |
+| `src/ui/` | **UI層**: GPUIのView/Entity。描画とイベントハンドリング。 |
+| `src/ui/workspace.rs`| メインウィンドウ、ドッキング、タブ、ペインなどの管理。 |
+| `src/data/` | **データ層**: バイナリデータとI/O処理。ファイルシステムとの連携。 |
+| `src/data/file_buffer.rs`| 大規模ファイルへの効率的なメモリアクセスを提供。 |
+| `src/data/encoding.rs`| 文字列エンコーディングの変換と判定。 |
+| `src/service/` | **サービス層**: ワークフローの調整、非同期タスクの統合管理。 |
+| `src/service/editor_service.rs`| UIからの要求を受け、各モジュールを呼び出して状態を更新する。 |
+| `src/analysis/` | **解析層**: バイナリの高度な解析ロジック（状態を持たない純粋関数を推奨）。 |
+| `src/util/` | 共通ユーティリティ、定数、トレイト定義など。 |
