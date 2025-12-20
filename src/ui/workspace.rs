@@ -49,18 +49,9 @@ impl Workspace {
         let app_menu_bar = AppMenuBar::new(window, cx);
         let title_bar = cx.new(|_cx| AppTitleBar { app_menu_bar });
 
-        cx.subscribe(&title_bar, |_, _, event, cx| match event {
+        cx.subscribe_in(&title_bar, window, |this, _, event, window, cx| match event {
             crate::ui::toolbar::AppTitleBarEvent::OpenSettings => {
-                // Workspace::new takes &mut Window, we need it here.
-                // But subscribe callback doesn't provide window directly in cx?
-                // Wait, cx is Context<Workspace>, which derefs to App?
-                // Context<T> does NOT provide window directly in subscribe callback.
-                // However, subscribe callback signature is `|this: &mut T, entity: Entity<E>, event: &E, cx: &mut Context<T>|`.
-                // We don't have Window here!
-                // But we can dispatch action which handles window implicitly?
-                // OR we can't call open_settings_panel because it needs Window.
-                // Plan: Dispatch action from here, which WILL work because we are in Workspace context.
-                cx.dispatch_action(&OpenSettings);
+                this.open_settings_panel(window, cx);
             }
         })
         .detach();
@@ -236,10 +227,8 @@ impl Workspace {
     }
 
     fn open_settings_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        println!("Opening settings panel");
         use crate::ui::settings_panel::SettingsPanel;
 
-        // Check if settings panel is already open
         let dock_area = self.dock_area.read(cx);
         let existing_panel = Self::check_has_settings_panel(dock_area.items());
 
@@ -352,6 +341,9 @@ impl Workspace {
                     if item.view().downcast::<crate::ui::diff_panel::DiffPanel>().is_ok() {
                         return true;
                     }
+                    if item.view().downcast::<crate::ui::settings_panel::SettingsPanel>().is_ok() {
+                        return true;
+                    }
                 }
             }
             DockItem::Split { items, .. } => {
@@ -371,6 +363,9 @@ impl Workspace {
                     return true;
                 }
                 if view.view().downcast::<crate::ui::diff_panel::DiffPanel>().is_ok() {
+                    return true;
+                }
+                if view.view().downcast::<crate::ui::settings_panel::SettingsPanel>().is_ok() {
                     return true;
                 }
             }
@@ -399,31 +394,26 @@ impl Render for Workspace {
                         resizable_panel()
                             .visible(self.is_file_tree_visible)
                             .size(px(250.))
-                            .child(self.file_tree.clone())
+                            .child(self.file_tree.clone()),
                     )
                     .child(
-                        resizable_panel().child(
-                            div()
-                                .relative()
-                                .size_full()
-                                .flex()
-                                .flex_col()
-                                .child(self.dock_area.clone())
-                                .when(!self.check_has_panels(cx), |this| {
-                                    this.child(
-                                        div()
-                                            .absolute()
-                                            .top_0()
-                                            .left_0()
-                                            .size_full()
-                                            .flex()
-                                            .justify_center()
-                                            .items_center()
-                                            .bg(cx.theme().background)
-                                            .child(div().text_xl().text_color(cx.theme().muted_foreground).child("Nothing is open")),
-                                    )
-                                }),
-                        )
+                        resizable_panel().child(div().relative().size_full().flex().flex_col().child(self.dock_area.clone()).when(
+                            !self.check_has_panels(cx),
+                            |this| {
+                                this.child(
+                                    div()
+                                        .absolute()
+                                        .top_0()
+                                        .left_0()
+                                        .size_full()
+                                        .flex()
+                                        .justify_center()
+                                        .items_center()
+                                        .bg(cx.theme().background)
+                                        .child(div().text_xl().text_color(cx.theme().muted_foreground).child("Nothing is open")),
+                                )
+                            },
+                        )),
                     ),
             )
             .child(self.status_bar.clone())
