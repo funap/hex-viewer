@@ -1,5 +1,4 @@
 use crate::actions::{SearchNext, SearchPrev, ToggleSearch};
-use crate::appearance::Appearance;
 use crate::model::file_buffer::FileBuffer;
 use gpui::prelude::*;
 use gpui::*;
@@ -107,6 +106,8 @@ pub struct HexView {
     show_offset: bool,
     show_header: bool,
     show_ascii: bool,
+    font_family_prop: SharedString,
+    font_size_prop: Pixels,
 }
 
 impl EventEmitter<HexViewEvent> for HexView {}
@@ -128,7 +129,29 @@ impl HexView {
             show_offset: true,
             show_header: true,
             show_ascii: true,
+            font_family_prop: "Zed Sans Mono".into(),
+            font_size_prop: px(14.0),
         }
+    }
+
+    pub fn font_family(mut self, font_family: impl Into<SharedString>) -> Self {
+        self.font_family_prop = font_family.into();
+        self
+    }
+
+    pub fn font_size(mut self, font_size: impl Into<Pixels>) -> Self {
+        self.font_size_prop = font_size.into();
+        self
+    }
+
+    pub fn set_font_family(&mut self, font_family: impl Into<SharedString>, cx: &mut Context<Self>) {
+        self.font_family_prop = font_family.into();
+        cx.notify();
+    }
+
+    pub fn set_font_size(&mut self, font_size: impl Into<Pixels>, cx: &mut Context<Self>) {
+        self.font_size_prop = font_size.into();
+        cx.notify();
     }
 
     pub fn with_offset(mut self, show: bool) -> Self {
@@ -706,7 +729,7 @@ impl Render for HexView {
             .flex()
             .flex_col()
             .bg(cx.theme().background)
-            .font_family(cx.global::<Appearance>().font_family.clone())
+            .font_family(self.font_family_prop.clone())
             .size_full()
             .key_context(CONTEXT)
             .track_focus(&self.focus_handle(cx))
@@ -744,6 +767,8 @@ impl Render for HexView {
                 show_offset: self.show_offset,
                 show_header: self.show_header,
                 show_ascii: self.show_ascii,
+                font_family: self.font_family_prop.clone(),
+                font_size: self.font_size_prop,
             })
             .child(
                 div().absolute().top_0().right_0().bottom_0().w_4().child(
@@ -767,6 +792,8 @@ struct HexViewElement {
     show_offset: bool,
     show_header: bool,
     show_ascii: bool,
+    font_family: SharedString,
+    font_size: Pixels,
 }
 
 struct PrepaintState {
@@ -842,9 +869,12 @@ impl Element for HexViewElement {
         let selection_start = self.selection_start;
         let selection_end = self.selection_end;
         let highlights = &self.highlights;
-
-        let text_style = window.text_style();
-        let font_size = text_style.font_size.to_pixels(window.rem_size());
+        let text_style = TextStyle {
+            font_family: self.font_family.clone(),
+            font_size: gpui::AbsoluteLength::Pixels(self.font_size),
+            ..window.text_style()
+        };
+        let font_size = self.font_size;
 
         let theme = cx.theme();
         let offset_color = theme.muted_foreground;

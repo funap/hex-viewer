@@ -1,11 +1,12 @@
 use crate::model::file_buffer::FileBuffer;
 use gpui::prelude::*;
-use gpui::*;
+use gpui::{App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, KeyBinding, Subscription, Task, Window, div, px};
 use gpui_component::dock::{Panel, PanelEvent};
 use std::sync::Arc;
 
 use crate::actions::{FocusHexView, SearchNext, SearchPrev, ToggleSearch};
 use crate::app_state::AppState;
+use crate::appearance::Appearance;
 use crate::model::search::SearchMode;
 use crate::ui::component::hex_view::{self, HexView};
 use crate::ui::component::search_bar::{SearchBar, SearchBarEvent};
@@ -37,11 +38,18 @@ pub struct EditorPanel {
     search_task: Option<Task<()>>,
     viewport_search_task: Option<Task<()>>,
     is_full_search_complete: bool,
+    _appearance_subscription: Subscription,
 }
 
 impl EditorPanel {
     pub fn new(buffer: Arc<FileBuffer>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let hex_view = cx.new(|cx| HexView::new(cx).buffer(buffer.clone()));
+        let appearance = cx.global::<Appearance>().clone();
+        let hex_view = cx.new(|cx| {
+            HexView::new(cx)
+                .buffer(buffer.clone())
+                .font_family(appearance.font_family.clone())
+                .font_size(appearance.font_size)
+        });
         let search_bar = cx.new(|cx| SearchBar::new(window, cx));
 
         cx.subscribe(&search_bar, |this, _, event: &SearchBarEvent, cx| match event {
@@ -90,6 +98,16 @@ impl EditorPanel {
         })
         .detach();
 
+        let _appearance_subscription = cx.observe_global::<Appearance>(|this, cx| {
+            let appearance = cx.global::<Appearance>();
+            let font_family = appearance.font_family.clone();
+            let font_size = appearance.font_size;
+            this.hex_view.update(cx, |this_hex_view, cx| {
+                this_hex_view.set_font_family(font_family, cx);
+                this_hex_view.set_font_size(font_size, cx);
+            });
+        });
+
         Self {
             buffer,
             focus_handle: cx.focus_handle(),
@@ -102,6 +120,7 @@ impl EditorPanel {
             search_task: None,
             viewport_search_task: None,
             is_full_search_complete: false,
+            _appearance_subscription,
         }
     }
 
@@ -471,7 +490,7 @@ impl Render for EditorPanel {
             .on_action(cx.listener(Self::search_next))
             .on_action(cx.listener(Self::search_prev))
             .on_action(cx.listener(Self::focus_hex_view))
-            .when(self.is_search_visible, |this| this.child(self.search_bar.clone()))
+            .when(self.is_search_visible, |el| el.child(self.search_bar.clone()))
             .child(self.hex_view.clone())
     }
 }

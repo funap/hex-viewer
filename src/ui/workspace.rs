@@ -249,7 +249,7 @@ impl Workspace {
             return;
         }
 
-        let settings_panel = cx.new(|cx| SettingsPanel::new("Settings", cx));
+        let settings_panel = cx.new(|cx| SettingsPanel::new(window, cx));
         let panel = Arc::new(settings_panel);
 
         self.dock_area.update(cx, |dock_area, cx| {
