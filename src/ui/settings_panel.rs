@@ -2,8 +2,9 @@ use crate::appearance::Appearance;
 use gpui::prelude::*;
 use gpui::{Action, App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, ParentElement, Render, Subscription, Window, div, px};
 use gpui_component::{
-    PixelsExt,
+    ActiveTheme, Icon, IconName, PixelsExt,
     dock::{Panel, PanelEvent},
+    h_flex,
     input::{self, Input, InputState},
 };
 
@@ -27,10 +28,7 @@ impl SettingsPanel {
         // The global must be retrieved after the entities have been created.
         let (family, size) = {
             let appearance = cx.global::<Appearance>();
-            (
-                appearance.font_family.to_string(),
-                appearance.font_size.as_f32().to_string(),
-            )
+            (appearance.font_family.to_string(), appearance.font_size.as_f32().to_string())
         };
 
         // Set initial values
@@ -132,8 +130,20 @@ impl Panel for SettingsPanel {
     fn panel_name(&self) -> &'static str {
         "SettingsPanel"
     }
-    fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        "Settings".into_any_element()
+    fn title(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+        h_flex().gap_2().items_center().child("Settings").child(
+            div()
+                .id("close-icon")
+                .cursor_pointer()
+                .rounded_md()
+                .hover(|style| style.bg(theme.accent).text_color(theme.accent_foreground))
+                .on_click(cx.listener(|this, _, window, cx| {
+                    this.focus_handle(cx).focus(window);
+                    window.dispatch_action(Box::new(gpui_component::dock::ClosePanel), cx);
+                }))
+                .child(Icon::new(IconName::Close).size(px(14.0))),
+        )
     }
     fn closable(&self, _: &App) -> bool {
         true
