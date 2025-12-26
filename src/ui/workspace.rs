@@ -375,7 +375,7 @@ impl Workspace {
 }
 
 impl Render for Workspace {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .id("workspace")
             .on_action(cx.listener(Self::on_action_open_file))
@@ -417,5 +417,8 @@ impl Render for Workspace {
                     ),
             )
             .child(self.status_bar.clone())
+            .children(Root::render_dialog_layer(window, cx))
+            .children(Root::render_sheet_layer(window, cx))
+            .children(Root::render_notification_layer(window, cx))
     }
 }
