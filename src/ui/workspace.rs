@@ -10,6 +10,7 @@ use crate::ui::file_tree_panel::FileTreePanel;
 use crate::ui::toolbar::AppTitleBar;
 
 use crate::app_state::AppState;
+use crate::model::editor::Editor;
 use crate::ui::status_bar::StatusBar;
 use gpui_component::Root;
 use gpui_component::dock::{DockArea, DockItem, DockPlacement};
@@ -56,8 +57,7 @@ impl Workspace {
         })
         .detach();
 
-        let editor_status = AppState::global(cx).editor_status.clone();
-        let status_bar = cx.new(|cx| StatusBar::new(editor_status, cx));
+        let status_bar = cx.new(|cx| StatusBar::new(cx));
         cx.subscribe(&status_bar, |this, _, event, cx| match event {
             crate::ui::status_bar::StatusBarEvent::ToggleFileTree => {
                 this.is_file_tree_visible = !this.is_file_tree_visible;
@@ -145,7 +145,14 @@ impl Workspace {
 
     fn on_action_add_editor_panel(&mut self, action: &AddEditorPanel, window: &mut Window, cx: &mut Context<Self>) {
         let buffer = action.0.clone();
-        let editor_panel = cx.new(|cx| EditorPanel::new(buffer, window, cx));
+        let editor = cx.new(|_| Editor::new(buffer));
+
+        // Add to AppState
+        cx.update_global::<AppState, _>(|state, _cx| {
+            state.editors.push(editor.clone());
+        });
+
+        let editor_panel = cx.new(|cx| EditorPanel::new(editor, window, cx));
         let panel = Arc::new(editor_panel);
 
         self.dock_area.update(cx, |dock_area, cx| {
@@ -277,7 +284,7 @@ impl Workspace {
             DockItem::Tabs { items, .. } => {
                 for item in items {
                     if let Ok(panel) = item.view().downcast::<EditorPanel>() {
-                        if panel.read(cx).path() == path {
+                        if panel.read(cx).path(cx) == path {
                             return Some(panel.read(cx).focus_handle(cx));
                         }
                     }

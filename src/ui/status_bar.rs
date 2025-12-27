@@ -1,43 +1,37 @@
+use crate::app_state::AppState;
 use crate::appearance::Appearance;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::ActiveTheme;
 
-#[derive(Clone, Debug, Default)]
-pub struct EditorStatus {
-    pub cursor_offset: usize,
-    pub total_size: usize,
-    pub value_at_cursor: Option<u8>,
-    pub selection_count: Option<usize>,
-}
-
 pub enum StatusBarEvent {
     ToggleFileTree,
 }
 
-pub struct StatusBar {
-    status: Entity<EditorStatus>,
-}
+pub struct StatusBar {}
 
 impl EventEmitter<StatusBarEvent> for StatusBar {}
 
 impl StatusBar {
-    pub fn new(status: Entity<EditorStatus>, cx: &mut Context<Self>) -> Self {
-        cx.observe(&status, |_, _, cx| {
-            cx.notify();
-        })
-        .detach();
-
-        Self { status }
+    pub fn new(_cx: &mut Context<Self>) -> Self {
+        Self {}
     }
 }
 
 impl Render for StatusBar {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let status = self.status.read(cx);
         let theme = cx.theme();
+        let app_state = AppState::global(cx);
+        let active_editor = app_state.active_editor.as_ref().and_then(|e| e.upgrade());
 
-        let cursor_val = if let Some(byte) = status.value_at_cursor {
+        let (cursor_offset, total_size, value_at_cursor) = if let Some(editor) = active_editor {
+            let editor = editor.read(cx);
+            (editor.cursor_offset, editor.total_size(), editor.value_at_cursor())
+        } else {
+            (0, 0, None)
+        };
+
+        let cursor_val = if let Some(byte) = value_at_cursor {
             let ch = byte as char;
             let char_display = if ch.is_ascii_graphic() || ch == ' ' {
                 format!("'{}'", ch)
@@ -76,18 +70,9 @@ impl Render for StatusBar {
                 div()
                     .flex()
                     .gap_1()
-                    .child(
-                        div()
-                            .w(px(240.))
-                            .child(format!("Offset: 0x{:08X} ({})", status.cursor_offset, status.cursor_offset)),
-                    )
+                    .child(div().w(px(240.)).child(format!("Offset: 0x{:08X} ({})", cursor_offset, cursor_offset)))
                     .child(div().w(px(220.)).child(format!("Value: {}", cursor_val)))
-                    .child(
-                        div()
-                            .w(px(150.))
-                            .when_some(status.selection_count, |this, count| this.child(format!("Sel: {} bytes", count))),
-                    )
-                    .child(div().w(px(200.)).child(format!("Size: {} bytes", status.total_size))),
+                    .child(div().w(px(200.)).child(format!("Size: {} bytes", total_size))),
             )
     }
 }

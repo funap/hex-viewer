@@ -8,6 +8,7 @@ use gpui_component::{ActiveTheme, Icon, IconName, h_flex};
 use std::sync::Arc;
 
 use crate::actions::{NextDifference, PrevDifference, ToggleSyncScroll};
+use crate::model::editor::Editor;
 use crate::ui::component::hex_view::{HexView, HexViewEvent};
 
 const CONTEXT: &str = "DiffPanel";
@@ -35,8 +36,10 @@ pub struct DiffPanel {
 
 impl DiffPanel {
     pub fn new(left_buffer: Arc<FileBuffer>, right_buffer: Arc<FileBuffer>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let left_view = cx.new(|cx| HexView::new(cx).buffer(left_buffer.clone()));
-        let right_view = cx.new(|cx| HexView::new(cx).buffer(right_buffer.clone()));
+        let left_editor = cx.new(|_cx| Editor::new(left_buffer.clone()));
+        let right_editor = cx.new(|_cx| Editor::new(right_buffer.clone()));
+        let left_view = cx.new(|cx| HexView::new(left_editor, cx));
+        let right_view = cx.new(|cx| HexView::new(right_editor, cx));
 
         let focus_handle = cx.focus_handle();
 

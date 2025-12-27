@@ -1,8 +1,6 @@
-use crate::model::file_buffer::FileBuffer;
 use gpui::prelude::*;
 use gpui::{App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, KeyBinding, Subscription, Task, Window, div, px};
 use gpui_component::dock::{Panel, PanelEvent};
-use std::sync::Arc;
 
 use crate::actions::{FocusHexView, SearchNext, SearchPrev, ToggleSearch};
 use crate::app_state::AppState;
@@ -26,8 +24,10 @@ pub(crate) fn init(cx: &mut App) {
     ]);
 }
 
+use crate::model::editor::Editor;
+
 pub struct EditorPanel {
-    buffer: Arc<FileBuffer>,
+    editor: Entity<Editor>,
     focus_handle: FocusHandle,
     hex_view: Entity<HexView>,
     is_search_visible: bool,
@@ -42,11 +42,10 @@ pub struct EditorPanel {
 }
 
 impl EditorPanel {
-    pub fn new(buffer: Arc<FileBuffer>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(editor: Entity<Editor>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let appearance = cx.global::<Appearance>().clone();
         let hex_view = cx.new(|cx| {
-            HexView::new(cx)
-                .buffer(buffer.clone())
+            HexView::new(editor.clone(), cx)
                 .font_family(appearance.font_family.clone())
                 .font_size(appearance.font_size)
         });
@@ -90,10 +89,6 @@ impl EditorPanel {
                         this.update_viewport_highlights(cx);
                     }
                 }
-            } else if let crate::ui::component::hex_view::HexViewEvent::CursorMoved(_) | crate::ui::component::hex_view::HexViewEvent::SelectionChanged { .. } =
-                event
-            {
-                this.update_global_status(cx);
             }
         })
         .detach();
@@ -109,7 +104,7 @@ impl EditorPanel {
         });
 
         Self {
-            buffer,
+            editor,
             focus_handle: cx.focus_handle(),
             hex_view,
             is_search_visible: false,
@@ -125,27 +120,16 @@ impl EditorPanel {
     }
 
     fn update_global_status(&self, cx: &mut Context<Self>) {
-        let hex_view = self.hex_view.read(cx);
-        let cursor_offset = hex_view.cursor_offset();
-        let selection_count = hex_view.selection_range().map(|range| range.len());
-        let buffer = self.buffer.clone();
+        // Update active editor in AppState
+        let editor_weak = self.editor.downgrade();
 
-        // Only update if this panel has focus or window is active?
-        // For now, update whenever this method is called (on focus or cursor move).
-
-        let app_state = AppState::global(cx);
-        let editor_status = app_state.editor_status.clone();
-        editor_status.update(cx, |status, cx| {
-            status.cursor_offset = cursor_offset;
-            status.total_size = buffer.len();
-            status.value_at_cursor = buffer.data().get(cursor_offset).copied();
-            status.selection_count = selection_count;
-            cx.notify();
+        cx.update_global::<AppState, _>(|state, _cx| {
+            state.active_editor = Some(editor_weak);
         });
     }
 
-    pub fn path(&self) -> &std::path::Path {
-        self.buffer.path()
+    pub fn path(&self, cx: &App) -> std::path::PathBuf {
+        self.editor.read(cx).buffer.path().to_path_buf()
     }
 
     fn toggle_search(&mut self, _: &ToggleSearch, window: &mut Window, cx: &mut Context<Self>) {
@@ -185,7 +169,7 @@ impl EditorPanel {
     }
 
     fn perform_viewport_search(&mut self, cx: &mut Context<Self>) {
-        let (start, end) = self.hex_view.read(cx).viewport_byte_range();
+        let (start, end) = self.hex_view.read(cx).viewport_byte_range(cx);
         let query = self.last_search_query.clone();
         if query.is_empty() {
             return;
@@ -200,7 +184,8 @@ impl EditorPanel {
             range: Some(start..end),
         };
 
-        let search_task = app_state.editor_service.search(self.buffer.clone(), query.clone(), options, cx);
+        let buffer = self.editor.read(cx).buffer.clone();
+        let search_task = app_state.editor_service.search(buffer, query.clone(), options, cx);
 
         let task = cx.spawn(async move |this, cx| {
             let results = search_task.await;
@@ -234,7 +219,8 @@ impl EditorPanel {
             limit: crate::model::search::SearchLimit::Unlimited,
             range: None,
         };
-        let search_task = app_state.editor_service.search(self.buffer.clone(), query_string.clone(), options, cx);
+        let buffer = self.editor.read(cx).buffer.clone();
+        let search_task = app_state.editor_service.search(buffer, query_string.clone(), options, cx);
 
         // Spawn task to handle search results
         let task = cx.spawn(async move |this, cx| {
@@ -298,7 +284,7 @@ impl EditorPanel {
 
                 // If preserving scroll, filter to viewport range
                 let all_highlights: Vec<_> = if preserve_scroll {
-                    let (viewport_start, viewport_end) = self.hex_view.read(cx).viewport_byte_range();
+                    let (viewport_start, viewport_end) = self.hex_view.read(cx).viewport_byte_range(cx);
                     self.search_results
                         .iter()
                         .filter(|&&pos| pos >= viewport_start && pos < viewport_end)
@@ -343,7 +329,7 @@ impl EditorPanel {
         };
 
         // Filter search results to viewport range
-        let (viewport_start, viewport_end) = self.hex_view.read(cx).viewport_byte_range();
+        let (viewport_start, viewport_end) = self.hex_view.read(cx).viewport_byte_range(cx);
         let theme = cx.theme();
         let viewport_highlights: Vec<_> = self
             .search_results
@@ -420,6 +406,8 @@ impl Panel for EditorPanel {
 
     fn title(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let title = self
+            .editor
+            .read(cx)
             .buffer
             .path()
             .file_name()
@@ -458,10 +446,10 @@ impl Panel for EditorPanel {
 
     fn set_zoomed(&mut self, _zoomed: bool, _window: &mut Window, _cx: &mut Context<Self>) {}
 
-    fn dump(&self, _cx: &App) -> gpui_component::dock::PanelState {
+    fn dump(&self, cx: &App) -> gpui_component::dock::PanelState {
         let mut state = gpui_component::dock::PanelState::new(self);
         let panel_state = EditorPanelState {
-            path: Some(self.buffer.path().to_path_buf()),
+            path: Some(self.editor.read(cx).buffer.path().to_path_buf()),
         };
         state.info = gpui_component::dock::PanelInfo::panel(panel_state.to_value());
         state
