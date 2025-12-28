@@ -16,10 +16,13 @@ pub(crate) fn init(cx: &mut App) {
     // Initialize HexView actions and keybindings
     hex_view::init(cx);
     cx.bind_keys([
+        KeyBinding::new("ctrl-f", ToggleSearch, Some(CONTEXT)),
         KeyBinding::new("cmd-f", ToggleSearch, Some(CONTEXT)),
         KeyBinding::new("f3", SearchNext, Some(CONTEXT)),
+        KeyBinding::new("ctrl-g", SearchNext, Some(CONTEXT)),
         KeyBinding::new("cmd-g", SearchNext, Some(CONTEXT)),
         KeyBinding::new("shift-f3", SearchPrev, Some(CONTEXT)),
+        KeyBinding::new("ctrl-shift-g", SearchPrev, Some(CONTEXT)),
         KeyBinding::new("cmd-shift-g", SearchPrev, Some(CONTEXT)),
     ]);
 }
@@ -103,10 +106,19 @@ impl EditorPanel {
 
         let _editor_subscription = cx.observe(&editor, |this, _, cx| {
             this.update_search_bar_results(cx);
-            if this.is_search_visible {
-                this.update_viewport_highlights(cx);
-            }
         });
+
+        // Observe search bar for incremental search
+        cx.observe(&search_bar, |this, search_bar, cx| {
+            if this.is_search_visible {
+                let query = search_bar.read(cx).query(cx);
+                let mode = search_bar.read(cx).mode();
+                if query != this.editor.read(cx).search_state.query {
+                    this.perform_incremental_search(&query, mode, cx);
+                }
+            }
+        })
+        .detach();
 
         Self {
             editor,
@@ -181,30 +193,19 @@ impl EditorPanel {
         let mode = self.search_bar.read(cx).mode();
         let app_state = AppState::global(cx);
 
-        let options = crate::model::search::SearchOptions {
-            mode,
-            limit: crate::model::search::SearchLimit::Unlimited,
-            range: Some(start..end),
-        };
-
-        self.viewport_search_task = Some(app_state.editor_service.perform_search(self.editor.clone(), query, options, false, cx));
+        let (_, viewport_task) = app_state.editor_service.incremental_search(self.editor.clone(), query, mode, start..end, cx);
+        self.viewport_search_task = Some(viewport_task);
     }
 
     fn perform_full_search(&mut self, query: &str, mode: SearchMode, cx: &mut Context<Self>) {
-        self.search_task = None;
-
+        let (start, end) = self.hex_view.read(cx).viewport_byte_range(cx);
         let app_state = AppState::global(cx);
-        let options = crate::model::search::SearchOptions {
-            mode,
-            limit: crate::model::search::SearchLimit::Unlimited,
-            range: None,
-        };
 
-        self.search_task = Some(
-            app_state
-                .editor_service
-                .perform_search(self.editor.clone(), query.to_string(), options, true, cx),
-        );
+        let (viewport_task, full_task) = app_state
+            .editor_service
+            .incremental_search(self.editor.clone(), query.to_string(), mode, start..end, cx);
+        self.viewport_search_task = Some(viewport_task);
+        self.search_task = Some(full_task);
     }
 
     fn update_search_bar_results(&mut self, cx: &mut Context<Self>) {
@@ -397,15 +398,6 @@ impl Panel for EditorPanel {
 
 impl Render for EditorPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // Check if search query has changed and perform search if needed
-        if self.is_search_visible {
-            let current_query = self.search_bar.read(cx).query(cx);
-            if current_query != self.editor.read(cx).search_state.query {
-                let mode = self.search_bar.read(cx).mode();
-                self.perform_incremental_search(&current_query, mode, cx);
-            }
-        }
-
         div()
             .size_full()
             .flex()
