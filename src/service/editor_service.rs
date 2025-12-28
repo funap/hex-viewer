@@ -82,6 +82,37 @@ impl EditorService {
         })
     }
 
+    /// Performs a search and updates the provided Editor entity with the results.
+    pub fn perform_search(
+        &self,
+        editor: gpui::Entity<crate::model::editor::Editor>,
+        query: String,
+        options: crate::model::search::SearchOptions,
+        is_full: bool,
+        cx: &gpui::App,
+    ) -> gpui::Task<()> {
+        let buffer = editor.read(cx).buffer.clone();
+        let query_clone = query.clone();
+        let search_task = self.search(buffer, query, options, cx);
+        let editor_weak = editor.downgrade();
+
+        cx.spawn(move |cx: &mut gpui::AsyncApp| {
+            let mut cx = cx.clone();
+            async move {
+                let results = search_task.await;
+                if let Some(editor) = editor_weak.upgrade() {
+                    editor
+                        .update(&mut cx, |editor, cx| {
+                            editor.set_search_query(query_clone);
+                            editor.set_search_results(results, is_full);
+                            cx.notify();
+                        })
+                        .ok();
+                }
+            }
+        })
+    }
+
     pub fn compute_diff(&self, left: Arc<FileBuffer>, right: Arc<FileBuffer>, cx: &gpui::App) -> gpui::Task<crate::model::diff::DiffResult> {
         cx.background_executor().spawn(async move {
             let left_data = left.data();

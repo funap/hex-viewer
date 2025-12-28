@@ -54,7 +54,7 @@ pub const HEX_GAP: f32 = 4.0;
 pub const SECTION_GAP: f32 = 16.0;
 pub const OFFSET_X_START: f32 = 4.0;
 pub const SELECTION_PADDING: f32 = 2.0;
-pub const BYTES_PER_ROW: usize = 16;
+pub use crate::model::editor::BYTES_PER_ROW;
 // pub const FONT_FAMILY: &str = "Menlo"; // Removed in favor of global Appearance
 
 pub fn init(cx: &mut App) {
@@ -237,12 +237,8 @@ impl HexView {
     }
 
     pub fn set_cursor_offset(&mut self, offset: usize, cx: &mut Context<Self>) {
-        let buffer_len = self.editor.read(cx).buffer.len();
-        self.editor.update(cx, |editor, cx| {
-            editor.selection_start = None;
-            editor.selection_end = None;
-            editor.cursor_offset = offset.min(buffer_len.saturating_sub(1));
-            cx.notify();
+        self.editor.update(cx, |editor, _| {
+            editor.set_cursor_offset(offset);
         });
         self.ensure_cursor_visible(cx);
         cx.notify();
@@ -314,22 +310,13 @@ impl HexView {
     fn on_mouse_down(&mut self, event: &MouseDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
         if let Some(byte_pos) = self.byte_pos_from_point(event.position, cx) {
             self.is_dragging = true;
-            self.editor.update(cx, |editor, cx| {
-                editor.cursor_offset = byte_pos;
-                editor.selection_start = Some(byte_pos);
-                editor.selection_end = Some(byte_pos);
-                cx.notify();
+            self.editor.update(cx, |editor, _| {
+                editor.start_drag(byte_pos);
             });
             cx.notify();
-            let (start, end) = self
-                .editor
-                .read(cx)
-                .selection_start
-                .zip(self.editor.read(cx).selection_end)
-                .unwrap_or((byte_pos, byte_pos));
             cx.emit(HexViewEvent::SelectionChanged {
-                start: Some(start),
-                end: Some(end),
+                start: Some(byte_pos),
+                end: Some(byte_pos),
             });
         }
     }
@@ -402,20 +389,14 @@ impl HexView {
             }
 
             if let Some(byte_pos) = self.byte_pos_from_point_clamped(event.position, cx) {
-                self.editor.update(cx, |editor, cx| {
-                    editor.selection_end = Some(byte_pos);
-                    cx.notify();
+                self.editor.update(cx, |editor, _| {
+                    editor.continue_drag(byte_pos);
                 });
                 cx.notify();
-                let (start, end) = self
-                    .editor
-                    .read(cx)
-                    .selection_start
-                    .zip(self.editor.read(cx).selection_end)
-                    .unwrap_or((byte_pos, byte_pos));
+                let editor = self.editor.read(cx);
                 cx.emit(HexViewEvent::SelectionChanged {
-                    start: Some(start),
-                    end: Some(end),
+                    start: editor.selection_start,
+                    end: editor.selection_end,
                 });
             }
         }
@@ -453,177 +434,88 @@ impl HexView {
     }
 
     fn move_left(&mut self, _: &MoveLeft, _window: &mut Window, cx: &mut Context<Self>) {
+        self.editor.update(cx, |editor, _| editor.move_left());
+        self.ensure_cursor_visible(cx);
+        cx.notify();
         let cursor_offset = self.editor.read(cx).cursor_offset;
-        if cursor_offset > 0 {
-            self.editor.update(cx, |editor, cx| {
-                editor.selection_start = None;
-                editor.selection_end = None;
-                editor.cursor_offset -= 1;
-                cx.notify();
-            });
-            self.ensure_cursor_visible(cx);
-            cx.notify();
-            let cursor_offset = self.editor.read(cx).cursor_offset;
-            cx.emit(HexViewEvent::CursorMoved(cursor_offset));
-        }
+        cx.emit(HexViewEvent::CursorMoved(cursor_offset));
     }
 
     fn move_right(&mut self, _: &MoveRight, _window: &mut Window, cx: &mut Context<Self>) {
-        let buffer_len = self.editor.read(cx).buffer.len();
+        self.editor.update(cx, |editor, _| editor.move_right());
+        self.ensure_cursor_visible(cx);
+        cx.notify();
         let cursor_offset = self.editor.read(cx).cursor_offset;
-        if cursor_offset < buffer_len.saturating_sub(1) {
-            self.editor.update(cx, |editor, cx| {
-                editor.selection_start = None;
-                editor.selection_end = None;
-                editor.cursor_offset += 1;
-                cx.notify();
-            });
-            self.ensure_cursor_visible(cx);
-            cx.notify();
-            let cursor_offset = self.editor.read(cx).cursor_offset;
-            cx.emit(HexViewEvent::CursorMoved(cursor_offset));
-        }
+        cx.emit(HexViewEvent::CursorMoved(cursor_offset));
     }
 
     fn move_up(&mut self, _: &MoveUp, _window: &mut Window, cx: &mut Context<Self>) {
+        self.editor.update(cx, |editor, _| editor.move_up());
+        self.ensure_cursor_visible(cx);
+        cx.notify();
         let cursor_offset = self.editor.read(cx).cursor_offset;
-        if cursor_offset >= 16 {
-            self.editor.update(cx, |editor, cx| {
-                editor.selection_start = None;
-                editor.selection_end = None;
-                editor.cursor_offset -= 16;
-                cx.notify();
-            });
-            self.ensure_cursor_visible(cx);
-            cx.notify();
-            let cursor_offset = self.editor.read(cx).cursor_offset;
-            cx.emit(HexViewEvent::CursorMoved(cursor_offset));
-        }
+        cx.emit(HexViewEvent::CursorMoved(cursor_offset));
     }
 
     fn move_down(&mut self, _: &MoveDown, _window: &mut Window, cx: &mut Context<Self>) {
-        let buffer_len = self.editor.read(cx).buffer.len();
+        self.editor.update(cx, |editor, _| editor.move_down());
+        self.ensure_cursor_visible(cx);
+        cx.notify();
         let cursor_offset = self.editor.read(cx).cursor_offset;
-        let new_offset = cursor_offset + 16;
-        if new_offset < buffer_len {
-            self.editor.update(cx, |editor, cx| {
-                editor.selection_start = None;
-                editor.selection_end = None;
-                editor.cursor_offset = new_offset;
-                cx.notify();
-            });
-            self.ensure_cursor_visible(cx);
-            cx.notify();
-            let cursor_offset = self.editor.read(cx).cursor_offset;
-            cx.emit(HexViewEvent::CursorMoved(cursor_offset));
-        }
+        cx.emit(HexViewEvent::CursorMoved(cursor_offset));
     }
 
     fn select_left(&mut self, _: &SelectLeft, _window: &mut Window, cx: &mut Context<Self>) {
-        let cursor_offset = self.editor.read(cx).cursor_offset;
-        if cursor_offset > 0 {
-            self.editor.update(cx, |editor, cx| {
-                if editor.selection_start.is_none() {
-                    editor.selection_start = Some(editor.cursor_offset);
-                }
-                editor.cursor_offset -= 1;
-                editor.selection_end = Some(editor.cursor_offset);
-                cx.notify();
-            });
-            self.ensure_cursor_visible(cx);
-            cx.notify();
-            let selection_start = self.editor.read(cx).selection_start;
-            let selection_end = self.editor.read(cx).selection_end;
-            cx.emit(HexViewEvent::SelectionChanged {
-                start: selection_start,
-                end: selection_end,
-            });
-        }
+        self.editor.update(cx, |editor, _| editor.select_left());
+        self.ensure_cursor_visible(cx);
+        cx.notify();
+        let editor = self.editor.read(cx);
+        cx.emit(HexViewEvent::SelectionChanged {
+            start: editor.selection_start,
+            end: editor.selection_end,
+        });
     }
 
     fn select_right(&mut self, _: &SelectRight, _window: &mut Window, cx: &mut Context<Self>) {
-        let buffer_len = self.editor.read(cx).buffer.len();
-        let cursor_offset = self.editor.read(cx).cursor_offset;
-        if cursor_offset < buffer_len.saturating_sub(1) {
-            self.editor.update(cx, |editor, cx| {
-                if editor.selection_start.is_none() {
-                    editor.selection_start = Some(editor.cursor_offset);
-                }
-                editor.cursor_offset += 1;
-                editor.selection_end = Some(editor.cursor_offset);
-                cx.notify();
-            });
-            self.ensure_cursor_visible(cx);
-            cx.notify();
-            let selection_start = self.editor.read(cx).selection_start;
-            let selection_end = self.editor.read(cx).selection_end;
-            cx.emit(HexViewEvent::SelectionChanged {
-                start: selection_start,
-                end: selection_end,
-            });
-        }
+        self.editor.update(cx, |editor, _| editor.select_right());
+        self.ensure_cursor_visible(cx);
+        cx.notify();
+        let editor = self.editor.read(cx);
+        cx.emit(HexViewEvent::SelectionChanged {
+            start: editor.selection_start,
+            end: editor.selection_end,
+        });
     }
 
     fn select_up(&mut self, _: &SelectUp, _window: &mut Window, cx: &mut Context<Self>) {
-        let cursor_offset = self.editor.read(cx).cursor_offset;
-        if cursor_offset >= 16 {
-            self.editor.update(cx, |editor, cx| {
-                if editor.selection_start.is_none() {
-                    editor.selection_start = Some(editor.cursor_offset);
-                }
-                editor.cursor_offset -= 16;
-                editor.selection_end = Some(editor.cursor_offset);
-                cx.notify();
-            });
-            self.ensure_cursor_visible(cx);
-            cx.notify();
-            let selection_start = self.editor.read(cx).selection_start;
-            let selection_end = self.editor.read(cx).selection_end;
-            cx.emit(HexViewEvent::SelectionChanged {
-                start: selection_start,
-                end: selection_end,
-            });
-        }
+        self.editor.update(cx, |editor, _| editor.select_up());
+        self.ensure_cursor_visible(cx);
+        cx.notify();
+        let editor = self.editor.read(cx);
+        cx.emit(HexViewEvent::SelectionChanged {
+            start: editor.selection_start,
+            end: editor.selection_end,
+        });
     }
 
     fn select_down(&mut self, _: &SelectDown, _window: &mut Window, cx: &mut Context<Self>) {
-        let buffer_len = self.editor.read(cx).buffer.len();
-        let cursor_offset = self.editor.read(cx).cursor_offset;
-        let new_offset = cursor_offset + 16;
-        if new_offset < buffer_len {
-            self.editor.update(cx, |editor, cx| {
-                if editor.selection_start.is_none() {
-                    editor.selection_start = Some(editor.cursor_offset);
-                }
-                editor.cursor_offset = new_offset;
-                editor.selection_end = Some(editor.cursor_offset);
-                cx.notify();
-            });
-            self.ensure_cursor_visible(cx);
-            cx.notify();
-            let selection_start = self.editor.read(cx).selection_start;
-            let selection_end = self.editor.read(cx).selection_end;
-            cx.emit(HexViewEvent::SelectionChanged {
-                start: selection_start,
-                end: selection_end,
-            });
-        }
+        self.editor.update(cx, |editor, _| editor.select_down());
+        self.ensure_cursor_visible(cx);
+        cx.notify();
+        let editor = self.editor.read(cx);
+        cx.emit(HexViewEvent::SelectionChanged {
+            start: editor.selection_start,
+            end: editor.selection_end,
+        });
     }
 
     fn select_all(&mut self, _: &SelectAll, _window: &mut Window, cx: &mut Context<Self>) {
-        let buffer_len = self.editor.read(cx).buffer.len();
-        self.editor.update(cx, |editor, cx| {
-            editor.selection_start = Some(0);
-            editor.selection_end = Some(buffer_len.saturating_sub(1));
-            editor.cursor_offset = buffer_len.saturating_sub(1);
-            cx.notify();
-        });
+        self.editor.update(cx, |editor, _| editor.select_all());
         cx.notify();
-        let selection_start = self.editor.read(cx).selection_start;
-        let selection_end = self.editor.read(cx).selection_end;
+        let editor = self.editor.read(cx);
         cx.emit(HexViewEvent::SelectionChanged {
-            start: selection_start,
-            end: selection_end,
+            start: editor.selection_start,
+            end: editor.selection_end,
         });
     }
 
@@ -639,19 +531,8 @@ impl HexView {
     }
 
     fn page_up(&mut self, _: &PageUp, _window: &mut Window, cx: &mut Context<Self>) {
-        let cursor_offset = self.editor.read(cx).cursor_offset;
         let visible_rows = self.get_visible_rows();
-        let move_amount = visible_rows * BYTES_PER_ROW;
-        self.editor.update(cx, |editor, cx| {
-            editor.selection_start = None;
-            editor.selection_end = None;
-            if cursor_offset >= move_amount {
-                editor.cursor_offset -= move_amount;
-            } else {
-                editor.cursor_offset = 0;
-            }
-            cx.notify();
-        });
+        self.editor.update(cx, |editor, _| editor.page_up(visible_rows));
         self.ensure_cursor_visible(cx);
         cx.notify();
         let cursor_offset = self.editor.read(cx).cursor_offset;
@@ -659,21 +540,8 @@ impl HexView {
     }
 
     fn page_down(&mut self, _: &PageDown, _window: &mut Window, cx: &mut Context<Self>) {
-        let buffer_len = self.editor.read(cx).buffer.len();
-        let cursor_offset = self.editor.read(cx).cursor_offset;
         let visible_rows = self.get_visible_rows();
-        let move_amount = visible_rows * BYTES_PER_ROW;
-        let new_offset = cursor_offset + move_amount;
-        self.editor.update(cx, |editor, cx| {
-            editor.selection_start = None;
-            editor.selection_end = None;
-            if new_offset < buffer_len {
-                editor.cursor_offset = new_offset;
-            } else {
-                editor.cursor_offset = buffer_len.saturating_sub(1);
-            }
-            cx.notify();
-        });
+        self.editor.update(cx, |editor, _| editor.page_down(visible_rows));
         self.ensure_cursor_visible(cx);
         cx.notify();
         let cursor_offset = self.editor.read(cx).cursor_offset;
@@ -681,12 +549,7 @@ impl HexView {
     }
 
     fn home(&mut self, _: &Home, _window: &mut Window, cx: &mut Context<Self>) {
-        self.editor.update(cx, |editor, cx| {
-            editor.selection_start = None;
-            editor.selection_end = None;
-            editor.cursor_offset = 0;
-            cx.notify();
-        });
+        self.editor.update(cx, |editor, _| editor.home());
         self.ensure_cursor_visible(cx);
         cx.notify();
         let cursor_offset = self.editor.read(cx).cursor_offset;
@@ -694,13 +557,7 @@ impl HexView {
     }
 
     fn end(&mut self, _: &End, _window: &mut Window, cx: &mut Context<Self>) {
-        let buffer_len = self.editor.read(cx).buffer.len();
-        self.editor.update(cx, |editor, cx| {
-            editor.selection_start = None;
-            editor.selection_end = None;
-            editor.cursor_offset = buffer_len.saturating_sub(1);
-            cx.notify();
-        });
+        self.editor.update(cx, |editor, _| editor.end());
         self.ensure_cursor_visible(cx);
         cx.notify();
         let cursor_offset = self.editor.read(cx).cursor_offset;
@@ -708,95 +565,48 @@ impl HexView {
     }
 
     fn select_page_up(&mut self, _: &SelectPageUp, _window: &mut Window, cx: &mut Context<Self>) {
-        let cursor_offset = self.editor.read(cx).cursor_offset;
         let visible_rows = self.get_visible_rows();
-        let move_amount = visible_rows * BYTES_PER_ROW;
-        self.editor.update(cx, |editor, cx| {
-            if editor.selection_start.is_none() {
-                editor.selection_start = Some(editor.cursor_offset);
-            }
-            if cursor_offset >= move_amount {
-                editor.cursor_offset -= move_amount;
-            } else {
-                editor.cursor_offset = 0;
-            }
-            editor.selection_end = Some(editor.cursor_offset);
-            cx.notify();
-        });
+        self.editor.update(cx, |editor, _| editor.select_page_up(visible_rows));
         self.ensure_cursor_visible(cx);
         cx.notify();
-        let selection_start = self.editor.read(cx).selection_start;
-        let selection_end = self.editor.read(cx).selection_end;
+        let editor = self.editor.read(cx);
         cx.emit(HexViewEvent::SelectionChanged {
-            start: selection_start,
-            end: selection_end,
+            start: editor.selection_start,
+            end: editor.selection_end,
         });
     }
 
     fn select_page_down(&mut self, _: &SelectPageDown, _window: &mut Window, cx: &mut Context<Self>) {
-        let buffer_len = self.editor.read(cx).buffer.len();
-        let cursor_offset = self.editor.read(cx).cursor_offset;
         let visible_rows = self.get_visible_rows();
-        let move_amount = visible_rows * BYTES_PER_ROW;
-        let new_offset = cursor_offset + move_amount;
-        self.editor.update(cx, |editor, cx| {
-            if editor.selection_start.is_none() {
-                editor.selection_start = Some(editor.cursor_offset);
-            }
-            if new_offset < buffer_len {
-                editor.cursor_offset = new_offset;
-            } else {
-                editor.cursor_offset = buffer_len.saturating_sub(1);
-            }
-            editor.selection_end = Some(editor.cursor_offset);
-            cx.notify();
-        });
+        self.editor.update(cx, |editor, _| editor.select_page_down(visible_rows));
         self.ensure_cursor_visible(cx);
         cx.notify();
-        let selection_start = self.editor.read(cx).selection_start;
-        let selection_end = self.editor.read(cx).selection_end;
+        let editor = self.editor.read(cx);
         cx.emit(HexViewEvent::SelectionChanged {
-            start: selection_start,
-            end: selection_end,
+            start: editor.selection_start,
+            end: editor.selection_end,
         });
     }
 
     fn select_home(&mut self, _: &SelectHome, _window: &mut Window, cx: &mut Context<Self>) {
-        self.editor.update(cx, |editor, cx| {
-            if editor.selection_start.is_none() {
-                editor.selection_start = Some(editor.cursor_offset);
-            }
-            editor.cursor_offset = 0;
-            editor.selection_end = Some(editor.cursor_offset);
-            cx.notify();
-        });
+        self.editor.update(cx, |editor, _| editor.select_home());
         self.ensure_cursor_visible(cx);
         cx.notify();
-        let selection_start = self.editor.read(cx).selection_start;
-        let selection_end = self.editor.read(cx).selection_end;
+        let editor = self.editor.read(cx);
         cx.emit(HexViewEvent::SelectionChanged {
-            start: selection_start,
-            end: selection_end,
+            start: editor.selection_start,
+            end: editor.selection_end,
         });
     }
 
     fn select_end(&mut self, _: &SelectEnd, _window: &mut Window, cx: &mut Context<Self>) {
-        let buffer_len = self.editor.read(cx).buffer.len();
-        self.editor.update(cx, |editor, cx| {
-            if editor.selection_start.is_none() {
-                editor.selection_start = Some(editor.cursor_offset);
-            }
-            editor.cursor_offset = buffer_len.saturating_sub(1);
-            editor.selection_end = Some(editor.cursor_offset);
-            cx.notify();
-        });
+        self.editor.update(cx, |editor, _| editor.select_end());
         self.ensure_cursor_visible(cx);
         cx.notify();
-        let selection_start = self.editor.read(cx).selection_start;
-        let selection_end = self.editor.read(cx).selection_end;
+        let editor = self.editor.read(cx);
         cx.emit(HexViewEvent::SelectionChanged {
-            start: selection_start,
-            end: selection_end,
+            start: editor.selection_start,
+            end: editor.selection_end,
         });
     }
 
