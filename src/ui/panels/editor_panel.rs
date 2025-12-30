@@ -143,7 +143,7 @@ impl EditorPanel {
     }
 
     pub fn path(&self, cx: &App) -> std::path::PathBuf {
-        self.editor.read(cx).buffer.path().to_path_buf()
+        self.editor.read(cx).document.read().unwrap().buffer.path().to_path_buf()
     }
 
     fn toggle_search(&mut self, _: &ToggleSearch, window: &mut Window, cx: &mut Context<Self>) {
@@ -348,6 +348,9 @@ impl Panel for EditorPanel {
         let title = self
             .editor
             .read(cx)
+            .document
+            .read()
+            .unwrap()
             .buffer
             .path()
             .file_name()
@@ -389,7 +392,7 @@ impl Panel for EditorPanel {
     fn dump(&self, cx: &App) -> gpui_component::dock::PanelState {
         let mut state = gpui_component::dock::PanelState::new(self);
         let panel_state = EditorPanelState {
-            path: Some(self.editor.read(cx).buffer.path().to_path_buf()),
+            path: Some(self.editor.read(cx).document.read().unwrap().buffer.path().to_path_buf()),
         };
         state.info = gpui_component::dock::PanelInfo::panel(panel_state.to_value());
         state

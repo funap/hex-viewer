@@ -144,8 +144,8 @@ impl Workspace {
     }
 
     fn on_action_add_editor_panel(&mut self, action: &AddEditorPanel, window: &mut Window, cx: &mut Context<Self>) {
-        let buffer = action.0.clone();
-        let editor = cx.new(|_| Editor::new(buffer));
+        let document = action.0.clone();
+        let editor = cx.new(|_| Editor::new(document));
 
         // Add to AppState
         cx.update_global::<AppState, _>(|state, _cx| {
@@ -173,9 +173,9 @@ impl Workspace {
             let app = cx.update(|cx| AppState::global(cx).clone()).ok().unwrap();
 
             if let Some(add_editor_panel) = this.upgrade() {
-                if let Ok(buffer) = app.editor_service.open_file(std::path::PathBuf::from(file_path)).await {
+                if let Ok(document) = app.editor_service.open_file(std::path::PathBuf::from(file_path)).await {
                     let _ = add_editor_panel.update(cx, |_, cx| {
-                        cx.dispatch_action(&AddEditorPanel(buffer));
+                        cx.dispatch_action(&AddEditorPanel(document));
                     });
                 }
             }
@@ -192,13 +192,12 @@ impl Workspace {
 
             if let Some(workspace) = this.upgrade() {
                 let left_result = app.editor_service.open_file(std::path::PathBuf::from(left_path)).await;
-                let right_result: anyhow::Result<std::sync::Arc<crate::core::buffer::FileBuffer>> =
-                    app.editor_service.open_file(std::path::PathBuf::from(right_path)).await;
+                let right_result = app.editor_service.open_file(std::path::PathBuf::from(right_path)).await;
 
-                if let (Ok(left_buffer), Ok(right_buffer)) = (left_result, right_result) {
+                if let (Ok(left_document), Ok(right_document)) = (left_result, right_result) {
                     let _ = workspace.update_in(window, |_, window, cx| {
                         let app = AppState::global(cx).clone();
-                        let diff_result_task = app.editor_service.compute_diff(left_buffer.clone(), right_buffer.clone(), cx);
+                        let diff_result_task = app.editor_service.compute_diff(left_document.clone(), right_document.clone(), cx);
 
                         cx.spawn_in(window, async move |workspace, window| {
                             let diff_result = diff_result_task.await;
@@ -206,7 +205,7 @@ impl Workspace {
                             let _ = workspace.update_in(window, |_workspace, window, cx| {
                                 use crate::ui::panels::diff_panel::DiffPanel;
                                 let diff_view = cx.new(|cx| {
-                                    let mut view = DiffPanel::new(left_buffer, right_buffer, window, cx);
+                                    let mut view = DiffPanel::new(left_document, right_document, window, cx);
                                     view.set_diff_result(diff_result, cx);
                                     view
                                 });
@@ -313,9 +312,9 @@ impl Workspace {
                 if !initial_files.is_empty() {
                     if let Ok(app) = cx.update(|cx| AppState::global(cx).clone()) {
                         for file_path in initial_files {
-                            if let Ok(buffer) = app.editor_service.open_file(file_path).await {
+                            if let Ok(document) = app.editor_service.open_file(file_path).await {
                                 let _ = window.update(cx, |_root, _window, cx| {
-                                    cx.dispatch_action(&AddEditorPanel(buffer));
+                                    cx.dispatch_action(&AddEditorPanel(document));
                                 });
                             }
                         }

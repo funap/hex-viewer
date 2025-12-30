@@ -1,4 +1,5 @@
 use crate::core::buffer::FileBuffer;
+use crate::core::document::Document;
 use crate::core::editor::Editor;
 use crate::core::search::{self, SearchOptions};
 use gpui::{App, Entity, Task};
@@ -24,7 +25,7 @@ pub enum MoveDirection {
 #[allow(dead_code)]
 #[derive(Clone)]
 pub struct EditorService {
-    buffers: Arc<RwLock<HashMap<PathBuf, Arc<FileBuffer>>>>,
+    documents: Arc<RwLock<HashMap<PathBuf, Arc<RwLock<Document>>>>>,
 }
 
 #[allow(dead_code)]
@@ -32,34 +33,35 @@ impl EditorService {
     /// Creates a new, empty EditorService.
     pub fn new() -> Self {
         Self {
-            buffers: Arc::new(RwLock::new(HashMap::new())),
+            documents: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
     /// Opens a file asynchronously.
-    /// If the file is already in the cache, it returns the cached buffer.
+    /// If the file is already in the cache, it returns the cached document.
     /// Otherwise, it reads the file from disk, adds it to the cache, and returns it.
     /// This operation is thread-safe.
-    pub async fn open_file(&self, path: PathBuf) -> anyhow::Result<Arc<FileBuffer>> {
-        // First, check if the buffer is already in the cache with a read lock.
-        if let Some(buffer) = self.buffers.read().unwrap().get(&path) {
-            return Ok(buffer.clone());
+    pub async fn open_file(&self, path: PathBuf) -> anyhow::Result<Arc<RwLock<Document>>> {
+        // First, check if the document is already in the cache with a read lock.
+        if let Some(document) = self.documents.read().unwrap().get(&path) {
+            return Ok(document.clone());
         }
 
         // If not in the cache, read the file without holding any lock.
         let data = tokio::fs::read(&path).await?;
-        let new_buffer = Arc::new(FileBuffer::new(path.clone(), data));
+        let buffer = FileBuffer::new(path.clone(), data);
+        let new_document = Arc::new(RwLock::new(Document::new(buffer)));
 
-        // Acquire a write lock to insert the new buffer into the cache.
-        let mut buffers = self.buffers.write().unwrap();
+        // Acquire a write lock to insert the new document into the cache.
+        let mut documents = self.documents.write().unwrap();
 
         // Before inserting, check again if another thread has inserted it in the meantime.
-        if let Some(buffer) = buffers.get(&path) {
-            return Ok(buffer.clone());
+        if let Some(document) = documents.get(&path) {
+            return Ok(document.clone());
         }
 
-        buffers.insert(path, new_buffer.clone());
-        Ok(new_buffer)
+        documents.insert(path, new_document.clone());
+        Ok(new_document)
     }
 
     /// Searches for a query in the given buffer based on the search options.
@@ -107,9 +109,44 @@ impl EditorService {
         is_full: bool,
         cx: &gpui::App,
     ) -> gpui::Task<()> {
-        let buffer = editor.read(cx).buffer.clone();
+        let buffer_data = {
+            let editor_read = editor.read(cx);
+            let document = editor_read.document.read().unwrap();
+            // We need a way to pass the buffer data to the background task.
+            // FileBuffer is not thread-safe refcounted by itself unless we clone the data or put it in Arc.
+            // But Editor has Arc<RwLock<Document>>.
+            // The search function takes Arc<FileBuffer>.
+            // We need to change the search function signature or create a temporary Arc<FileBuffer> (which triggers clone if FileBuffer is not Arc internally).
+            // FileBuffer has Vec<u8>. Cloning FileBuffer clones data.
+            // We should probably change `search` to take `Vec<u8>` or `Arc<Vec<u8>>` or maintain `Arc` inside FileBuffer?
+            // Or, simply clone it for now (expensive but safe).
+            // BETTER: Make FileBuffer hold `data: Arc<Vec<u8>>` or just pass the data clone.
+            // existing code: `let buffer = editor.read(cx).buffer.clone();` -- this was cloning Arc<RwLock<FileBuffer>> (wait, previous code was `buffer: Arc<RwLock<FileBuffer>>`).
+            // So it was cloning the Arc.
+            // Now Document holds `buffer: FileBuffer` directly.
+            // So we can't just clone the Arc.
+            // We should clone the data or change FileBuffer to be cheap to clone (Arc inside).
+            // Given the context, I will clone the buffer data for now to get it working, or wrap it in Arc derived from Document? No.
+            // Let's modify `search` to take `Arc<FileBuffer>` is annoying if FileBuffer is not in Arc.
+            // Actually `EditorService::search` takes `Arc<FileBuffer>`.
+            // I should probably change `search` to take `FileBuffer` (clone) or `Vec<u8>`.
+            // Taking a closer look at `search` implementation: it spawns a task.
+            // `cx.background_executor().spawn(async move { ... buffer.data() ... })`
+            // If I clone FileBuffer, it copies all data. That's bad for large files.
+            // The previous architecture had `Arc<RwLock<FileBuffer>>`.
+            // Now `Document` owns `FileBuffer`.
+            // If I want to search in background, I need a snapshot of data.
+            // So cloning `FileBuffer` (allocating new Vec) is actually correct for a consistent snapshot if we want to avoid locking for the duration of search.
+            // BUT, `FileBuffer` was previously shared via Arc.
+            // Let's assume for this refactor, `FileBuffer` is small enough or we simply clone it.
+            // Note: `FileBuffer` struct: `path: PathBuf, data: Vec<u8>`. Cloning it clones the vector.
+            // Optimization: Use `Arc<Vec<u8>>` in `FileBuffer` later.
+            // For now, I will create a new Arc<FileBuffer> from the clone.
+            Arc::new(document.buffer.clone())
+        };
+
         let query_clone = query.clone();
-        let search_task = self.search(buffer, query, options, cx);
+        let search_task = self.search(buffer_data, query, options, cx);
         let editor_weak = editor.downgrade();
 
         cx.spawn(move |cx: &mut gpui::AsyncApp| {
@@ -215,10 +252,12 @@ impl EditorService {
         });
     }
 
-    pub fn compute_diff(&self, left: Arc<FileBuffer>, right: Arc<FileBuffer>, cx: &gpui::App) -> gpui::Task<crate::core::diff::DiffResult> {
+    pub fn compute_diff(&self, left: Arc<RwLock<Document>>, right: Arc<RwLock<Document>>, cx: &gpui::App) -> gpui::Task<crate::core::diff::DiffResult> {
         cx.background_executor().spawn(async move {
-            let left_data = left.data();
-            let right_data = right.data();
+            let left_doc = left.read().unwrap();
+            let right_doc = right.read().unwrap();
+            let left_data = left_doc.buffer.data();
+            let right_data = right_doc.buffer.data();
             crate::core::diff::compute_simple_diff(left_data, right_data)
         })
     }

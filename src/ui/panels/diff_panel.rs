@@ -1,11 +1,11 @@
-use crate::core::buffer::FileBuffer;
 use crate::core::diff::{DiffChunk, DiffResult};
+use crate::core::document::Document;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::dock::{Panel, PanelEvent};
 use gpui_component::{ActiveTheme, Icon, IconName, h_flex};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use crate::actions::{NextDifference, PrevDifference, ToggleSyncScroll};
 use crate::core::appearance::Appearance;
@@ -23,8 +23,8 @@ pub fn init(cx: &mut App) {
 }
 
 pub struct DiffPanel {
-    left_buffer: Arc<FileBuffer>,
-    right_buffer: Arc<FileBuffer>,
+    left_document: Arc<RwLock<Document>>,
+    right_document: Arc<RwLock<Document>>,
     left_view: Entity<HexView>,
     right_view: Entity<HexView>,
     diff_result: Option<DiffResult>,
@@ -36,9 +36,9 @@ pub struct DiffPanel {
 }
 
 impl DiffPanel {
-    pub fn new(left_buffer: Arc<FileBuffer>, right_buffer: Arc<FileBuffer>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let left_editor = cx.new(|_cx| Editor::new(left_buffer.clone()));
-        let right_editor = cx.new(|_cx| Editor::new(right_buffer.clone()));
+    pub fn new(left_document: Arc<RwLock<Document>>, right_document: Arc<RwLock<Document>>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let left_editor = cx.new(|_cx| Editor::new(left_document.clone()));
+        let right_editor = cx.new(|_cx| Editor::new(right_document.clone()));
         let appearance = cx.global::<Appearance>().clone();
         let left_view = cx.new(|cx| {
             HexView::new(left_editor, cx)
@@ -96,8 +96,8 @@ impl DiffPanel {
         }));
 
         Self {
-            left_buffer,
-            right_buffer,
+            left_document,
+            right_document,
             left_view,
             right_view,
             diff_result: None,
@@ -184,12 +184,12 @@ impl DiffPanel {
         }
     }
 
-    fn left_path(&self) -> &std::path::Path {
-        self.left_buffer.path()
+    fn left_path(&self) -> std::path::PathBuf {
+        self.left_document.read().unwrap().buffer.path().to_path_buf()
     }
 
-    fn right_path(&self) -> &std::path::Path {
-        self.right_buffer.path()
+    fn right_path(&self) -> std::path::PathBuf {
+        self.right_document.read().unwrap().buffer.path().to_path_buf()
     }
 }
 
@@ -207,8 +207,18 @@ impl Panel for DiffPanel {
     }
 
     fn title(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let left_name = self.left_path().file_name().and_then(|n| n.to_str()).unwrap_or("Unknown");
-        let right_name = self.right_path().file_name().and_then(|n| n.to_str()).unwrap_or("Unknown");
+        let left_name = self
+            .left_path()
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(|s| s.to_string())
+            .unwrap_or("Unknown".to_string());
+        let right_name = self
+            .right_path()
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(|s| s.to_string())
+            .unwrap_or("Unknown".to_string());
         let title = format!("Diff: {} ↔ {}", left_name, right_name);
 
         let theme = cx.theme();

@@ -1,5 +1,5 @@
 use crate::actions::{SearchNext, SearchPrev, ToggleSearch};
-use crate::core::buffer::FileBuffer;
+use crate::core::document::Document;
 use crate::core::editor::Editor;
 use gpui::prelude::*;
 use gpui::*;
@@ -9,6 +9,7 @@ use gpui_component::{ActiveTheme, PixelsExt};
 use std::cmp;
 use std::ops::Range;
 use std::sync::Arc;
+use std::sync::RwLock;
 
 #[allow(dead_code)]
 pub enum HexViewEvent {
@@ -224,13 +225,13 @@ impl HexView {
         let start_byte = self.scroll_offset * BYTES_PER_ROW;
         let visible_rows = self.get_visible_rows();
         let end_byte = start_byte + (visible_rows * BYTES_PER_ROW);
-        let end_byte = end_byte.min(self.editor.read(cx).buffer.len());
+        let end_byte = end_byte.min(self.editor.read(cx).total_size());
         (start_byte, end_byte)
     }
 
     pub fn set_scroll_offset(&mut self, offset: usize, cx: &mut Context<Self>) {
         let row_height = px(ROW_HEIGHT);
-        let total_rows = (self.editor.read(cx).buffer.len() + BYTES_PER_ROW - 1) / BYTES_PER_ROW;
+        let total_rows = (self.editor.read(cx).total_size() + BYTES_PER_ROW - 1) / BYTES_PER_ROW;
         let max_offset = total_rows.saturating_sub(1);
         let new_offset = offset.min(max_offset);
 
@@ -304,7 +305,7 @@ impl HexView {
         }
 
         let byte_pos = row * BYTES_PER_ROW + byte_in_row;
-        if byte_pos >= self.editor.read(cx).buffer.len() {
+        if byte_pos >= self.editor.read(cx).total_size() {
             return None;
         }
 
@@ -346,7 +347,7 @@ impl HexView {
         let byte_in_row = byte_in_row.max(0).min((BYTES_PER_ROW - 1) as i32) as usize;
 
         let byte_pos = row * BYTES_PER_ROW + byte_in_row;
-        Some(byte_pos.min(self.editor.read(cx).buffer.len().saturating_sub(1)))
+        Some(byte_pos.min(self.editor.read(cx).total_size().saturating_sub(1)))
     }
 
     const SCROLL_TRIGGER_MARGIN: f32 = 32.0;
@@ -356,7 +357,7 @@ impl HexView {
         let row_height = px(ROW_HEIGHT);
         let handle_y = self.scroll_handle.offset().y;
         let handle_row = ((-handle_y).max(px(0.)) / row_height).round() as usize;
-        let total_rows = (self.editor.read(cx).buffer.len() + BYTES_PER_ROW - 1) / BYTES_PER_ROW;
+        let total_rows = (self.editor.read(cx).total_size() + BYTES_PER_ROW - 1) / BYTES_PER_ROW;
         if handle_row != self.scroll_offset {
             self.scroll_offset = handle_row.min(total_rows.saturating_sub(1));
             cx.notify();
@@ -411,7 +412,7 @@ impl HexView {
         let row_height = px(ROW_HEIGHT);
         let handle_y = self.scroll_handle.offset().y;
         let handle_row = ((-handle_y).max(px(0.)) / row_height).round() as usize;
-        let total_rows = (self.editor.read(cx).buffer.len() + BYTES_PER_ROW - 1) / BYTES_PER_ROW;
+        let total_rows = (self.editor.read(cx).total_size() + BYTES_PER_ROW - 1) / BYTES_PER_ROW;
         if handle_row != self.scroll_offset {
             self.scroll_offset = handle_row.min(total_rows.saturating_sub(1));
             cx.notify();
@@ -423,7 +424,7 @@ impl HexView {
 
     fn on_scroll_wheel(&mut self, event: &ScrollWheelEvent, _window: &mut Window, cx: &mut Context<Self>) {
         let row_height = px(ROW_HEIGHT);
-        let total_rows = (self.editor.read(cx).buffer.len() + BYTES_PER_ROW - 1) / BYTES_PER_ROW;
+        let total_rows = (self.editor.read(cx).total_size() + BYTES_PER_ROW - 1) / BYTES_PER_ROW;
         let max_offset = total_rows.saturating_sub(1).max(0) as i32;
 
         let delta_y = event.delta.pixel_delta(row_height).y.as_f32() as i32;
@@ -601,9 +602,9 @@ impl Focusable for HexView {
 impl Render for HexView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let editor = self.editor.read(cx);
-        let buffer = editor.buffer.clone();
-        let buffer_len = buffer.len();
-        let total_rows = ((buffer_len + BYTES_PER_ROW - 1) / BYTES_PER_ROW).max(1);
+        let document = editor.document.clone();
+        let total_size = editor.total_size();
+        let total_rows = ((total_size + BYTES_PER_ROW - 1) / BYTES_PER_ROW).max(1);
 
         let visible_rows = self.get_visible_rows();
         let extra_scroll_rows = visible_rows.saturating_sub(1);
@@ -655,7 +656,7 @@ impl Render for HexView {
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .child(HexViewElement {
                 view: cx.entity().downgrade(),
-                buffer,
+                document,
                 selection_start,
                 selection_end,
                 cursor_offset,
@@ -680,7 +681,7 @@ impl Render for HexView {
 
 struct HexViewElement {
     view: WeakEntity<HexView>,
-    buffer: Arc<FileBuffer>,
+    document: Arc<RwLock<Document>>,
     selection_start: Option<usize>,
     selection_end: Option<usize>,
     cursor_offset: usize,
@@ -741,7 +742,8 @@ impl Element for HexViewElement {
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
         // Ensure at least one line is shown, even for empty buffer
-        let line_count = ((self.buffer.len() + BYTES_PER_ROW - 1) / BYTES_PER_ROW).max(1);
+        let buffer_len = self.document.read().unwrap().buffer.len();
+        let line_count = ((buffer_len + BYTES_PER_ROW - 1) / BYTES_PER_ROW).max(1);
         let header_height = if self.show_header { px(HEADER_HEIGHT) } else { px(0.) };
 
         let row_height = px(ROW_HEIGHT);
@@ -763,7 +765,8 @@ impl Element for HexViewElement {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        let buffer = self.buffer.clone();
+        let document = self.document.read().unwrap();
+        let buffer = &document.buffer;
         let selection_start = self.selection_start;
         let selection_end = self.selection_end;
         let highlights = &self.highlights;

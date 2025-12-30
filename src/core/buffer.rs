@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 /// A buffer to hold the contents of a file.
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct FileBuffer {
     path: PathBuf,
     data: Vec<u8>,
@@ -48,6 +49,22 @@ impl FileBuffer {
         let start = start.min(self.data.len());
         let end = (start + len).min(self.data.len());
         &self.data[start..end]
+    }
+
+    /// Inserts a byte at the specified index.
+    pub fn insert(&mut self, index: usize, byte: u8) {
+        if index <= self.data.len() {
+            self.data.insert(index, byte);
+        }
+    }
+
+    /// Removes a byte at the specified index and returns it.
+    pub fn remove(&mut self, index: usize) -> Option<u8> {
+        if index < self.data.len() {
+            Some(self.data.remove(index))
+        } else {
+            None
+        }
     }
 }
 

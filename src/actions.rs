@@ -1,8 +1,8 @@
-use crate::core::buffer::FileBuffer;
+use crate::core::document::Document;
 use gpui::Action;
 use schemars::JsonSchema;
 use serde::Deserialize;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 #[derive(Clone, PartialEq, Deserialize, JsonSchema, Action)]
 #[action(namespace = app)]
@@ -73,7 +73,7 @@ pub struct ToggleFileTree;
 pub struct OpenSettings;
 
 #[derive(Clone)]
-pub struct AddEditorPanel(pub Arc<FileBuffer>);
+pub struct AddEditorPanel(pub Arc<RwLock<Document>>);
 
 impl Action for AddEditorPanel {
     fn name(&self) -> &'static str {
