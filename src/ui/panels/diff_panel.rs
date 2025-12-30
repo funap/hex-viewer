@@ -1,5 +1,5 @@
-use crate::analysis::diff::{DiffChunk, DiffResult};
-use crate::data::file_buffer::FileBuffer;
+use crate::core::buffer::FileBuffer;
+use crate::core::diff::{DiffChunk, DiffResult};
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::button::{Button, ButtonVariants};
@@ -8,9 +8,9 @@ use gpui_component::{ActiveTheme, Icon, IconName, h_flex};
 use std::sync::Arc;
 
 use crate::actions::{NextDifference, PrevDifference, ToggleSyncScroll};
-use crate::data::appearance::Appearance;
-use crate::data::editor::Editor;
-use crate::ui::component::hex_view::{HexView, HexViewEvent};
+use crate::core::appearance::Appearance;
+use crate::core::editor::Editor;
+use crate::ui::components::hex_view::{HexView, HexViewEvent};
 
 const CONTEXT: &str = "DiffPanel";
 

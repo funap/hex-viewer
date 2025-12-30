@@ -1,5 +1,5 @@
 use crate::app_state::AppState;
-use crate::data::appearance::Appearance;
+use crate::core::appearance::Appearance;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::ActiveTheme;

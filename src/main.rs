@@ -2,14 +2,13 @@ use gpui::Application;
 use gpui_component_assets::Assets;
 
 mod actions;
-mod analysis;
 mod app_state;
-mod data;
+mod core;
 mod service;
 mod theme;
 mod ui;
 
-use crate::data::appearance::Appearance;
+use crate::core::appearance::Appearance;
 use ui::workspace::Workspace;
 
 impl gpui::Global for Appearance {}
@@ -30,9 +29,9 @@ fn main() {
         gpui_component::init(cx);
         theme::init(cx);
         ui::workspace::init(cx);
-        ui::file_tree_panel::init(cx);
-        ui::editor_panel::init(cx);
-        ui::diff_panel::init(cx);
+        ui::panels::file_tree_panel::init(cx);
+        ui::panels::editor_panel::init(cx);
+        ui::panels::diff_panel::init(cx);
 
         // Parse command line arguments (skip the first one which is the program name)
         let mut files_to_open = Vec::new();

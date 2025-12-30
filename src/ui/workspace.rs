@@ -4,14 +4,14 @@ use gpui_component::ActiveTheme;
 
 use crate::actions::*;
 
-use crate::ui::editor_panel::EditorPanel;
-use crate::ui::file_tree_panel::FileTreePanel;
+use crate::ui::panels::editor_panel::EditorPanel;
+use crate::ui::panels::file_tree_panel::FileTreePanel;
 
-use crate::ui::toolbar::AppTitleBar;
+use crate::ui::components::toolbar::AppTitleBar;
 
 use crate::app_state::AppState;
-use crate::data::editor::Editor;
-use crate::ui::status_bar::StatusBar;
+use crate::core::editor::Editor;
+use crate::ui::components::status_bar::StatusBar;
 use gpui_component::Root;
 use gpui_component::dock::{DockArea, DockItem, DockPlacement};
 use gpui_component::menu::AppMenuBar;
@@ -51,7 +51,7 @@ impl Workspace {
         let title_bar = cx.new(|_cx| AppTitleBar { app_menu_bar });
 
         cx.subscribe_in(&title_bar, window, |this, _, event, window, cx| match event {
-            crate::ui::toolbar::AppTitleBarEvent::OpenSettings => {
+            crate::ui::components::toolbar::AppTitleBarEvent::OpenSettings => {
                 this.open_settings_panel(window, cx);
             }
         })
@@ -59,7 +59,7 @@ impl Workspace {
 
         let status_bar = cx.new(|cx| StatusBar::new(cx));
         cx.subscribe(&status_bar, |this, _, event, cx| match event {
-            crate::ui::status_bar::StatusBarEvent::ToggleFileTree => {
+            crate::ui::components::status_bar::StatusBarEvent::ToggleFileTree => {
                 this.is_file_tree_visible = !this.is_file_tree_visible;
                 cx.notify();
             }
@@ -68,7 +68,7 @@ impl Workspace {
 
         let file_tree = cx.new(|cx| FileTreePanel::new(FILE_TREE_PANEL_TITLE, cx));
         cx.subscribe(&file_tree, |_, _, event, cx| match event {
-            crate::ui::file_tree_panel::FileTreeEvent::OpenFile(path) => {
+            crate::ui::panels::file_tree_panel::FileTreeEvent::OpenFile(path) => {
                 cx.dispatch_action(&crate::actions::OpenFile {
                     path: path.to_string_lossy().to_string(),
                 });
@@ -192,7 +192,8 @@ impl Workspace {
 
             if let Some(workspace) = this.upgrade() {
                 let left_result = app.editor_service.open_file(std::path::PathBuf::from(left_path)).await;
-                let right_result = app.editor_service.open_file(std::path::PathBuf::from(right_path)).await;
+                let right_result: anyhow::Result<std::sync::Arc<crate::core::buffer::FileBuffer>> =
+                    app.editor_service.open_file(std::path::PathBuf::from(right_path)).await;
 
                 if let (Ok(left_buffer), Ok(right_buffer)) = (left_result, right_result) {
                     let _ = workspace.update_in(window, |_, window, cx| {
@@ -203,7 +204,7 @@ impl Workspace {
                             let diff_result = diff_result_task.await;
 
                             let _ = workspace.update_in(window, |_workspace, window, cx| {
-                                use crate::ui::diff_panel::DiffPanel;
+                                use crate::ui::panels::diff_panel::DiffPanel;
                                 let diff_view = cx.new(|cx| {
                                     let mut view = DiffPanel::new(left_buffer, right_buffer, window, cx);
                                     view.set_diff_result(diff_result, cx);
@@ -234,7 +235,7 @@ impl Workspace {
     }
 
     fn open_settings_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        use crate::ui::settings_panel::SettingsPanel;
+        use crate::ui::panels::settings_panel::SettingsPanel;
 
         let dock_area = self.dock_area.read(cx);
         let existing_panel = Self::check_has_settings_panel(dock_area.items());
@@ -253,11 +254,11 @@ impl Workspace {
         });
     }
 
-    fn check_has_settings_panel(dock_item: &DockItem) -> Option<Entity<crate::ui::settings_panel::SettingsPanel>> {
+    fn check_has_settings_panel(dock_item: &DockItem) -> Option<Entity<crate::ui::panels::settings_panel::SettingsPanel>> {
         match dock_item {
             DockItem::Tabs { items, .. } => {
                 for item in items {
-                    if let Ok(panel) = item.view().downcast::<crate::ui::settings_panel::SettingsPanel>() {
+                    if let Ok(panel) = item.view().downcast::<crate::ui::panels::settings_panel::SettingsPanel>() {
                         return Some(panel);
                     }
                 }
@@ -345,10 +346,10 @@ impl Workspace {
                     if item.view().downcast::<EditorPanel>().is_ok() {
                         return true;
                     }
-                    if item.view().downcast::<crate::ui::diff_panel::DiffPanel>().is_ok() {
+                    if item.view().downcast::<crate::ui::panels::diff_panel::DiffPanel>().is_ok() {
                         return true;
                     }
-                    if item.view().downcast::<crate::ui::settings_panel::SettingsPanel>().is_ok() {
+                    if item.view().downcast::<crate::ui::panels::settings_panel::SettingsPanel>().is_ok() {
                         return true;
                     }
                 }
@@ -369,10 +370,10 @@ impl Workspace {
                 if view.view().downcast::<EditorPanel>().is_ok() {
                     return true;
                 }
-                if view.view().downcast::<crate::ui::diff_panel::DiffPanel>().is_ok() {
+                if view.view().downcast::<crate::ui::panels::diff_panel::DiffPanel>().is_ok() {
                     return true;
                 }
-                if view.view().downcast::<crate::ui::settings_panel::SettingsPanel>().is_ok() {
+                if view.view().downcast::<crate::ui::panels::settings_panel::SettingsPanel>().is_ok() {
                     return true;
                 }
             }

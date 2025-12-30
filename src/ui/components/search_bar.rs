@@ -6,7 +6,7 @@ use gpui_component::{
     input::{self, Input, InputState},
 };
 
-use crate::analysis::search::SearchMode;
+use crate::core::search::SearchMode;
 
 #[allow(dead_code)]
 pub enum SearchBarEvent {

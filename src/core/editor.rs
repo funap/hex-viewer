@@ -1,4 +1,4 @@
-use crate::data::file_buffer::FileBuffer;
+use crate::core::buffer::FileBuffer;
 use std::cmp;
 use std::ops::Range;
 use std::sync::Arc;

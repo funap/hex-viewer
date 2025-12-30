@@ -3,11 +3,11 @@ use gpui::{App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoEleme
 use gpui_component::dock::{Panel, PanelEvent};
 
 use crate::actions::{FocusHexView, SearchNext, SearchPrev, ToggleSearch};
-use crate::analysis::search::SearchMode;
 use crate::app_state::AppState;
-use crate::data::appearance::Appearance;
-use crate::ui::component::hex_view::{self, HexView};
-use crate::ui::component::search_bar::{SearchBar, SearchBarEvent};
+use crate::core::appearance::Appearance;
+use crate::core::search::SearchMode;
+use crate::ui::components::hex_view::{self, HexView};
+use crate::ui::components::search_bar::{SearchBar, SearchBarEvent};
 use gpui_component::{ActiveTheme, Icon, IconName, h_flex};
 
 const CONTEXT: &str = "EditorPanel";
@@ -27,7 +27,7 @@ pub(crate) fn init(cx: &mut App) {
     ]);
 }
 
-use crate::data::editor::Editor;
+use crate::core::editor::Editor;
 
 pub struct EditorPanel {
     editor: Entity<Editor>,
@@ -79,8 +79,8 @@ impl EditorPanel {
         .detach();
 
         // Subscribe to HexView scroll events to update highlights when scrolling
-        cx.subscribe(&hex_view, |this, _, event: &crate::ui::component::hex_view::HexViewEvent, cx| {
-            if let crate::ui::component::hex_view::HexViewEvent::Scrolled(_) = event {
+        cx.subscribe(&hex_view, |this, _, event: &crate::ui::components::hex_view::HexViewEvent, cx| {
+            if let crate::ui::components::hex_view::HexViewEvent::Scrolled(_) = event {
                 // Update highlights if there's an active search
                 if this.is_search_visible {
                     let editor = this.editor.read(cx);
