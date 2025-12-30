@@ -8,6 +8,7 @@ use gpui_component::{ActiveTheme, Icon, IconName, h_flex};
 use std::sync::Arc;
 
 use crate::actions::{NextDifference, PrevDifference, ToggleSyncScroll};
+use crate::appearance::Appearance;
 use crate::model::editor::Editor;
 use crate::ui::component::hex_view::{HexView, HexViewEvent};
 
@@ -38,8 +39,17 @@ impl DiffPanel {
     pub fn new(left_buffer: Arc<FileBuffer>, right_buffer: Arc<FileBuffer>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let left_editor = cx.new(|_cx| Editor::new(left_buffer.clone()));
         let right_editor = cx.new(|_cx| Editor::new(right_buffer.clone()));
-        let left_view = cx.new(|cx| HexView::new(left_editor, cx));
-        let right_view = cx.new(|cx| HexView::new(right_editor, cx));
+        let appearance = cx.global::<Appearance>().clone();
+        let left_view = cx.new(|cx| {
+            HexView::new(left_editor, cx)
+                .font_family(appearance.font_family.clone())
+                .font_size(appearance.font_size)
+        });
+        let right_view = cx.new(|cx| {
+            HexView::new(right_editor, cx)
+                .font_family(appearance.font_family.clone())
+                .font_size(appearance.font_size)
+        });
 
         let focus_handle = cx.focus_handle();
 
@@ -69,6 +79,20 @@ impl DiffPanel {
                     this.is_syncing = false;
                 }
             }
+        }));
+
+        subscriptions.push(cx.observe_global::<Appearance>(|this, cx| {
+            let appearance = cx.global::<Appearance>();
+            let font_family = appearance.font_family.clone();
+            let font_size = appearance.font_size;
+            this.left_view.update(cx, |view, cx| {
+                view.set_font_family(font_family.clone(), cx);
+                view.set_font_size(font_size, cx);
+            });
+            this.right_view.update(cx, |view, cx| {
+                view.set_font_family(font_family, cx);
+                view.set_font_size(font_size, cx);
+            });
         }));
 
         Self {
