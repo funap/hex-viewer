@@ -50,3 +50,46 @@ impl FileBuffer {
         &self.data[start..end]
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new() {
+        let path = PathBuf::from("test.txt");
+        let data = vec![1, 2, 3];
+        let buffer = FileBuffer::new(path.clone(), data.clone());
+
+        assert_eq!(buffer.path(), path.as_path());
+        assert_eq!(buffer.data(), &data[..]);
+        assert_eq!(buffer.len(), 3);
+        assert!(!buffer.is_empty());
+    }
+
+    #[test]
+    fn test_empty() {
+        let buffer = FileBuffer::empty();
+        assert_eq!(buffer.path(), Path::new("Untitled"));
+        assert!(buffer.is_empty());
+        assert_eq!(buffer.len(), 0);
+    }
+
+    #[test]
+    fn test_get_range() {
+        let data = vec![10, 20, 30, 40, 50];
+        let buffer = FileBuffer::new(PathBuf::from("test.bin"), data);
+
+        // Valid range
+        assert_eq!(buffer.get_range(1, 3), &[20, 30, 40]);
+
+        // Range extending beyond end
+        assert_eq!(buffer.get_range(3, 10), &[40, 50]);
+
+        // Start beyond end
+        assert_eq!(buffer.get_range(10, 5), &[] as &[u8]);
+
+        // Empty range
+        assert_eq!(buffer.get_range(0, 0), &[] as &[u8]);
+    }
+}

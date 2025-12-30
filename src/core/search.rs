@@ -87,8 +87,6 @@ pub fn find_occurrences(data: &[u8], pattern: &[u8], limit: SearchLimit, range: 
 
     for i in start..=search_end {
         if &data[i..i + pattern_len] == pattern {
-            results.push(i);
-
             // Track first match for range-based limiting
             if first_match.is_none() {
                 first_match = Some(i);
@@ -100,6 +98,7 @@ pub fn find_occurrences(data: &[u8], pattern: &[u8], limit: SearchLimit, range: 
                     if results.len() >= max {
                         break;
                     }
+                    results.push(i);
                 }
                 SearchLimit::Range(range_bytes) => {
                     if let Some(first) = first_match {
@@ -107,13 +106,70 @@ pub fn find_occurrences(data: &[u8], pattern: &[u8], limit: SearchLimit, range: 
                             break;
                         }
                     }
+                    results.push(i);
                 }
                 SearchLimit::Unlimited => {
-                    // Continue searching
+                    results.push(i);
                 }
             }
         }
     }
 
     results
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_find_occurrences_text() {
+        let data = b"Hello World Hello";
+        let pattern = b"Hello";
+        let results = find_occurrences(data, pattern, SearchLimit::Unlimited, None);
+        assert_eq!(results, vec![0, 12]);
+    }
+
+    #[test]
+    fn test_find_occurrences_limit_count() {
+        let data = b"AA AA AA AA";
+        let pattern = b"AA";
+        let results = find_occurrences(data, pattern, SearchLimit::Count(2), None);
+        assert_eq!(results, vec![0, 3]);
+    }
+
+    #[test]
+    fn test_find_occurrences_limit_range() {
+        let data = b"AA..AA....AA";
+        let pattern = b"AA";
+        // First match at 0. Range limit 5 means look until index 0 + 5.
+        // Second match at 4. (4 < 5) should be found.
+        // Third match at 10. (10 >= 5) should be excluded.
+        let results = find_occurrences(data, pattern, SearchLimit::Range(5), None);
+        assert_eq!(results, vec![0, 4]);
+    }
+
+    #[test]
+    fn test_find_occurrences_range_restriction() {
+        let data = b"0123456789";
+        let pattern = b"34";
+
+        // Range inclusive of match
+        let results = find_occurrences(data, pattern, SearchLimit::Unlimited, Some(2..6));
+        assert_eq!(results, vec![3]);
+
+        // Range exclusive of match (start after)
+        let results = find_occurrences(data, pattern, SearchLimit::Unlimited, Some(5..8));
+        assert!(results.is_empty());
+
+        // Range exclusive of match (end before)
+        let results = find_occurrences(data, pattern, SearchLimit::Unlimited, Some(0..3));
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_empty_pattern_or_data() {
+        assert!(find_occurrences(b"", b"test", SearchLimit::Unlimited, None).is_empty());
+        assert!(find_occurrences(b"data", b"", SearchLimit::Unlimited, None).is_empty());
+    }
 }

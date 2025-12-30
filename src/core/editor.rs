@@ -295,3 +295,96 @@ impl Editor {
         self.search_state.current_result_index.and_then(|i| self.search_state.results.get(i).copied())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_editor_with_content(content: &[u8]) -> Editor {
+        let buffer = Arc::new(FileBuffer::new(std::path::PathBuf::from("test"), content.to_vec()));
+        Editor::new(buffer)
+    }
+
+    #[test]
+    fn test_initialization() {
+        let editor = create_editor_with_content(b"test");
+        assert_eq!(editor.cursor_offset, 0);
+        assert!(editor.selection_start.is_none());
+    }
+
+    #[test]
+    fn test_cursor_movement() {
+        let mut editor = create_editor_with_content(b"12345678901234567890"); // > 16 bytes for row testing
+
+        // Right
+        editor.move_right();
+        assert_eq!(editor.cursor_offset, 1);
+        editor.move_right();
+        assert_eq!(editor.cursor_offset, 2);
+
+        // Left
+        editor.move_left();
+        assert_eq!(editor.cursor_offset, 1);
+
+        // Down (BYTES_PER_ROW = 16)
+        editor.cursor_offset = 0;
+        editor.move_down();
+        assert_eq!(editor.cursor_offset, 16);
+
+        // Up
+        editor.move_up();
+        assert_eq!(editor.cursor_offset, 0);
+
+        // Boundaries
+        editor.move_left();
+        assert_eq!(editor.cursor_offset, 0); // Should stick at 0
+
+        editor.end(); // Move to end
+        let end_pos = editor.cursor_offset;
+        editor.move_right();
+        assert_eq!(editor.cursor_offset, end_pos); // Should stick at end
+    }
+
+    #[test]
+    fn test_selection() {
+        let mut editor = create_editor_with_content(b"12345");
+
+        // Select Right
+        editor.select_right();
+        assert_eq!(editor.selection_start, Some(0));
+        assert_eq!(editor.selection_end, Some(1));
+        assert_eq!(editor.cursor_offset, 1);
+
+        // Clear selection on move
+        editor.move_right();
+        assert!(editor.selection_start.is_none());
+        assert!(editor.selection_end.is_none());
+
+        // Select All
+        editor.select_all();
+        assert_eq!(editor.selection_start, Some(0));
+        assert_eq!(editor.selection_end, Some(4));
+    }
+
+    #[test]
+    fn test_search_navigation() {
+        let mut editor = create_editor_with_content(b"AABBCCAA");
+        let results = vec![0, 6]; // Matches for "AA"
+        editor.set_search_results(results.clone(), true);
+
+        // Initial state
+        assert_eq!(editor.search_state.results, results);
+        assert_eq!(editor.search_state.current_result_index, Some(0));
+
+        // Next result
+        assert_eq!(editor.next_search_result(), Some(6));
+        assert_eq!(editor.search_state.current_result_index, Some(1));
+
+        // Wrap around
+        assert_eq!(editor.next_search_result(), Some(0));
+        assert_eq!(editor.search_state.current_result_index, Some(0));
+
+        // Previous result
+        assert_eq!(editor.prev_search_result(), Some(6));
+    }
+}

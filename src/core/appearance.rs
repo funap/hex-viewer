@@ -22,3 +22,23 @@ impl Appearance {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_appearance_default() {
+        let appearance = Appearance::default();
+        assert_eq!(appearance.font_size, 14.0);
+
+        #[cfg(target_os = "macos")]
+        assert_eq!(appearance.font_family, "Menlo");
+
+        #[cfg(target_os = "windows")]
+        assert_eq!(appearance.font_family, "Consolas");
+
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        assert_eq!(appearance.font_family, "DejaVu Sans Mono");
+    }
+}
