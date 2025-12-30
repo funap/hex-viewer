@@ -1,6 +1,6 @@
-use crate::model::editor::Editor;
-use crate::model::file_buffer::FileBuffer;
-use crate::model::search::SearchOptions;
+use crate::analysis::search::{self, SearchOptions};
+use crate::data::editor::Editor;
+use crate::data::file_buffer::FileBuffer;
 use gpui::{App, Entity, Task};
 use std::collections::HashMap;
 use std::ops::Range;
@@ -64,15 +64,15 @@ impl EditorService {
 
     /// Searches for a query in the given buffer based on the search options.
     /// Returns a Task that executes the search in the background.
-    pub fn search(&self, buffer: Arc<FileBuffer>, query: String, options: crate::model::search::SearchOptions, cx: &gpui::App) -> gpui::Task<Vec<usize>> {
+    pub fn search(&self, buffer: Arc<FileBuffer>, query: String, options: crate::analysis::search::SearchOptions, cx: &gpui::App) -> gpui::Task<Vec<usize>> {
         cx.background_executor().spawn(async move {
             if query.is_empty() {
                 return Vec::new();
             }
 
             match options.mode {
-                crate::model::search::SearchMode::Text => buffer.search_text(&query, options.limit, options.range.clone()),
-                crate::model::search::SearchMode::Hex => {
+                crate::analysis::search::SearchMode::Text => search::find_occurrences(buffer.data(), query.as_bytes(), options.limit, options.range.clone()),
+                crate::analysis::search::SearchMode::Hex => {
                     // Parse hex string (remove spaces and keep only valid hex characters)
                     let hex_str: String = query.chars().filter(|c| c.is_ascii_hexdigit()).collect();
 
@@ -89,7 +89,7 @@ impl EditorService {
                             .collect();
 
                         match bytes {
-                            Ok(pattern) => buffer.search_bytes(&pattern, options.limit, options.range.clone()),
+                            Ok(pattern) => search::find_occurrences(buffer.data(), &pattern, options.limit, options.range.clone()),
                             Err(_) => Vec::new(),
                         }
                     }
@@ -101,9 +101,9 @@ impl EditorService {
     /// Performs a search and updates the provided Editor entity with the results.
     pub fn perform_search(
         &self,
-        editor: gpui::Entity<crate::model::editor::Editor>,
+        editor: gpui::Entity<crate::data::editor::Editor>,
         query: String,
-        options: crate::model::search::SearchOptions,
+        options: crate::analysis::search::SearchOptions,
         is_full: bool,
         cx: &gpui::App,
     ) -> gpui::Task<()> {
@@ -134,14 +134,14 @@ impl EditorService {
         &self,
         editor: Entity<Editor>,
         query: String,
-        mode: crate::model::search::SearchMode,
+        mode: crate::analysis::search::SearchMode,
         viewport_range: Range<usize>,
         cx: &App,
     ) -> (Task<()>, Task<()>) {
         // 1. Immediate viewport search
         let viewport_options = SearchOptions {
             mode,
-            limit: crate::model::search::SearchLimit::Unlimited,
+            limit: crate::analysis::search::SearchLimit::Unlimited,
             range: Some(viewport_range),
         };
         let viewport_task = self.perform_search(editor.clone(), query.clone(), viewport_options, false, cx);
@@ -149,7 +149,7 @@ impl EditorService {
         // 2. Background full search
         let full_options = SearchOptions {
             mode,
-            limit: crate::model::search::SearchLimit::Unlimited,
+            limit: crate::analysis::search::SearchLimit::Unlimited,
             range: None,
         };
         let full_task = self.perform_search(editor, query, full_options, true, cx);
@@ -215,11 +215,11 @@ impl EditorService {
         });
     }
 
-    pub fn compute_diff(&self, left: Arc<FileBuffer>, right: Arc<FileBuffer>, cx: &gpui::App) -> gpui::Task<crate::model::diff::DiffResult> {
+    pub fn compute_diff(&self, left: Arc<FileBuffer>, right: Arc<FileBuffer>, cx: &gpui::App) -> gpui::Task<crate::analysis::diff::DiffResult> {
         cx.background_executor().spawn(async move {
             let left_data = left.data();
             let right_data = right.data();
-            crate::model::diff::compute_simple_diff(left_data, right_data)
+            crate::analysis::diff::compute_simple_diff(left_data, right_data)
         })
     }
 }

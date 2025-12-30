@@ -1,6 +1,6 @@
 use crate::actions::{SearchNext, SearchPrev, ToggleSearch};
-use crate::model::editor::Editor;
-use crate::model::file_buffer::FileBuffer;
+use crate::data::editor::Editor;
+use crate::data::file_buffer::FileBuffer;
 use gpui::prelude::*;
 use gpui::*;
 use gpui::{ScrollWheelEvent, WeakEntity};
@@ -54,7 +54,7 @@ pub const HEX_GAP: f32 = 4.0;
 pub const SECTION_GAP: f32 = 16.0;
 pub const OFFSET_X_START: f32 = 4.0;
 pub const SELECTION_PADDING: f32 = 2.0;
-pub use crate::model::editor::BYTES_PER_ROW;
+pub use crate::data::editor::BYTES_PER_ROW;
 // pub const FONT_FAMILY: &str = "Menlo"; // Removed in favor of global Appearance
 
 pub fn init(cx: &mut App) {

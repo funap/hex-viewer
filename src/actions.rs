@@ -1,4 +1,4 @@
-use crate::model::file_buffer::FileBuffer;
+use crate::data::file_buffer::FileBuffer;
 use gpui::Action;
 use schemars::JsonSchema;
 use serde::Deserialize;

@@ -1,4 +1,4 @@
-use crate::model::editor::Editor;
+use crate::data::editor::Editor;
 use crate::service::editor_service::EditorService;
 use gpui::{App, Entity, Global, WeakEntity};
 

@@ -1,4 +1,4 @@
-use crate::model::appearance::Appearance;
+use crate::data::appearance::Appearance;
 use gpui::prelude::*;
 use gpui::{Action, App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, ParentElement, Render, Subscription, Window, div, px};
 use gpui_component::{

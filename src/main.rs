@@ -2,13 +2,14 @@ use gpui::Application;
 use gpui_component_assets::Assets;
 
 mod actions;
+mod analysis;
 mod app_state;
-mod model;
+mod data;
 mod service;
 mod theme;
 mod ui;
 
-use crate::model::appearance::Appearance;
+use crate::data::appearance::Appearance;
 use ui::workspace::Workspace;
 
 impl gpui::Global for Appearance {}

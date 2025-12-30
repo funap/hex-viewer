@@ -10,7 +10,7 @@ use crate::ui::file_tree_panel::FileTreePanel;
 use crate::ui::toolbar::AppTitleBar;
 
 use crate::app_state::AppState;
-use crate::model::editor::Editor;
+use crate::data::editor::Editor;
 use crate::ui::status_bar::StatusBar;
 use gpui_component::Root;
 use gpui_component::dock::{DockArea, DockItem, DockPlacement};

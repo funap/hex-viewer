@@ -6,7 +6,7 @@ use gpui_component::{
     input::{self, Input, InputState},
 };
 
-use crate::model::search::SearchMode;
+use crate::analysis::search::SearchMode;
 
 #[allow(dead_code)]
 pub enum SearchBarEvent {
@@ -43,9 +43,7 @@ impl SearchBar {
 
                 // Start new debounce task (300ms)
                 let task = cx.spawn(async move |this, cx| {
-                    cx.background_executor()
-                        .timer(std::time::Duration::from_millis(300))
-                        .await;
+                    cx.background_executor().timer(std::time::Duration::from_millis(300)).await;
                     if let Some(this) = this.upgrade() {
                         this.update(cx, |this, cx| {
                             this.is_searching = true;
@@ -119,19 +117,17 @@ impl Render for SearchBar {
             .bg(cx.theme().background)
             .border_b_1()
             .border_color(cx.theme().border)
-            .on_key_down(
-                cx.listener(|_this, event: &gpui::KeyDownEvent, _window, cx| {
-                    if event.keystroke.key == "enter" {
-                        if event.keystroke.modifiers.shift {
-                            cx.emit(SearchBarEvent::Prev);
-                        } else {
-                            cx.emit(SearchBarEvent::Next);
-                        }
-                    } else if event.keystroke.key == "escape" {
-                        cx.emit(SearchBarEvent::Dismiss);
+            .on_key_down(cx.listener(|_this, event: &gpui::KeyDownEvent, _window, cx| {
+                if event.keystroke.key == "enter" {
+                    if event.keystroke.modifiers.shift {
+                        cx.emit(SearchBarEvent::Prev);
+                    } else {
+                        cx.emit(SearchBarEvent::Next);
                     }
-                }),
-            )
+                } else if event.keystroke.key == "escape" {
+                    cx.emit(SearchBarEvent::Dismiss);
+                }
+            }))
             .child(
                 div()
                     .flex()
@@ -157,43 +153,21 @@ impl Render for SearchBar {
                     ),
             )
             .child(
-                div().flex_1().child(
-                    Input::new(&self.input)
-                        .prefix(Icon::new(IconName::Search).size_3p5())
-                        .cleanable(true),
-                ),
+                div()
+                    .flex_1()
+                    .child(Input::new(&self.input).prefix(Icon::new(IconName::Search).size_3p5()).cleanable(true)),
             )
             .when(!result_info.is_empty(), |this| {
-                this.child(
-                    div()
-                        .text_sm()
-                        .text_color(cx.theme().muted_foreground)
-                        .child(result_info.clone()),
-                )
+                this.child(div().text_sm().text_color(cx.theme().muted_foreground).child(result_info.clone()))
             })
-            .child(
-                Button::new("prev")
-                    .ghost()
-                    .icon(IconName::ChevronUp)
-                    .on_click(cx.listener(|_, _, _, cx| {
-                        cx.emit(SearchBarEvent::Prev);
-                    })),
-            )
-            .child(
-                Button::new("next")
-                    .ghost()
-                    .icon(IconName::ChevronDown)
-                    .on_click(cx.listener(|_, _, _, cx| {
-                        cx.emit(SearchBarEvent::Next);
-                    })),
-            )
-            .child(
-                Button::new("close")
-                    .ghost()
-                    .icon(IconName::Close)
-                    .on_click(cx.listener(|_, _, _, cx| {
-                        cx.emit(SearchBarEvent::Dismiss);
-                    })),
-            )
+            .child(Button::new("prev").ghost().icon(IconName::ChevronUp).on_click(cx.listener(|_, _, _, cx| {
+                cx.emit(SearchBarEvent::Prev);
+            })))
+            .child(Button::new("next").ghost().icon(IconName::ChevronDown).on_click(cx.listener(|_, _, _, cx| {
+                cx.emit(SearchBarEvent::Next);
+            })))
+            .child(Button::new("close").ghost().icon(IconName::Close).on_click(cx.listener(|_, _, _, cx| {
+                cx.emit(SearchBarEvent::Dismiss);
+            })))
     }
 }

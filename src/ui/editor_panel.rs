@@ -3,9 +3,9 @@ use gpui::{App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoEleme
 use gpui_component::dock::{Panel, PanelEvent};
 
 use crate::actions::{FocusHexView, SearchNext, SearchPrev, ToggleSearch};
+use crate::analysis::search::SearchMode;
 use crate::app_state::AppState;
-use crate::model::appearance::Appearance;
-use crate::model::search::SearchMode;
+use crate::data::appearance::Appearance;
 use crate::ui::component::hex_view::{self, HexView};
 use crate::ui::component::search_bar::{SearchBar, SearchBarEvent};
 use gpui_component::{ActiveTheme, Icon, IconName, h_flex};
@@ -27,7 +27,7 @@ pub(crate) fn init(cx: &mut App) {
     ]);
 }
 
-use crate::model::editor::Editor;
+use crate::data::editor::Editor;
 
 pub struct EditorPanel {
     editor: Entity<Editor>,
