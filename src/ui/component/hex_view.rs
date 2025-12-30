@@ -955,21 +955,21 @@ impl Element for HexViewElement {
 
             // Show cursor if focused, even for empty buffer
             if focus_handle.is_focused(window) {
-                let cursor_row = if buffer.len() > 0 { cursor_offset / 16 } else { 0 };
-                let byte_in_row = if buffer.len() > 0 { cursor_offset % 16 } else { 0 };
-                // Adjust for current scroll offset
-                let visible_cursor_row = if cursor_row >= self.scroll_offset {
-                    cursor_row - self.scroll_offset
-                } else {
-                    0
-                };
-                let y_pos = bounds.top() + header_height + row_height * visible_cursor_row as f32;
-                let cursor_x = hex_start_x + (hex_byte_width + hex_gap) * byte_in_row as f32;
+                let cursor_row = if buffer.len() > 0 { cursor_offset / BYTES_PER_ROW } else { 0 };
+                let byte_in_row = if buffer.len() > 0 { cursor_offset % BYTES_PER_ROW } else { 0 };
 
-                Some(fill(
-                    Bounds::new(point(cursor_x, y_pos), size(hex_byte_width, row_height)),
-                    theme.accent.opacity(0.3),
-                ))
+                if cursor_row >= start_row && cursor_row < end_row {
+                    let visible_cursor_row = cursor_row - start_row;
+                    let y_pos = bounds.top() + header_height + row_height * visible_cursor_row as f32;
+                    let cursor_x = hex_start_x + (hex_byte_width + hex_gap) * byte_in_row as f32;
+
+                    Some(fill(
+                        Bounds::new(point(cursor_x, y_pos), size(hex_byte_width, row_height)),
+                        theme.accent.opacity(0.3),
+                    ))
+                } else {
+                    None
+                }
             } else {
                 None
             }
