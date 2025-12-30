@@ -8,18 +8,6 @@ use std::ops::Range;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
-#[allow(dead_code)]
-pub enum MoveDirection {
-    Left,
-    Right,
-    Up,
-    Down,
-    PageUp(usize),
-    PageDown(usize),
-    Home,
-    End,
-}
-
 /// A service for managing file buffers and editor workflows.
 /// It caches open files to avoid redundant reads and ensures thread-safe access.
 #[allow(dead_code)]
@@ -186,64 +174,6 @@ impl EditorService {
         let full_task = self.perform_search(editor, query, full_options, true, cx);
 
         (viewport_task, full_task)
-    }
-
-    /// Moves the cursor in the specified direction and ensures visibility.
-    pub fn move_cursor(&self, editor: Entity<Editor>, direction: MoveDirection, cx: &mut App) {
-        editor.update(cx, |editor, cx| {
-            match direction {
-                MoveDirection::Left => editor.move_left(),
-                MoveDirection::Right => editor.move_right(),
-                MoveDirection::Up => editor.move_up(),
-                MoveDirection::Down => editor.move_down(),
-                MoveDirection::PageUp(rows) => editor.page_up(rows),
-                MoveDirection::PageDown(rows) => editor.page_down(rows),
-                MoveDirection::Home => editor.home(),
-                MoveDirection::End => editor.end(),
-            }
-            cx.notify();
-        });
-    }
-
-    /// Extends the selection in the specified direction.
-    pub fn select_cursor(&self, editor: Entity<Editor>, direction: MoveDirection, cx: &mut App) {
-        editor.update(cx, |editor, cx| {
-            match direction {
-                MoveDirection::Left => editor.select_left(),
-                MoveDirection::Right => editor.select_right(),
-                MoveDirection::Up => editor.select_up(),
-                MoveDirection::Down => editor.select_down(),
-                MoveDirection::PageUp(rows) => editor.select_page_up(rows),
-                MoveDirection::PageDown(rows) => editor.select_page_down(rows),
-                MoveDirection::Home => editor.select_home(),
-                MoveDirection::End => editor.select_end(),
-            }
-            cx.notify();
-        });
-    }
-
-    /// Sets the cursor offset directly.
-    pub fn set_cursor_offset(&self, editor: Entity<Editor>, offset: usize, cx: &mut App) {
-        editor.update(cx, |editor, cx| {
-            editor.set_cursor_offset(offset);
-            cx.notify();
-        });
-    }
-
-    /// Starts a drag operation.
-    pub fn start_drag(&self, editor: Entity<Editor>, offset: usize, cx: &mut App) {
-        editor.update(cx, |editor, cx| {
-            editor.start_drag(offset);
-            cx.notify();
-        });
-    }
-
-    /// Continues a drag operation.
-    pub fn continue_drag(&self, editor: Entity<Editor>, offset: usize, cx: &mut App) {
-        editor.update(cx, |editor, cx| {
-            editor.continue_drag(offset);
-            cx.notify();
-        });
     }
 
     pub fn compute_diff(&self, left: Arc<RwLock<Document>>, right: Arc<RwLock<Document>>, cx: &gpui::App) -> gpui::Task<crate::core::diff::DiffResult> {

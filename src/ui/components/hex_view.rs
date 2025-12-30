@@ -246,8 +246,9 @@ impl HexView {
     }
 
     pub fn set_cursor_offset(&mut self, offset: usize, cx: &mut Context<Self>) {
-        let editor_service = crate::app_state::AppState::global(cx).editor_service.clone();
-        editor_service.set_cursor_offset(self.editor.clone(), offset, cx);
+        self.editor.update(cx, |editor, _| {
+            editor.set_cursor_offset(offset);
+        });
         self.ensure_cursor_visible(cx);
     }
 
@@ -315,8 +316,9 @@ impl HexView {
     fn on_mouse_down(&mut self, event: &MouseDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
         if let Some(byte_pos) = self.byte_pos_from_point(event.position, cx) {
             self.is_dragging = true;
-            let editor_service = crate::app_state::AppState::global(cx).editor_service.clone();
-            editor_service.start_drag(self.editor.clone(), byte_pos, cx);
+            self.editor.update(cx, |editor, _| {
+                editor.start_drag(byte_pos);
+            });
             cx.notify();
             cx.emit(HexViewEvent::SelectionChanged {
                 start: Some(byte_pos),
@@ -393,8 +395,9 @@ impl HexView {
             }
 
             if let Some(byte_pos) = self.byte_pos_from_point_clamped(event.position, cx) {
-                let editor_service = crate::app_state::AppState::global(cx).editor_service.clone();
-                editor_service.continue_drag(self.editor.clone(), byte_pos, cx);
+                self.editor.update(cx, |editor, _| {
+                    editor.continue_drag(byte_pos);
+                });
                 cx.notify();
                 let editor = self.editor.read(cx);
                 cx.emit(HexViewEvent::SelectionChanged {
@@ -437,50 +440,58 @@ impl HexView {
     }
 
     fn move_left(&mut self, _: &MoveLeft, _window: &mut Window, cx: &mut Context<Self>) {
-        let editor_service = crate::app_state::AppState::global(cx).editor_service.clone();
-        editor_service.move_cursor(self.editor.clone(), crate::service::editor_service::MoveDirection::Left, cx);
+        self.editor.update(cx, |editor, _| {
+            editor.move_left();
+        });
         self.ensure_cursor_visible(cx);
     }
 
     fn move_right(&mut self, _: &MoveRight, _window: &mut Window, cx: &mut Context<Self>) {
-        let editor_service = crate::app_state::AppState::global(cx).editor_service.clone();
-        editor_service.move_cursor(self.editor.clone(), crate::service::editor_service::MoveDirection::Right, cx);
+        self.editor.update(cx, |editor, _| {
+            editor.move_right();
+        });
         self.ensure_cursor_visible(cx);
     }
 
     fn move_up(&mut self, _: &MoveUp, _window: &mut Window, cx: &mut Context<Self>) {
-        let editor_service = crate::app_state::AppState::global(cx).editor_service.clone();
-        editor_service.move_cursor(self.editor.clone(), crate::service::editor_service::MoveDirection::Up, cx);
+        self.editor.update(cx, |editor, _| {
+            editor.move_up();
+        });
         self.ensure_cursor_visible(cx);
     }
 
     fn move_down(&mut self, _: &MoveDown, _window: &mut Window, cx: &mut Context<Self>) {
-        let editor_service = crate::app_state::AppState::global(cx).editor_service.clone();
-        editor_service.move_cursor(self.editor.clone(), crate::service::editor_service::MoveDirection::Down, cx);
+        self.editor.update(cx, |editor, _| {
+            editor.move_down();
+        });
         self.ensure_cursor_visible(cx);
     }
 
     fn select_left(&mut self, _: &SelectLeft, _window: &mut Window, cx: &mut Context<Self>) {
-        let editor_service = crate::app_state::AppState::global(cx).editor_service.clone();
-        editor_service.select_cursor(self.editor.clone(), crate::service::editor_service::MoveDirection::Left, cx);
+        self.editor.update(cx, |editor, _| {
+            editor.select_left();
+        });
         self.ensure_cursor_visible(cx);
     }
 
     fn select_right(&mut self, _: &SelectRight, _window: &mut Window, cx: &mut Context<Self>) {
-        let editor_service = crate::app_state::AppState::global(cx).editor_service.clone();
-        editor_service.select_cursor(self.editor.clone(), crate::service::editor_service::MoveDirection::Right, cx);
+        self.editor.update(cx, |editor, _| {
+            editor.select_right();
+        });
         self.ensure_cursor_visible(cx);
     }
 
     fn select_up(&mut self, _: &SelectUp, _window: &mut Window, cx: &mut Context<Self>) {
-        let editor_service = crate::app_state::AppState::global(cx).editor_service.clone();
-        editor_service.select_cursor(self.editor.clone(), crate::service::editor_service::MoveDirection::Up, cx);
+        self.editor.update(cx, |editor, _| {
+            editor.select_up();
+        });
         self.ensure_cursor_visible(cx);
     }
 
     fn select_down(&mut self, _: &SelectDown, _window: &mut Window, cx: &mut Context<Self>) {
-        let editor_service = crate::app_state::AppState::global(cx).editor_service.clone();
-        editor_service.select_cursor(self.editor.clone(), crate::service::editor_service::MoveDirection::Down, cx);
+        self.editor.update(cx, |editor, _| {
+            editor.select_down();
+        });
         self.ensure_cursor_visible(cx);
     }
 
