@@ -1,31 +1,20 @@
-use std::path::{Path, PathBuf};
-
 /// A buffer to hold the contents of a file.
 #[allow(dead_code)]
 #[derive(Clone)]
-pub struct FileBuffer {
-    path: PathBuf,
+pub struct Buffer {
     data: Vec<u8>,
 }
 
 #[allow(dead_code)]
-impl FileBuffer {
-    /// Creates a new FileBuffer with the given path and data.
-    pub fn new(path: PathBuf, data: Vec<u8>) -> Self {
-        Self { path, data }
+impl Buffer {
+    /// Creates a new Buffer with the given data.
+    pub fn new(data: Vec<u8>) -> Self {
+        Self { data }
     }
 
-    /// Creates an empty FileBuffer with no file path.
+    /// Creates an empty Buffer.
     pub fn empty() -> Self {
-        Self {
-            path: PathBuf::from("Untitled"),
-            data: Vec::new(),
-        }
-    }
-
-    /// Returns the path of the file.
-    pub fn path(&self) -> &Path {
-        &self.path
+        Self { data: Vec::new() }
     }
 
     /// Returns the length of the buffer.
@@ -60,11 +49,7 @@ impl FileBuffer {
 
     /// Removes a byte at the specified index and returns it.
     pub fn remove(&mut self, index: usize) -> Option<u8> {
-        if index < self.data.len() {
-            Some(self.data.remove(index))
-        } else {
-            None
-        }
+        if index < self.data.len() { Some(self.data.remove(index)) } else { None }
     }
 }
 
@@ -74,11 +59,9 @@ mod tests {
 
     #[test]
     fn test_new() {
-        let path = PathBuf::from("test.txt");
         let data = vec![1, 2, 3];
-        let buffer = FileBuffer::new(path.clone(), data.clone());
+        let buffer = Buffer::new(data.clone());
 
-        assert_eq!(buffer.path(), path.as_path());
         assert_eq!(buffer.data(), &data[..]);
         assert_eq!(buffer.len(), 3);
         assert!(!buffer.is_empty());
@@ -86,8 +69,7 @@ mod tests {
 
     #[test]
     fn test_empty() {
-        let buffer = FileBuffer::empty();
-        assert_eq!(buffer.path(), Path::new("Untitled"));
+        let buffer = Buffer::empty();
         assert!(buffer.is_empty());
         assert_eq!(buffer.len(), 0);
     }
@@ -95,7 +77,7 @@ mod tests {
     #[test]
     fn test_get_range() {
         let data = vec![10, 20, 30, 40, 50];
-        let buffer = FileBuffer::new(PathBuf::from("test.bin"), data);
+        let buffer = Buffer::new(data);
 
         // Valid range
         assert_eq!(buffer.get_range(1, 3), &[20, 30, 40]);

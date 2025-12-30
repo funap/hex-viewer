@@ -106,6 +106,7 @@ impl EditorPanel {
 
         let _editor_subscription = cx.observe(&editor, |this, _, cx| {
             this.update_search_bar_results(cx);
+            cx.notify();
         });
 
         // Observe search bar for incremental search
@@ -143,7 +144,7 @@ impl EditorPanel {
     }
 
     pub fn path(&self, cx: &App) -> std::path::PathBuf {
-        self.editor.read(cx).document.read().unwrap().buffer.path().to_path_buf()
+        self.editor.read(cx).document.read().unwrap().path().to_path_buf()
     }
 
     fn toggle_search(&mut self, _: &ToggleSearch, window: &mut Window, cx: &mut Context<Self>) {
@@ -345,21 +346,22 @@ impl Panel for EditorPanel {
     }
 
     fn title(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let title = self
-            .editor
-            .read(cx)
-            .document
-            .read()
-            .unwrap()
-            .buffer
+        let editor = self.editor.read(cx);
+        let doc = editor.document.read().unwrap();
+
+        let mut name = doc
             .path()
             .file_name()
             .map(|name| name.to_string_lossy().to_string())
             .unwrap_or_else(|| "(untitled)".to_string());
 
+        if doc.is_dirty() {
+            name.push_str(" *");
+        }
+
         let theme = cx.theme();
 
-        h_flex().gap_2().items_center().child(title).child(
+        h_flex().gap_2().items_center().child(name).child(
             div()
                 .id("close-icon")
                 .cursor_pointer()
@@ -392,7 +394,7 @@ impl Panel for EditorPanel {
     fn dump(&self, cx: &App) -> gpui_component::dock::PanelState {
         let mut state = gpui_component::dock::PanelState::new(self);
         let panel_state = EditorPanelState {
-            path: Some(self.editor.read(cx).document.read().unwrap().buffer.path().to_path_buf()),
+            path: Some(self.editor.read(cx).document.read().unwrap().path().to_path_buf()),
         };
         state.info = gpui_component::dock::PanelInfo::panel(panel_state.to_value());
         state

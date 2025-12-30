@@ -45,4 +45,9 @@ impl History {
         self.undo_stack.clear();
         self.redo_stack.clear();
     }
+
+    /// Returns the current version of the history (length of the undo stack).
+    pub fn version(&self) -> usize {
+        self.undo_stack.len()
+    }
 }

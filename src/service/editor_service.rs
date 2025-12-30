@@ -1,4 +1,4 @@
-use crate::core::buffer::FileBuffer;
+use crate::core::buffer::Buffer;
 use crate::core::document::Document;
 use crate::core::editor::Editor;
 use crate::core::search::{self, SearchOptions};
@@ -49,8 +49,8 @@ impl EditorService {
 
         // If not in the cache, read the file without holding any lock.
         let data = tokio::fs::read(&path).await?;
-        let buffer = FileBuffer::new(path.clone(), data);
-        let new_document = Arc::new(RwLock::new(Document::new(buffer)));
+        let buffer = Buffer::new(data);
+        let new_document = Arc::new(RwLock::new(Document::new(path.clone(), buffer)));
 
         // Acquire a write lock to insert the new document into the cache.
         let mut documents = self.documents.write().unwrap();
@@ -66,7 +66,7 @@ impl EditorService {
 
     /// Searches for a query in the given buffer based on the search options.
     /// Returns a Task that executes the search in the background.
-    pub fn search(&self, buffer: Arc<FileBuffer>, query: String, options: crate::core::search::SearchOptions, cx: &gpui::App) -> gpui::Task<Vec<usize>> {
+    pub fn search(&self, buffer: Arc<Buffer>, query: String, options: crate::core::search::SearchOptions, cx: &gpui::App) -> gpui::Task<Vec<usize>> {
         cx.background_executor().spawn(async move {
             if query.is_empty() {
                 return Vec::new();
@@ -113,35 +113,29 @@ impl EditorService {
             let editor_read = editor.read(cx);
             let document = editor_read.document.read().unwrap();
             // We need a way to pass the buffer data to the background task.
-            // FileBuffer is not thread-safe refcounted by itself unless we clone the data or put it in Arc.
+            // Buffer is not thread-safe refcounted by itself unless we clone the data or put it in Arc.
             // But Editor has Arc<RwLock<Document>>.
-            // The search function takes Arc<FileBuffer>.
-            // We need to change the search function signature or create a temporary Arc<FileBuffer> (which triggers clone if FileBuffer is not Arc internally).
-            // FileBuffer has Vec<u8>. Cloning FileBuffer clones data.
-            // We should probably change `search` to take `Vec<u8>` or `Arc<Vec<u8>>` or maintain `Arc` inside FileBuffer?
-            // Or, simply clone it for now (expensive but safe).
-            // BETTER: Make FileBuffer hold `data: Arc<Vec<u8>>` or just pass the data clone.
-            // existing code: `let buffer = editor.read(cx).buffer.clone();` -- this was cloning Arc<RwLock<FileBuffer>> (wait, previous code was `buffer: Arc<RwLock<FileBuffer>>`).
-            // So it was cloning the Arc.
-            // Now Document holds `buffer: FileBuffer` directly.
+            // The search function takes Arc<Buffer>.
+            // We need to change the search function signature or create a temporary Arc<Buffer> (which triggers clone if Buffer is not Arc internally).
+            // Now Document holds `buffer: Buffer` directly.
             // So we can't just clone the Arc.
-            // We should clone the data or change FileBuffer to be cheap to clone (Arc inside).
+            // We should clone the data or change Buffer to be cheap to clone (Arc inside).
             // Given the context, I will clone the buffer data for now to get it working, or wrap it in Arc derived from Document? No.
-            // Let's modify `search` to take `Arc<FileBuffer>` is annoying if FileBuffer is not in Arc.
-            // Actually `EditorService::search` takes `Arc<FileBuffer>`.
-            // I should probably change `search` to take `FileBuffer` (clone) or `Vec<u8>`.
+            // Let's modify `search` to take `Arc<Buffer>` is annoying if Buffer is not in Arc.
+            // Actually `EditorService::search` takes `Arc<Buffer>`.
+            // I should probably change `search` to take `Buffer` (clone) or `Vec<u8>`.
             // Taking a closer look at `search` implementation: it spawns a task.
             // `cx.background_executor().spawn(async move { ... buffer.data() ... })`
-            // If I clone FileBuffer, it copies all data. That's bad for large files.
-            // The previous architecture had `Arc<RwLock<FileBuffer>>`.
-            // Now `Document` owns `FileBuffer`.
+            // If I clone Buffer, it copies all data. That's bad for large files.
+            // The previous architecture had `Arc<RwLock<Buffer>>`.
+            // Now `Document` owns `Buffer`.
             // If I want to search in background, I need a snapshot of data.
-            // So cloning `FileBuffer` (allocating new Vec) is actually correct for a consistent snapshot if we want to avoid locking for the duration of search.
-            // BUT, `FileBuffer` was previously shared via Arc.
-            // Let's assume for this refactor, `FileBuffer` is small enough or we simply clone it.
-            // Note: `FileBuffer` struct: `path: PathBuf, data: Vec<u8>`. Cloning it clones the vector.
-            // Optimization: Use `Arc<Vec<u8>>` in `FileBuffer` later.
-            // For now, I will create a new Arc<FileBuffer> from the clone.
+            // So cloning `Buffer` (allocating new Vec) is actually correct for a consistent snapshot if we want to avoid locking for the duration of search.
+            // BUT, `Buffer` was previously shared via Arc.
+            // Let's assume for this refactor, `Buffer` is small enough or we simply clone it.
+            // Note: `Buffer` struct: `path: PathBuf, data: Vec<u8>`. Cloning it clones the vector.
+            // Optimization: Use `Arc<Vec<u8>>` in `Buffer` later.
+            // For now, I will create a new Arc<Buffer> from the clone.
             Arc::new(document.buffer.clone())
         };
 

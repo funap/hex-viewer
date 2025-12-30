@@ -185,11 +185,11 @@ impl DiffPanel {
     }
 
     fn left_path(&self) -> std::path::PathBuf {
-        self.left_document.read().unwrap().buffer.path().to_path_buf()
+        self.left_document.read().unwrap().path().to_path_buf()
     }
 
     fn right_path(&self) -> std::path::PathBuf {
-        self.right_document.read().unwrap().buffer.path().to_path_buf()
+        self.right_document.read().unwrap().path().to_path_buf()
     }
 }
 
