@@ -1,3 +1,4 @@
+pub mod appearance;
 pub mod diff;
 pub mod editor;
 pub mod encoding;

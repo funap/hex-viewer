@@ -1,12 +1,10 @@
-use gpui::{App, Global, Pixels, SharedString};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Appearance {
-    pub font_family: SharedString,
-    pub font_size: Pixels,
+    pub font_family: String,
+    pub font_size: f32,
 }
-
-impl Global for Appearance {}
 
 impl Appearance {
     pub fn default() -> Self {
@@ -20,11 +18,7 @@ impl Appearance {
 
         Self {
             font_family: font_family.into(),
-            font_size: gpui::px(14.0),
+            font_size: 14.0,
         }
     }
-}
-
-pub fn init(cx: &mut App) {
-    cx.set_global(Appearance::default());
 }

@@ -3,13 +3,15 @@ use gpui_component_assets::Assets;
 
 mod actions;
 mod app_state;
-mod appearance;
 mod model;
 mod service;
 mod theme;
 mod ui;
 
+use crate::model::appearance::Appearance;
 use ui::workspace::Workspace;
+
+impl gpui::Global for Appearance {}
 
 fn main() {
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
@@ -22,7 +24,7 @@ fn main() {
 
     app.run(move |cx| {
         app_state::AppState::init(cx);
-        appearance::init(cx);
+        cx.set_global(Appearance::default());
 
         gpui_component::init(cx);
         theme::init(cx);

@@ -4,7 +4,7 @@ use gpui_component::dock::{Panel, PanelEvent};
 
 use crate::actions::{FocusHexView, SearchNext, SearchPrev, ToggleSearch};
 use crate::app_state::AppState;
-use crate::appearance::Appearance;
+use crate::model::appearance::Appearance;
 use crate::model::search::SearchMode;
 use crate::ui::component::hex_view::{self, HexView};
 use crate::ui::component::search_bar::{SearchBar, SearchBarEvent};
@@ -47,7 +47,7 @@ impl EditorPanel {
         let hex_view = cx.new(|cx| {
             HexView::new(editor.clone(), cx)
                 .font_family(appearance.font_family.clone())
-                .font_size(appearance.font_size)
+                .font_size(px(appearance.font_size))
         });
         let search_bar = cx.new(|cx| SearchBar::new(window, cx));
 
@@ -100,7 +100,7 @@ impl EditorPanel {
             let font_size = appearance.font_size;
             this.hex_view.update(cx, |this_hex_view, cx| {
                 this_hex_view.set_font_family(font_family, cx);
-                this_hex_view.set_font_size(font_size, cx);
+                this_hex_view.set_font_size(px(font_size), cx);
             });
         });
 

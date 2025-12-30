@@ -8,7 +8,7 @@ use gpui_component::{ActiveTheme, Icon, IconName, h_flex};
 use std::sync::Arc;
 
 use crate::actions::{NextDifference, PrevDifference, ToggleSyncScroll};
-use crate::appearance::Appearance;
+use crate::model::appearance::Appearance;
 use crate::model::editor::Editor;
 use crate::ui::component::hex_view::{HexView, HexViewEvent};
 
@@ -43,12 +43,12 @@ impl DiffPanel {
         let left_view = cx.new(|cx| {
             HexView::new(left_editor, cx)
                 .font_family(appearance.font_family.clone())
-                .font_size(appearance.font_size)
+                .font_size(px(appearance.font_size))
         });
         let right_view = cx.new(|cx| {
             HexView::new(right_editor, cx)
                 .font_family(appearance.font_family.clone())
-                .font_size(appearance.font_size)
+                .font_size(px(appearance.font_size))
         });
 
         let focus_handle = cx.focus_handle();
@@ -87,11 +87,11 @@ impl DiffPanel {
             let font_size = appearance.font_size;
             this.left_view.update(cx, |view, cx| {
                 view.set_font_family(font_family.clone(), cx);
-                view.set_font_size(font_size, cx);
+                view.set_font_size(px(font_size), cx);
             });
             this.right_view.update(cx, |view, cx| {
                 view.set_font_family(font_family, cx);
-                view.set_font_size(font_size, cx);
+                view.set_font_size(px(font_size), cx);
             });
         }));
 

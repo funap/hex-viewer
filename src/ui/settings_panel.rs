@@ -1,8 +1,8 @@
-use crate::appearance::Appearance;
+use crate::model::appearance::Appearance;
 use gpui::prelude::*;
 use gpui::{Action, App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, ParentElement, Render, Subscription, Window, div, px};
 use gpui_component::{
-    ActiveTheme, Icon, IconName, PixelsExt,
+    ActiveTheme, Icon, IconName,
     dock::{Panel, PanelEvent},
     h_flex,
     input::{self, Input, InputState},
@@ -28,7 +28,7 @@ impl SettingsPanel {
         // The global must be retrieved after the entities have been created.
         let (family, size) = {
             let appearance = cx.global::<Appearance>();
-            (appearance.font_family.to_string(), appearance.font_size.as_f32().to_string())
+            (appearance.font_family.clone(), appearance.font_size.to_string())
         };
 
         // Set initial values
@@ -50,7 +50,7 @@ impl SettingsPanel {
             if let input::InputEvent::Change = event {
                 let value = input.read(cx).value().to_string();
                 cx.update_global::<Appearance, _>(|appearance, _| {
-                    appearance.font_family = value.into();
+                    appearance.font_family = value;
                 });
             }
         }));
@@ -60,7 +60,7 @@ impl SettingsPanel {
                 let value = input.read(cx).value().to_string();
                 if let Ok(size) = value.parse::<f32>() {
                     cx.update_global::<Appearance, _>(|appearance, _| {
-                        appearance.font_size = px(size);
+                        appearance.font_size = size;
                     });
                 }
             }
@@ -76,8 +76,8 @@ impl SettingsPanel {
 
     fn on_action_update_setting_input(&mut self, _action: &UpdateSettingInput, window: &mut Window, cx: &mut Context<Self>) {
         let appearance = cx.global::<Appearance>();
-        let family = appearance.font_family.to_string();
-        let size_str = appearance.font_size.as_f32().to_string();
+        let family = appearance.font_family.clone();
+        let size_str = appearance.font_size.to_string();
 
         self.font_family_input.update(cx, |input, cx| {
             if input.value() != family.as_str() {
