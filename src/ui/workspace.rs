@@ -147,11 +147,6 @@ impl Workspace {
         let document = action.0.clone();
         let editor = cx.new(|_| Editor::new(document));
 
-        // Add to AppState
-        cx.update_global::<AppState, _>(|state, _cx| {
-            state.editors.push(editor.clone());
-        });
-
         let editor_panel = cx.new(|cx| EditorPanel::new(editor, window, cx));
         let panel = Arc::new(editor_panel);
 
@@ -333,6 +328,44 @@ impl Workspace {
         })
     }
 
+    fn get_active_editor(&self, cx: &App) -> Option<Entity<Editor>> {
+        let dock_area = self.dock_area.read(cx);
+        Self::find_active_editor_in_items(dock_area.items(), cx)
+    }
+
+    fn find_active_editor_in_items(dock_item: &DockItem, cx: &App) -> Option<Entity<Editor>> {
+        match dock_item {
+            DockItem::Tabs { items, .. } => {
+                // Return the first EditorPanel found
+                for item in items {
+                    if let Ok(panel) = item.view().downcast::<EditorPanel>() {
+                        return Some(panel.read(cx).editor());
+                    }
+                }
+                None
+            }
+            DockItem::Split { items, .. } => {
+                // Check all split items
+                for item in items {
+                    if let Some(editor) = Self::find_active_editor_in_items(item, cx) {
+                        return Some(editor);
+                    }
+                }
+                None
+            }
+            DockItem::Tiles { .. } => {
+                // Tiles use a different API (TileItem), skip for now
+                None
+            }
+            DockItem::Panel { view, .. } => {
+                if let Ok(panel) = view.view().downcast::<EditorPanel>() {
+                    return Some(panel.read(cx).editor());
+                }
+                None
+            }
+        }
+    }
+
     fn check_has_panels(&self, cx: &App) -> bool {
         let dock_area = self.dock_area.read(cx);
         Self::has_panels_recursive(dock_area.items())
@@ -383,6 +416,14 @@ impl Workspace {
 
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Get active editor from the focused panel in DockArea
+        let active_editor = self.get_active_editor(cx);
+
+        // Update StatusBar with active editor
+        self.status_bar.update(cx, |status_bar, _cx| {
+            status_bar.set_active_editor(active_editor.clone());
+        });
+
         div()
             .id("workspace")
             .on_action(cx.listener(Self::on_action_open_file))

@@ -1,5 +1,5 @@
-use crate::app_state::AppState;
 use crate::core::appearance::Appearance;
+use crate::core::editor::Editor;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::ActiveTheme;
@@ -8,21 +8,26 @@ pub enum StatusBarEvent {
     ToggleFileTree,
 }
 
-pub struct StatusBar {}
+pub struct StatusBar {
+    active_editor: Option<WeakEntity<Editor>>,
+}
 
 impl EventEmitter<StatusBarEvent> for StatusBar {}
 
 impl StatusBar {
     pub fn new(_cx: &mut Context<Self>) -> Self {
-        Self {}
+        Self { active_editor: None }
+    }
+
+    pub fn set_active_editor(&mut self, editor: Option<Entity<Editor>>) {
+        self.active_editor = editor.map(|e| e.downgrade());
     }
 }
 
 impl Render for StatusBar {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let app_state = AppState::global(cx);
-        let active_editor = app_state.active_editor.as_ref().and_then(|e| e.upgrade());
+        let active_editor = self.active_editor.as_ref().and_then(|e| e.upgrade());
 
         let (cursor_offset, total_size, value_at_cursor) = if let Some(editor) = active_editor {
             let editor = editor.read(cx);

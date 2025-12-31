@@ -1,13 +1,10 @@
-use crate::core::editor::Editor;
 use crate::service::editor_service::EditorService;
-use gpui::{App, Entity, Global, WeakEntity};
+use gpui::{App, Global};
 
 #[allow(dead_code)]
 #[derive(Clone)]
 pub struct AppState {
     pub editor_service: EditorService,
-    pub editors: Vec<Entity<Editor>>,
-    pub active_editor: Option<WeakEntity<Editor>>,
 }
 
 impl Global for AppState {}
@@ -16,8 +13,6 @@ impl AppState {
     pub fn init(cx: &mut App) {
         let state = Self {
             editor_service: EditorService::new(),
-            editors: Vec::new(),
-            active_editor: None,
         };
         cx.set_global::<AppState>(state);
     }

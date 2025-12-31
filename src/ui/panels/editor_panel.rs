@@ -73,8 +73,8 @@ impl EditorPanel {
         .detach();
 
         let hex_focus_handle = hex_view.read(cx).focus_handle(cx);
-        cx.on_focus_in(&hex_focus_handle, window, |this: &mut Self, _window: &mut Window, cx: &mut Context<Self>| {
-            this.update_global_status(cx);
+        cx.on_focus_in(&hex_focus_handle, window, |_this: &mut Self, _window: &mut Window, _cx: &mut Context<Self>| {
+            // Focus event - could be used for future functionality
         })
         .detach();
 
@@ -134,13 +134,8 @@ impl EditorPanel {
         }
     }
 
-    fn update_global_status(&self, cx: &mut Context<Self>) {
-        // Update active editor in AppState
-        let editor_weak = self.editor.downgrade();
-
-        cx.update_global::<AppState, _>(|state, _cx| {
-            state.active_editor = Some(editor_weak);
-        });
+    pub fn editor(&self) -> Entity<Editor> {
+        self.editor.clone()
     }
 
     pub fn path(&self, cx: &App) -> std::path::PathBuf {
