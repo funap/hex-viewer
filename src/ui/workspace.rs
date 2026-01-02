@@ -25,6 +25,7 @@ pub struct Workspace {
     pub is_file_tree_visible: bool,
     pub title_bar: Entity<AppTitleBar>,
     pub status_bar: Entity<StatusBar>,
+    pub active_editor: Option<Entity<Editor>>,
 }
 
 const MAIN_DOCK_AREA_ID: &str = "main_dock_area";
@@ -84,6 +85,7 @@ impl Workspace {
             is_file_tree_visible: true,
             title_bar,
             status_bar,
+            active_editor: None,
         }
     }
 
@@ -148,6 +150,15 @@ impl Workspace {
         let editor = cx.new(|_| Editor::new(document));
 
         let editor_panel = cx.new(|cx| EditorPanel::new(editor, window, cx));
+        cx.on_focus_in(&editor_panel.read(cx).focus_handle(cx), window, {
+            let editor_panel = editor_panel.clone();
+            move |this, _window, cx| {
+                let editor = editor_panel.read(cx).editor();
+                this.active_editor = Some(editor);
+                cx.notify();
+            }
+        })
+        .detach();
         let panel = Arc::new(editor_panel);
 
         self.dock_area.update(cx, |dock_area, cx| {
@@ -197,16 +208,27 @@ impl Workspace {
                         cx.spawn_in(window, async move |workspace, window| {
                             let diff_result = diff_result_task.await;
 
-                            let _ = workspace.update_in(window, |_workspace, window, cx| {
+                            let _ = workspace.update_in(window, |workspace_view, window, cx| {
                                 use crate::ui::panels::diff_panel::DiffPanel;
                                 let diff_view = cx.new(|cx| {
-                                    let mut view = DiffPanel::new(left_document, right_document, window, cx);
-                                    view.set_diff_result(diff_result, cx);
+                                    let mut view = DiffPanel::new(left_document.clone(), right_document.clone(), window, cx);
+                                    view.set_diff_result(diff_result.clone(), cx);
                                     view
                                 });
+
+                                cx.on_focus_in(
+                                    &diff_view.read(cx).focus_handle(cx),
+                                    window,
+                                    |this, _, cx| {
+                                        this.active_editor = None;
+                                        cx.notify();
+                                    },
+                                )
+                                .detach();
+
                                 let panel = Arc::new(diff_view);
 
-                                _workspace.dock_area.update(cx, |dock_area, cx| {
+                                workspace_view.dock_area.update(cx, |dock_area, cx| {
                                     dock_area.add_panel(panel, DockPlacement::Center, None, window, cx);
                                 });
                             });
@@ -241,6 +263,15 @@ impl Workspace {
         }
 
         let settings_panel = cx.new(|cx| SettingsPanel::new(window, cx));
+        cx.on_focus_in(
+            &settings_panel.read(cx).focus_handle(cx),
+            window,
+            |this, _, cx| {
+                this.active_editor = None;
+                cx.notify();
+            },
+        )
+        .detach();
         let panel = Arc::new(settings_panel);
 
         self.dock_area.update(cx, |dock_area, cx| {
@@ -328,43 +359,11 @@ impl Workspace {
         })
     }
 
-    fn get_active_editor(&self, cx: &App) -> Option<Entity<Editor>> {
-        let dock_area = self.dock_area.read(cx);
-        Self::find_active_editor_in_items(dock_area.items(), cx)
+    fn get_active_editor(&self, _cx: &App) -> Option<Entity<Editor>> {
+        self.active_editor.clone()
     }
 
-    fn find_active_editor_in_items(dock_item: &DockItem, cx: &App) -> Option<Entity<Editor>> {
-        match dock_item {
-            DockItem::Tabs { items, .. } => {
-                // Return the first EditorPanel found
-                for item in items {
-                    if let Ok(panel) = item.view().downcast::<EditorPanel>() {
-                        return Some(panel.read(cx).editor());
-                    }
-                }
-                None
-            }
-            DockItem::Split { items, .. } => {
-                // Check all split items
-                for item in items {
-                    if let Some(editor) = Self::find_active_editor_in_items(item, cx) {
-                        return Some(editor);
-                    }
-                }
-                None
-            }
-            DockItem::Tiles { .. } => {
-                // Tiles use a different API (TileItem), skip for now
-                None
-            }
-            DockItem::Panel { view, .. } => {
-                if let Ok(panel) = view.view().downcast::<EditorPanel>() {
-                    return Some(panel.read(cx).editor());
-                }
-                None
-            }
-        }
-    }
+
 
     fn check_has_panels(&self, cx: &App) -> bool {
         let dock_area = self.dock_area.read(cx);
