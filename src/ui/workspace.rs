@@ -68,6 +68,13 @@ impl Workspace {
         .detach();
 
         let file_tree = cx.new(|cx| FileTreePanel::new(FILE_TREE_PANEL_TITLE, cx));
+        cx.on_focus_in(&file_tree.read(cx).focus_handle(cx), window, |this, _, cx| {
+            this.active_editor = None;
+            this.status_bar
+                .update(cx, |status_bar, _| status_bar.set_active_editor(None));
+            cx.notify();
+        })
+        .detach();
         cx.subscribe(&file_tree, |_, _, event, cx| match event {
             crate::ui::panels::file_tree_panel::FileTreeEvent::OpenFile(path) => {
                 cx.dispatch_action(&crate::actions::OpenFile {
@@ -154,7 +161,10 @@ impl Workspace {
             let editor_panel = editor_panel.clone();
             move |this, _window, cx| {
                 let editor = editor_panel.read(cx).editor();
-                this.active_editor = Some(editor);
+                this.active_editor = Some(editor.clone());
+                this.status_bar.update(cx, |status_bar, _| {
+                    status_bar.set_active_editor(Some(editor));
+                });
                 cx.notify();
             }
         })
@@ -221,6 +231,9 @@ impl Workspace {
                                     window,
                                     |this, _, cx| {
                                         this.active_editor = None;
+                                        this.status_bar.update(cx, |status_bar, _| {
+                                            status_bar.set_active_editor(None)
+                                        });
                                         cx.notify();
                                     },
                                 )
@@ -268,6 +281,8 @@ impl Workspace {
             window,
             |this, _, cx| {
                 this.active_editor = None;
+                this.status_bar
+                    .update(cx, |status_bar, _| status_bar.set_active_editor(None));
                 cx.notify();
             },
         )
@@ -359,9 +374,7 @@ impl Workspace {
         })
     }
 
-    fn get_active_editor(&self, _cx: &App) -> Option<Entity<Editor>> {
-        self.active_editor.clone()
-    }
+
 
 
 
@@ -415,14 +428,6 @@ impl Workspace {
 
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // Get active editor from the focused panel in DockArea
-        let active_editor = self.get_active_editor(cx);
-
-        // Update StatusBar with active editor
-        self.status_bar.update(cx, |status_bar, _cx| {
-            status_bar.set_active_editor(active_editor.clone());
-        });
-
         div()
             .id("workspace")
             .on_action(cx.listener(Self::on_action_open_file))
@@ -444,23 +449,29 @@ impl Render for Workspace {
                             .child(self.file_tree.clone()),
                     )
                     .child(
-                        resizable_panel().child(div().relative().size_full().flex().flex_col().child(self.dock_area.clone()).when(
-                            !self.check_has_panels(cx),
-                            |this| {
-                                this.child(
-                                    div()
-                                        .absolute()
-                                        .top_0()
-                                        .left_0()
-                                        .size_full()
-                                        .flex()
-                                        .justify_center()
-                                        .items_center()
-                                        .bg(cx.theme().background)
-                                        .child(div().text_xl().text_color(cx.theme().muted_foreground).child("Nothing is open")),
-                                )
-                            },
-                        )),
+                        resizable_panel()
+                            .child(
+                                div()
+                                .relative()
+                                .size_full()
+                                .flex()
+                                .flex_col()
+                                .child(self.dock_area.clone())
+                                .when(!self.check_has_panels(cx), |this| {
+                                    this.child(
+                                        div()
+                                            .absolute()
+                                            .top_0()
+                                            .left_0()
+                                            .size_full()
+                                            .flex()
+                                            .justify_center()
+                                            .items_center()
+                                            .bg(cx.theme().background)
+                                            .child(div().text_xl().text_color(cx.theme().muted_foreground).child("Nothing is open")),
+                                    )
+                                },
+                            )),
                     ),
             )
             .child(self.status_bar.clone())
