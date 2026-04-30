@@ -343,7 +343,8 @@ impl HexView {
         Some(byte_pos)
     }
 
-    fn on_mouse_down(&mut self, event: &MouseDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
+    fn on_mouse_down(&mut self, event: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        cx.focus_self(window);
         if let Some(byte_pos) = self.byte_pos_from_point(event.position, cx) {
             self.is_dragging = true;
             self.editor.update(cx, |editor, _| {
@@ -725,7 +726,7 @@ impl Render for HexView {
             .font_family(self.font_family_prop.clone())
             .size_full()
             .key_context(CONTEXT)
-            .track_focus(&self.focus_handle(cx))
+            .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::move_left))
             .on_action(cx.listener(Self::move_right))
             .on_action(cx.listener(Self::move_up))
