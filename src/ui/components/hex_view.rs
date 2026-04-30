@@ -40,7 +40,9 @@ actions!(
         SelectEnd,
         TriggerSearch,
         TriggerSearchNext,
-        TriggerSearchPrev
+        TriggerSearchPrev,
+        AddCustomBreak,
+        RemoveCustomBreak
     ]
 );
 
@@ -98,6 +100,9 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("shift-f3", SearchPrev, Some(CONTEXT)),
         KeyBinding::new("ctrl-shift-g", SearchPrev, Some(CONTEXT)),
         KeyBinding::new("cmd-shift-g", SearchPrev, Some(CONTEXT)),
+        KeyBinding::new("shift-enter", AddCustomBreak, Some(CONTEXT)),
+        KeyBinding::new("delete", RemoveCustomBreak, Some(CONTEXT)),
+        KeyBinding::new("backspace", RemoveCustomBreak, Some(CONTEXT)),
     ]);
 }
 
@@ -215,23 +220,33 @@ impl HexView {
     }
 
     pub fn scroll_to_offset(&mut self, byte_offset: usize, cx: &mut Context<Self>) {
-        let row = byte_offset / BYTES_PER_ROW;
+        let line_starts = self.editor.read(cx).line_starts();
+        let row = match line_starts.binary_search(&byte_offset) {
+            Ok(idx) => idx,
+            Err(idx) => idx - 1,
+        };
         self.set_scroll_offset(row, cx);
     }
 
     /// Returns the byte range of the current viewport (visible area).
     /// Returns (start_byte, end_byte) where end_byte is exclusive.
     pub fn viewport_byte_range(&self, cx: &App) -> (usize, usize) {
-        let start_byte = self.scroll_offset * BYTES_PER_ROW;
+        let editor = self.editor.read(cx);
+        let line_starts = editor.line_starts();
+        let start_byte = line_starts[self.scroll_offset];
         let visible_rows = self.get_visible_rows();
-        let end_byte = start_byte + (visible_rows * BYTES_PER_ROW);
-        let end_byte = end_byte.min(self.editor.read(cx).total_size());
+        let end_row = (self.scroll_offset + visible_rows).min(line_starts.len());
+        let end_byte = if end_row < line_starts.len() {
+            line_starts[end_row]
+        } else {
+            editor.total_size()
+        };
         (start_byte, end_byte)
     }
 
     pub fn set_scroll_offset(&mut self, offset: usize, cx: &mut Context<Self>) {
         let row_height = px(ROW_HEIGHT);
-        let total_rows = (self.editor.read(cx).total_size() + BYTES_PER_ROW - 1) / BYTES_PER_ROW;
+        let total_rows = self.editor.read(cx).line_starts().len();
         let max_offset = total_rows.saturating_sub(1);
         let new_offset = offset.min(max_offset);
 
@@ -263,8 +278,13 @@ impl HexView {
         let visible_height = bounds.size.height - header_height;
         let visible_rows = (visible_height / row_height).floor() as usize;
 
-        let cursor_offset = self.editor.read(cx).cursor_offset;
-        let cursor_row = cursor_offset / BYTES_PER_ROW;
+        let editor = self.editor.read(cx);
+        let cursor_offset = editor.cursor_offset;
+        let line_starts = editor.line_starts();
+        let cursor_row = match line_starts.binary_search(&cursor_offset) {
+            Ok(idx) => idx,
+            Err(idx) => idx - 1,
+        };
 
         if cursor_row < self.scroll_offset {
             self.scroll_offset = cursor_row;
@@ -293,7 +313,17 @@ impl HexView {
         let visible_row = (y_offset / row_height).floor() as usize;
 
         // Add scroll offset to get the actual row in the buffer
-        let row = visible_row + self.scroll_offset;
+        let row_idx = visible_row + self.scroll_offset;
+        let editor = self.editor.read(cx);
+        let line_starts = editor.line_starts();
+
+        if row_idx >= line_starts.len() {
+            return None;
+        }
+
+        let row_start = line_starts[row_idx];
+        let row_end = if row_idx + 1 < line_starts.len() { line_starts[row_idx + 1] } else { editor.total_size() };
+        let row_len = row_end - row_start;
 
         let x_offset = point.x - hex_start_x;
         if x_offset < px(0.) {
@@ -301,12 +331,12 @@ impl HexView {
         }
 
         let byte_in_row = (x_offset / (hex_byte_width + hex_gap)).floor() as usize;
-        if byte_in_row >= BYTES_PER_ROW {
+        if byte_in_row >= row_len {
             return None;
         }
 
-        let byte_pos = row * BYTES_PER_ROW + byte_in_row;
-        if byte_pos >= self.editor.read(cx).total_size() {
+        let byte_pos = row_start + byte_in_row;
+        if byte_pos >= editor.total_size() {
             return None;
         }
 
@@ -341,15 +371,29 @@ impl HexView {
         let visible_row = (y_offset / row_height).floor() as i32;
 
         // Allow selecting above/below visible area
-        let row = visible_row + self.scroll_offset as i32;
-        let row = row.max(0) as usize;
+        let row_idx = (visible_row + self.scroll_offset as i32).max(0) as usize;
+        let editor = self.editor.read(cx);
+        let line_starts = editor.line_starts();
+
+        if line_starts.is_empty() {
+            return Some(0);
+        }
+
+        let row_idx = row_idx.min(line_starts.len() - 1);
+        let row_start = line_starts[row_idx];
+        let row_end = if row_idx + 1 < line_starts.len() { line_starts[row_idx + 1] } else { editor.total_size() };
+        let row_len = row_end - row_start;
 
         let x_offset = point.x - hex_start_x;
         let byte_in_row = (x_offset / (hex_byte_width + hex_gap)).floor() as i32;
-        let byte_in_row = byte_in_row.max(0).min((BYTES_PER_ROW - 1) as i32) as usize;
+        let byte_in_row = if row_len > 0 {
+            byte_in_row.max(0).min((row_len - 1) as i32) as usize
+        } else {
+            0
+        };
 
-        let byte_pos = row * BYTES_PER_ROW + byte_in_row;
-        Some(byte_pos.min(self.editor.read(cx).total_size().saturating_sub(1)))
+        let byte_pos = row_start + byte_in_row;
+        Some(byte_pos.min(editor.total_size().saturating_sub(1)))
     }
 
     const SCROLL_TRIGGER_MARGIN: f32 = 32.0;
@@ -359,7 +403,7 @@ impl HexView {
         let row_height = px(ROW_HEIGHT);
         let handle_y = self.scroll_handle.offset().y;
         let handle_row = ((-handle_y).max(px(0.)) / row_height).round() as usize;
-        let total_rows = (self.editor.read(cx).total_size() + BYTES_PER_ROW - 1) / BYTES_PER_ROW;
+        let total_rows = self.editor.read(cx).line_starts().len();
         if handle_row != self.scroll_offset {
             self.scroll_offset = handle_row.min(total_rows.saturating_sub(1));
             cx.notify();
@@ -415,7 +459,7 @@ impl HexView {
         let row_height = px(ROW_HEIGHT);
         let handle_y = self.scroll_handle.offset().y;
         let handle_row = ((-handle_y).max(px(0.)) / row_height).round() as usize;
-        let total_rows = (self.editor.read(cx).total_size() + BYTES_PER_ROW - 1) / BYTES_PER_ROW;
+        let total_rows = self.editor.read(cx).line_starts().len();
         if handle_row != self.scroll_offset {
             self.scroll_offset = handle_row.min(total_rows.saturating_sub(1));
             cx.notify();
@@ -427,7 +471,7 @@ impl HexView {
 
     fn on_scroll_wheel(&mut self, event: &ScrollWheelEvent, _window: &mut Window, cx: &mut Context<Self>) {
         let row_height = px(ROW_HEIGHT);
-        let total_rows = (self.editor.read(cx).total_size() + BYTES_PER_ROW - 1) / BYTES_PER_ROW;
+        let total_rows = self.editor.read(cx).line_starts().len();
         let max_offset = total_rows.saturating_sub(1).max(0) as i32;
 
         let delta_y = event.delta.pixel_delta(row_height).y.as_f32() as i32;
@@ -602,6 +646,45 @@ impl HexView {
     fn trigger_search_prev(&mut self, _: &TriggerSearchPrev, window: &mut Window, cx: &mut Context<Self>) {
         window.dispatch_action(SearchPrev.boxed_clone(), cx);
     }
+
+    fn add_custom_break(&mut self, _: &AddCustomBreak, _window: &mut Window, cx: &mut Context<Self>) {
+        let cursor_offset = self.editor.read(cx).cursor_offset;
+        self.editor.update(cx, |editor, _| {
+            editor.toggle_custom_break(cursor_offset);
+        });
+        cx.notify();
+    }
+
+    fn remove_custom_break(&mut self, _: &RemoveCustomBreak, _window: &mut Window, cx: &mut Context<Self>) {
+        let cursor_offset = self.editor.read(cx).cursor_offset;
+        self.editor.update(cx, |editor, _| {
+            let line_starts = editor.line_starts();
+            let current_line_idx = match line_starts.binary_search(&cursor_offset) {
+                Ok(idx) => idx,
+                Err(idx) => idx - 1,
+            };
+            let current_line_start = line_starts[current_line_idx];
+
+            if cursor_offset == current_line_start && editor.custom_breaks.contains(&cursor_offset) {
+                // At the start of a custom-broken line
+                editor.remove_custom_break(cursor_offset);
+            } else {
+                // Check if the NEXT line starts with a custom break (Delete-like behavior at end of line)
+                let current_line_end = if current_line_idx + 1 < line_starts.len() {
+                    line_starts[current_line_idx + 1]
+                } else {
+                    editor.total_size()
+                };
+
+                if (cursor_offset == current_line_end.saturating_sub(1) || cursor_offset == current_line_end)
+                    && editor.custom_breaks.contains(&current_line_end)
+                {
+                    editor.remove_custom_break(current_line_end);
+                }
+            }
+        });
+        cx.notify();
+    }
 }
 
 impl Focusable for HexView {
@@ -614,8 +697,8 @@ impl Render for HexView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let editor = self.editor.read(cx);
         let document = editor.document.clone();
-        let total_size = editor.total_size();
-        let total_rows = ((total_size + BYTES_PER_ROW - 1) / BYTES_PER_ROW).max(1);
+        let line_starts = editor.line_starts();
+        let total_rows = line_starts.len().max(1);
 
         let visible_rows = self.get_visible_rows();
         let extra_scroll_rows = visible_rows.saturating_sub(1);
@@ -661,6 +744,8 @@ impl Render for HexView {
             .on_action(cx.listener(Self::select_home))
             .on_action(cx.listener(Self::select_end))
             .on_action(cx.listener(Self::trigger_search))
+            .on_action(cx.listener(Self::add_custom_break))
+            .on_action(cx.listener(Self::remove_custom_break))
             .on_scroll_wheel(cx.listener(Self::on_scroll_wheel))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
@@ -753,8 +838,7 @@ impl Element for HexViewElement {
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
         // Ensure at least one line is shown, even for empty buffer
-        let buffer_len = self.document.read().unwrap().buffer.len();
-        let line_count = ((buffer_len + BYTES_PER_ROW - 1) / BYTES_PER_ROW).max(1);
+        let line_count = self.view.upgrade().map(|v| v.read(cx).editor.read(cx).line_starts().len()).unwrap_or(1).max(1);
         let header_height = if self.show_header { px(HEADER_HEIGHT) } else { px(0.) };
 
         let row_height = px(ROW_HEIGHT);
@@ -797,7 +881,9 @@ impl Element for HexViewElement {
         let selection_bg_color = theme.secondary;
 
         // Ensure at least one line is shown, even for empty buffer
-        let line_count = ((buffer.len() + BYTES_PER_ROW - 1) / BYTES_PER_ROW).max(1);
+        let editor_view = self.view.upgrade().unwrap();
+        let line_starts = editor_view.read(cx).editor.read(cx).line_starts();
+        let line_count = line_starts.len().max(1);
         let header_height = if self.show_header { px(HEADER_HEIGHT) } else { px(0.) };
 
         let row_height = px(ROW_HEIGHT);
@@ -824,8 +910,10 @@ impl Element for HexViewElement {
         };
 
         for i in start_row..end_row {
-            let offset = i * 16;
-            let chunk = buffer.get_range(offset, 16);
+            let offset = line_starts[i];
+            let next_offset = if i + 1 < line_starts.len() { line_starts[i + 1] } else { buffer.len() };
+            let chunk_len = next_offset - offset;
+            let chunk = buffer.get_range(offset, chunk_len);
             let row_index = i - start_row;
             let y_pos = bounds.top() + header_height + row_height * row_index as f32;
 
@@ -836,7 +924,7 @@ impl Element for HexViewElement {
 
                 // Check if this line has any overlap with the highlight range
                 let line_start = offset;
-                let line_end = offset + 16; // Exclusive end for the line
+                let line_end = next_offset; // Exclusive end for the line
 
                 if line_start < range_end && line_end > range_start {
                     let start_in_line = cmp::max(line_start, range_start) - line_start;
@@ -856,10 +944,10 @@ impl Element for HexViewElement {
 
             // Draw continuous selection background for this line
             let line_start = offset;
-            let line_end = offset + 15;
-            if line_start <= max_sel && line_end >= min_sel {
-                let start_in_line = cmp::max(line_start, min_sel) - line_start;
-                let end_in_line = cmp::min(line_end, max_sel) - line_start;
+            let line_end = next_offset.saturating_sub(1);
+            if line_start <= max_sel && (next_offset > min_sel || (line_start == 0 && buffer.is_empty())) {
+                let start_in_line = cmp::max(line_start, min_sel).saturating_sub(line_start);
+                let end_in_line = cmp::min(line_end, max_sel).saturating_sub(line_start);
 
                 let x_start = hex_start_x + (hex_byte_width + hex_gap) * start_in_line as f32;
                 let x_end = hex_start_x + (hex_byte_width + hex_gap) * end_in_line as f32 + hex_byte_width;
@@ -969,8 +1057,11 @@ impl Element for HexViewElement {
 
             // Show cursor if focused, even for empty buffer
             if focus_handle.is_focused(window) {
-                let cursor_row = if buffer.len() > 0 { cursor_offset / BYTES_PER_ROW } else { 0 };
-                let byte_in_row = if buffer.len() > 0 { cursor_offset % BYTES_PER_ROW } else { 0 };
+                let cursor_row = match line_starts.binary_search(&cursor_offset) {
+                    Ok(idx) => idx,
+                    Err(idx) => idx - 1,
+                };
+                let byte_in_row = cursor_offset - line_starts[cursor_row];
 
                 if cursor_row >= start_row && cursor_row < end_row {
                     let visible_cursor_row = cursor_row - start_row;
@@ -1063,6 +1154,9 @@ impl Element for HexViewElement {
         let hex_start_x = bounds.left() + px(OFFSET_X_START) + offset_width + px(SECTION_GAP);
         let hex_byte_width = px(HEX_BYTE_WIDTH);
         let hex_gap = px(HEX_GAP);
+        // ASCII start depends on the max bytes per row?
+        // Let's use a fixed value based on BYTES_PER_ROW to keep it aligned if possible,
+        // or just enough to clear the longest possible line.
         let ascii_start_x = hex_start_x + (hex_byte_width + hex_gap) * BYTES_PER_ROW as f32 + px(SECTION_GAP);
 
         let theme = cx.theme();

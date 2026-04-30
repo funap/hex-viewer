@@ -1,6 +1,7 @@
 use crate::core::command::Command;
 use crate::core::document::Document;
 use std::cmp;
+use std::collections::BTreeSet;
 use std::ops::Range;
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -23,6 +24,7 @@ pub struct Editor {
     pub selection_start: Option<usize>,
     pub selection_end: Option<usize>,
     pub search_state: SearchState,
+    pub custom_breaks: BTreeSet<usize>,
 }
 
 impl Editor {
@@ -33,6 +35,7 @@ impl Editor {
             selection_start: None,
             selection_end: None,
             search_state: SearchState::default(),
+            custom_breaks: BTreeSet::new(),
         }
     }
 
@@ -81,21 +84,51 @@ impl Editor {
     }
 
     pub fn move_up(&mut self) {
-        if self.cursor_offset >= BYTES_PER_ROW {
-            self.cursor_offset -= BYTES_PER_ROW;
+        let line_starts = self.line_starts();
+        let current_line_idx = match line_starts.binary_search(&self.cursor_offset) {
+            Ok(idx) => idx,
+            Err(idx) => idx - 1,
+        };
+
+        if current_line_idx > 0 {
+            let current_line_start = line_starts[current_line_idx];
+            let offset_in_line = self.cursor_offset - current_line_start;
+            let prev_line_start = line_starts[current_line_idx - 1];
+            let prev_line_len = current_line_start - prev_line_start;
+
+            self.cursor_offset = prev_line_start + cmp::min(offset_in_line, prev_line_len - 1);
             self.selection_start = None;
             self.selection_end = None;
         }
     }
 
     pub fn move_down(&mut self) {
-        let buffer_len = self.total_size();
-        let new_offset = self.cursor_offset + BYTES_PER_ROW;
-        if new_offset <= buffer_len {
-            self.cursor_offset = new_offset;
+        let line_starts = self.line_starts();
+        let current_line_idx = match line_starts.binary_search(&self.cursor_offset) {
+            Ok(idx) => idx,
+            Err(idx) => idx - 1,
+        };
+
+        if current_line_idx + 1 < line_starts.len() {
+            let current_line_start = line_starts[current_line_idx];
+            let offset_in_line = self.cursor_offset - current_line_start;
+            let next_line_start = line_starts[current_line_idx + 1];
+            let next_line_end = if current_line_idx + 2 < line_starts.len() {
+                line_starts[current_line_idx + 2]
+            } else {
+                self.total_size()
+            };
+            let next_line_len = next_line_end - next_line_start;
+
+            if next_line_len > 0 {
+                self.cursor_offset = next_line_start + cmp::min(offset_in_line, next_line_len - 1);
+            } else {
+                self.cursor_offset = next_line_start;
+            }
             self.selection_start = None;
             self.selection_end = None;
         } else {
+            let buffer_len = self.total_size();
             self.cursor_offset = buffer_len;
             self.selection_start = None;
             self.selection_end = None;
@@ -124,28 +157,56 @@ impl Editor {
     }
 
     pub fn select_up(&mut self) {
-        if self.cursor_offset >= BYTES_PER_ROW {
+        let line_starts = self.line_starts();
+        let current_line_idx = match line_starts.binary_search(&self.cursor_offset) {
+            Ok(idx) => idx,
+            Err(idx) => idx - 1,
+        };
+
+        if current_line_idx > 0 {
             if self.selection_start.is_none() {
                 self.selection_start = Some(self.cursor_offset);
             }
-            self.cursor_offset -= BYTES_PER_ROW;
+            let current_line_start = line_starts[current_line_idx];
+            let offset_in_line = self.cursor_offset - current_line_start;
+            let prev_line_start = line_starts[current_line_idx - 1];
+            let prev_line_len = current_line_start - prev_line_start;
+
+            self.cursor_offset = prev_line_start + cmp::min(offset_in_line, prev_line_len - 1);
             self.selection_end = Some(self.cursor_offset);
         }
     }
 
     pub fn select_down(&mut self) {
-        let buffer_len = self.total_size();
-        let new_offset = self.cursor_offset + BYTES_PER_ROW;
-        if new_offset <= buffer_len {
-            if self.selection_start.is_none() {
-                self.selection_start = Some(self.cursor_offset);
+        let line_starts = self.line_starts();
+        let current_line_idx = match line_starts.binary_search(&self.cursor_offset) {
+            Ok(idx) => idx,
+            Err(idx) => idx - 1,
+        };
+
+        if self.selection_start.is_none() {
+            self.selection_start = Some(self.cursor_offset);
+        }
+
+        if current_line_idx + 1 < line_starts.len() {
+            let current_line_start = line_starts[current_line_idx];
+            let offset_in_line = self.cursor_offset - current_line_start;
+            let next_line_start = line_starts[current_line_idx + 1];
+            let next_line_end = if current_line_idx + 2 < line_starts.len() {
+                line_starts[current_line_idx + 2]
+            } else {
+                self.total_size()
+            };
+            let next_line_len = next_line_end - next_line_start;
+
+            if next_line_len > 0 {
+                self.cursor_offset = next_line_start + cmp::min(offset_in_line, next_line_len - 1);
+            } else {
+                self.cursor_offset = next_line_start;
             }
-            self.cursor_offset = new_offset;
             self.selection_end = Some(self.cursor_offset);
         } else {
-            if self.selection_start.is_none() {
-                self.selection_start = Some(self.cursor_offset);
-            }
+            let buffer_len = self.total_size();
             self.cursor_offset = buffer_len;
             self.selection_end = Some(self.cursor_offset);
         }
@@ -159,26 +220,56 @@ impl Editor {
     }
 
     pub fn page_up(&mut self, visible_rows: usize) {
-        let move_amount = visible_rows * BYTES_PER_ROW;
+        let line_starts = self.line_starts();
+        let current_line_idx = match line_starts.binary_search(&self.cursor_offset) {
+            Ok(idx) => idx,
+            Err(idx) => idx - 1,
+        };
+
         self.selection_start = None;
         self.selection_end = None;
-        if self.cursor_offset >= move_amount {
-            self.cursor_offset -= move_amount;
+
+        let target_line_idx = current_line_idx.saturating_sub(visible_rows);
+        let current_line_start = line_starts[current_line_idx];
+        let offset_in_line = self.cursor_offset - current_line_start;
+
+        let target_line_start = line_starts[target_line_idx];
+        let target_line_end = if target_line_idx + 1 < line_starts.len() {
+            line_starts[target_line_idx + 1]
         } else {
-            self.cursor_offset = 0;
-        }
+            self.total_size()
+        };
+        let target_line_len = target_line_end - target_line_start;
+
+        self.cursor_offset = target_line_start + cmp::min(offset_in_line, target_line_len.saturating_sub(1));
     }
 
     pub fn page_down(&mut self, visible_rows: usize) {
-        let buffer_len = self.total_size();
-        let move_amount = visible_rows * BYTES_PER_ROW;
-        let new_offset = self.cursor_offset + move_amount;
+        let line_starts = self.line_starts();
+        let current_line_idx = match line_starts.binary_search(&self.cursor_offset) {
+            Ok(idx) => idx,
+            Err(idx) => idx - 1,
+        };
+
         self.selection_start = None;
         self.selection_end = None;
-        if new_offset <= buffer_len {
-            self.cursor_offset = new_offset;
+
+        let target_line_idx = cmp::min(current_line_idx + visible_rows, line_starts.len() - 1);
+        let current_line_start = line_starts[current_line_idx];
+        let offset_in_line = self.cursor_offset - current_line_start;
+
+        let target_line_start = line_starts[target_line_idx];
+        let target_line_end = if target_line_idx + 1 < line_starts.len() {
+            line_starts[target_line_idx + 1]
         } else {
-            self.cursor_offset = buffer_len;
+            self.total_size()
+        };
+        let target_line_len = target_line_end - target_line_start;
+
+        if target_line_idx == line_starts.len() - 1 && target_line_len == 0 {
+            self.cursor_offset = self.total_size();
+        } else {
+            self.cursor_offset = target_line_start + cmp::min(offset_in_line, target_line_len.saturating_sub(1));
         }
     }
 
@@ -196,29 +287,59 @@ impl Editor {
     }
 
     pub fn select_page_up(&mut self, visible_rows: usize) {
-        let move_amount = visible_rows * BYTES_PER_ROW;
+        let line_starts = self.line_starts();
+        let current_line_idx = match line_starts.binary_search(&self.cursor_offset) {
+            Ok(idx) => idx,
+            Err(idx) => idx - 1,
+        };
+
         if self.selection_start.is_none() {
             self.selection_start = Some(self.cursor_offset);
         }
-        if self.cursor_offset >= move_amount {
-            self.cursor_offset -= move_amount;
+
+        let target_line_idx = current_line_idx.saturating_sub(visible_rows);
+        let current_line_start = line_starts[current_line_idx];
+        let offset_in_line = self.cursor_offset - current_line_start;
+
+        let target_line_start = line_starts[target_line_idx];
+        let target_line_end = if target_line_idx + 1 < line_starts.len() {
+            line_starts[target_line_idx + 1]
         } else {
-            self.cursor_offset = 0;
-        }
+            self.total_size()
+        };
+        let target_line_len = target_line_end - target_line_start;
+
+        self.cursor_offset = target_line_start + cmp::min(offset_in_line, target_line_len.saturating_sub(1));
         self.selection_end = Some(self.cursor_offset);
     }
 
     pub fn select_page_down(&mut self, visible_rows: usize) {
-        let buffer_len = self.total_size();
-        let move_amount = visible_rows * BYTES_PER_ROW;
-        let new_offset = self.cursor_offset + move_amount;
+        let line_starts = self.line_starts();
+        let current_line_idx = match line_starts.binary_search(&self.cursor_offset) {
+            Ok(idx) => idx,
+            Err(idx) => idx - 1,
+        };
+
         if self.selection_start.is_none() {
             self.selection_start = Some(self.cursor_offset);
         }
-        if new_offset <= buffer_len {
-            self.cursor_offset = new_offset;
+
+        let target_line_idx = cmp::min(current_line_idx + visible_rows, line_starts.len() - 1);
+        let current_line_start = line_starts[current_line_idx];
+        let offset_in_line = self.cursor_offset - current_line_start;
+
+        let target_line_start = line_starts[target_line_idx];
+        let target_line_end = if target_line_idx + 1 < line_starts.len() {
+            line_starts[target_line_idx + 1]
         } else {
-            self.cursor_offset = buffer_len;
+            self.total_size()
+        };
+        let target_line_len = target_line_end - target_line_start;
+
+        if target_line_idx == line_starts.len() - 1 && target_line_len == 0 {
+            self.cursor_offset = self.total_size();
+        } else {
+            self.cursor_offset = target_line_start + cmp::min(offset_in_line, target_line_len.saturating_sub(1));
         }
         self.selection_end = Some(self.cursor_offset);
     }
@@ -291,6 +412,55 @@ impl Editor {
         Some(self.search_state.results[next_index])
     }
 
+    pub fn line_starts(&self) -> Vec<usize> {
+        let total_size = self.total_size();
+        let mut starts = Vec::new();
+        let mut current = 0;
+
+        while current < total_size {
+            starts.push(current);
+            // Find the next custom break after current
+            let next_custom = self.custom_breaks.range((current + 1)..).next().copied();
+            // Default break after BYTES_PER_ROW
+            let next_default = current + BYTES_PER_ROW;
+
+            match next_custom {
+                Some(break_pos) if break_pos < next_default => {
+                    current = break_pos;
+                }
+                _ => {
+                    current = next_default;
+                }
+            }
+        }
+
+        // If the buffer is empty, or the last byte was a break, add one more empty line if needed?
+        // Actually, HexView handles empty buffer by showing at least one line.
+        if starts.is_empty() {
+            starts.push(0);
+        }
+
+        starts
+    }
+
+    pub fn add_custom_break(&mut self, offset: usize) {
+        if offset > 0 && offset < self.total_size() {
+            self.custom_breaks.insert(offset);
+        }
+    }
+
+    pub fn remove_custom_break(&mut self, offset: usize) {
+        self.custom_breaks.remove(&offset);
+    }
+
+    pub fn toggle_custom_break(&mut self, offset: usize) {
+        if self.custom_breaks.contains(&offset) {
+            self.custom_breaks.remove(&offset);
+        } else {
+            self.add_custom_break(offset);
+        }
+    }
+
     pub fn prev_search_result(&mut self) -> Option<usize> {
         if self.search_state.results.is_empty() {
             return None;
@@ -322,7 +492,7 @@ impl Editor {
         // The current History implementation stores Box<dyn Command>, which is fine.
         // But if I hold the lock while calling command.undo(self), and command.undo tries to lock document again... deadlock.
 
-        let mut command = {
+        let command = {
             let mut doc = self.document.write().unwrap();
             doc.history.pop_undo()
         };
@@ -336,7 +506,7 @@ impl Editor {
     }
 
     pub fn redo(&mut self) {
-        let mut command = {
+        let command = {
             let mut doc = self.document.write().unwrap();
             doc.history.pop_redo()
         };
@@ -473,5 +643,58 @@ mod tests {
         // Redo
         editor.redo();
         assert_eq!(editor.total_size(), 1);
+    }
+
+    #[test]
+    fn test_line_starts_with_custom_breaks() {
+        let mut editor = create_editor_with_content(&[0; 32]);
+        // Default: 0, 16
+        assert_eq!(editor.line_starts(), vec![0, 16]);
+
+        // Add custom break at 10
+        editor.add_custom_break(10);
+        // Should be 0, 10, 26
+        // Wait, current logic:
+        // current=0 -> push 0. next_custom=10, next_default=16. 10 < 16, so current=10.
+        // current=10 -> push 10. next_custom=None, next_default=26. current=26.
+        // current=26 -> push 26. next_custom=None, next_default=42. current=42 (>= 32, loop ends).
+        assert_eq!(editor.line_starts(), vec![0, 10, 26]);
+
+        // Add custom break at 5
+        editor.add_custom_break(5);
+        // 0, 5, 10, 26
+        assert_eq!(editor.line_starts(), vec![0, 5, 10, 26]);
+    }
+
+    #[test]
+    fn test_move_up_down_with_custom_breaks() {
+        let mut editor = create_editor_with_content(&[0; 32]);
+        editor.add_custom_break(10); // Lines: [0..10], [10..26], [26..32]
+
+        editor.set_cursor_offset(5);
+        editor.move_down();
+        // Move from line 0 pos 5 to line 1 pos 5 (offset 10 + 5 = 15)
+        assert_eq!(editor.cursor_offset, 15);
+
+        editor.move_down();
+        // Move from line 1 pos 5 to line 2 pos 5 (offset 26 + 5 = 31)
+        assert_eq!(editor.cursor_offset, 31);
+
+        editor.move_up();
+        assert_eq!(editor.cursor_offset, 15);
+
+        editor.move_up();
+        assert_eq!(editor.cursor_offset, 5);
+
+        // Test clamping to line length
+        editor.set_cursor_offset(28); // Line 2, pos 2 (28-26)
+        editor.move_up();
+        // Line 1 is 16 bytes long. pos 2 is valid. 10 + 2 = 12.
+        assert_eq!(editor.cursor_offset, 12);
+
+        editor.set_cursor_offset(20); // Line 1, pos 10
+        editor.move_down();
+        // Line 2 is 6 bytes long. pos 10 is too far. Clamp to 5. 26 + 5 = 31.
+        assert_eq!(editor.cursor_offset, 31);
     }
 }
