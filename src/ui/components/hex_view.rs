@@ -1,4 +1,8 @@
-use crate::actions::{SearchNext, SearchPrev, ToggleSearch};
+use crate::actions::{
+    AddCustomBreak, End, Home, MoveDown, MoveLeft, MoveRight, MoveUp, PageDown, PageUp,
+    RemoveCustomBreak, SearchNext, SearchPrev, SelectAll, SelectDown, SelectEnd, SelectHome,
+    SelectLeft, SelectPageDown, SelectPageUp, SelectRight, SelectUp, ToggleSearch,
+};
 use crate::core::document::Document;
 use crate::core::editor::Editor;
 use gpui::prelude::*;
@@ -18,33 +22,7 @@ pub enum HexViewEvent {
     CursorMoved(usize),
 }
 
-actions!(
-    hex_view,
-    [
-        MoveLeft,
-        MoveRight,
-        MoveUp,
-        MoveDown,
-        SelectLeft,
-        SelectRight,
-        SelectUp,
-        SelectDown,
-        SelectAll,
-        PageUp,
-        PageDown,
-        Home,
-        End,
-        SelectPageUp,
-        SelectPageDown,
-        SelectHome,
-        SelectEnd,
-        TriggerSearch,
-        TriggerSearchNext,
-        TriggerSearchPrev,
-        AddCustomBreak,
-        RemoveCustomBreak
-    ]
-);
+actions!(hex_view, [TriggerSearch, TriggerSearchNext, TriggerSearchPrev]);
 
 const CONTEXT: &str = "HexView";
 
@@ -265,6 +243,7 @@ impl HexView {
             editor.set_cursor_offset(offset);
         });
         self.ensure_cursor_visible(cx);
+        cx.notify();
     }
 
     fn ensure_cursor_visible(&mut self, cx: &mut Context<Self>) {
@@ -489,6 +468,7 @@ impl HexView {
             editor.move_left();
         });
         self.ensure_cursor_visible(cx);
+        cx.notify();
     }
 
     fn move_right(&mut self, _: &MoveRight, _window: &mut Window, cx: &mut Context<Self>) {
@@ -496,6 +476,7 @@ impl HexView {
             editor.move_right();
         });
         self.ensure_cursor_visible(cx);
+        cx.notify();
     }
 
     fn move_up(&mut self, _: &MoveUp, _window: &mut Window, cx: &mut Context<Self>) {
@@ -503,6 +484,7 @@ impl HexView {
             editor.move_up();
         });
         self.ensure_cursor_visible(cx);
+        cx.notify();
     }
 
     fn move_down(&mut self, _: &MoveDown, _window: &mut Window, cx: &mut Context<Self>) {
@@ -510,6 +492,7 @@ impl HexView {
             editor.move_down();
         });
         self.ensure_cursor_visible(cx);
+        cx.notify();
     }
 
     fn select_left(&mut self, _: &SelectLeft, _window: &mut Window, cx: &mut Context<Self>) {
@@ -726,7 +709,7 @@ impl Render for HexView {
             .font_family(self.font_family_prop.clone())
             .size_full()
             .key_context(CONTEXT)
-            .track_focus(&self.focus_handle)
+            .track_focus(&self.focus_handle(cx))
             .on_action(cx.listener(Self::move_left))
             .on_action(cx.listener(Self::move_right))
             .on_action(cx.listener(Self::move_up))

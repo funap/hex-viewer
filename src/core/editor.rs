@@ -25,6 +25,7 @@ pub struct Editor {
     pub selection_end: Option<usize>,
     pub search_state: SearchState,
     pub custom_breaks: BTreeSet<usize>,
+    line_starts_cache: RwLock<Option<Vec<usize>>>,
 }
 
 impl Editor {
@@ -36,6 +37,7 @@ impl Editor {
             selection_end: None,
             search_state: SearchState::default(),
             custom_breaks: BTreeSet::new(),
+            line_starts_cache: RwLock::new(None),
         }
     }
 
@@ -413,6 +415,13 @@ impl Editor {
     }
 
     pub fn line_starts(&self) -> Vec<usize> {
+        {
+            let cache = self.line_starts_cache.read().unwrap();
+            if let Some(starts) = cache.as_ref() {
+                return starts.clone();
+            }
+        }
+
         let total_size = self.total_size();
         let mut starts = Vec::new();
         let mut current = 0;
@@ -440,22 +449,33 @@ impl Editor {
             starts.push(0);
         }
 
+        let mut cache = self.line_starts_cache.write().unwrap();
+        *cache = Some(starts.clone());
         starts
+    }
+
+    pub fn invalidate_line_cache(&self) {
+        let mut cache = self.line_starts_cache.write().unwrap();
+        *cache = None;
     }
 
     pub fn add_custom_break(&mut self, offset: usize) {
         if offset > 0 && offset < self.total_size() {
-            self.custom_breaks.insert(offset);
+            if self.custom_breaks.insert(offset) {
+                self.invalidate_line_cache();
+            }
         }
     }
 
     pub fn remove_custom_break(&mut self, offset: usize) {
-        self.custom_breaks.remove(&offset);
+        if self.custom_breaks.remove(&offset) {
+            self.invalidate_line_cache();
+        }
     }
 
     pub fn toggle_custom_break(&mut self, offset: usize) {
         if self.custom_breaks.contains(&offset) {
-            self.custom_breaks.remove(&offset);
+            self.remove_custom_break(offset);
         } else {
             self.add_custom_break(offset);
         }
@@ -483,6 +503,7 @@ impl Editor {
     pub fn execute_command(&mut self, mut command: Box<dyn Command>) {
         command.execute(self);
         self.document.write().unwrap().history.push(command);
+        self.invalidate_line_cache();
     }
 
     pub fn undo(&mut self) {
