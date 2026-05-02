@@ -157,7 +157,7 @@ impl EditorPanel {
 
     fn perform_incremental_search(&mut self, query: &str, mode: SearchMode, cx: &mut Context<Self>) {
         if query.is_empty() {
-            self.editor.update(cx, |editor, cx| {
+            self.editor.update(cx, |editor: &mut Editor, cx| {
                 editor.clear_search();
                 cx.notify();
             });
@@ -167,7 +167,7 @@ impl EditorPanel {
             return;
         }
 
-        self.editor.update(cx, |editor, cx| {
+        self.editor.update(cx, |editor: &mut Editor, cx| {
             editor.set_search_query(query.to_string());
             cx.notify();
         });
@@ -303,7 +303,7 @@ impl EditorPanel {
     }
 
     fn perform_search_next(&mut self, cx: &mut Context<Self>) {
-        self.editor.update(cx, |editor, _| {
+        self.editor.update(cx, |editor: &mut Editor, _| {
             editor.next_search_result();
         });
         self.highlight_current_result(false, cx);
@@ -315,7 +315,7 @@ impl EditorPanel {
     }
 
     fn perform_search_prev(&mut self, cx: &mut Context<Self>) {
-        self.editor.update(cx, |editor, _| {
+        self.editor.update(cx, |editor: &mut Editor, _| {
             editor.prev_search_result();
         });
         self.highlight_current_result(false, cx);
