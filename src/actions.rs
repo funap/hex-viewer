@@ -72,63 +72,6 @@ pub struct ToggleFileTree;
 #[derive(Clone, PartialEq, Action)]
 pub struct OpenSettings;
 
-#[derive(Clone, PartialEq, Action)]
-pub struct MoveLeft;
-
-#[derive(Clone, PartialEq, Action)]
-pub struct MoveRight;
-
-#[derive(Clone, PartialEq, Action)]
-pub struct MoveUp;
-
-#[derive(Clone, PartialEq, Action)]
-pub struct MoveDown;
-
-#[derive(Clone, PartialEq, Action)]
-pub struct SelectLeft;
-
-#[derive(Clone, PartialEq, Action)]
-pub struct SelectRight;
-
-#[derive(Clone, PartialEq, Action)]
-pub struct SelectUp;
-
-#[derive(Clone, PartialEq, Action)]
-pub struct SelectDown;
-
-#[derive(Clone, PartialEq, Action)]
-pub struct SelectAll;
-
-#[derive(Clone, PartialEq, Action)]
-pub struct PageUp;
-
-#[derive(Clone, PartialEq, Action)]
-pub struct PageDown;
-
-#[derive(Clone, PartialEq, Action)]
-pub struct Home;
-
-#[derive(Clone, PartialEq, Action)]
-pub struct End;
-
-#[derive(Clone, PartialEq, Action)]
-pub struct SelectPageUp;
-
-#[derive(Clone, PartialEq, Action)]
-pub struct SelectPageDown;
-
-#[derive(Clone, PartialEq, Action)]
-pub struct SelectHome;
-
-#[derive(Clone, PartialEq, Action)]
-pub struct SelectEnd;
-
-#[derive(Clone, PartialEq, Action)]
-pub struct AddCustomBreak;
-
-#[derive(Clone, PartialEq, Action)]
-pub struct RemoveCustomBreak;
-
 #[derive(Clone)]
 pub struct AddEditorPanel(pub Arc<RwLock<Document>>);
 
