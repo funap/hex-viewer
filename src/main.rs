@@ -33,6 +33,53 @@ fn main() {
         ui::panels::editor_panel::init(cx);
         ui::panels::diff_panel::init(cx);
 
+        cx.set_menus(vec![
+            gpui::Menu {
+                name: "File".into(),
+                items: vec![
+                    gpui::MenuItem::action("Open File...", crate::actions::OpenFileDialog),
+                    gpui::MenuItem::action("Open Folder...", crate::actions::OpenFolder),
+                    gpui::MenuItem::action("Close Folder", crate::actions::CloseFolder),
+                    gpui::MenuItem::separator(),
+                    gpui::MenuItem::action("Toggle File Tree", crate::actions::ToggleFileTree),
+                    gpui::MenuItem::separator(),
+                    gpui::MenuItem::action("Quit", crate::actions::Quit),
+                ],
+            },
+            gpui::Menu {
+                name: "Edit".into(),
+                items: vec![
+                    gpui::MenuItem::action("Find", crate::actions::ToggleSearch),
+                    gpui::MenuItem::action("Find Next", crate::actions::SearchNext),
+                    gpui::MenuItem::action("Find Previous", crate::actions::SearchPrev),
+                    gpui::MenuItem::separator(),
+                    gpui::MenuItem::action("Select All", crate::actions::SelectAll),
+                    gpui::MenuItem::action("Go to Beginning", crate::actions::GoToBeginning),
+                    gpui::MenuItem::action("Go to End", crate::actions::GoToEnd),
+                ],
+            },
+            gpui::Menu {
+                name: "View".into(),
+                items: vec![
+                    gpui::MenuItem::action("Settings", crate::actions::OpenSettings),
+                ],
+            },
+        ]);
+
+        cx.bind_keys([
+            gpui::KeyBinding::new("cmd-o", crate::actions::OpenFileDialog, None),
+            gpui::KeyBinding::new("cmd-shift-o", crate::actions::OpenFolder, None),
+            gpui::KeyBinding::new("cmd-b", crate::actions::ToggleFileTree, None),
+            gpui::KeyBinding::new("cmd-q", crate::actions::Quit, None),
+            gpui::KeyBinding::new("cmd-f", crate::actions::ToggleSearch, None),
+            gpui::KeyBinding::new("cmd-g", crate::actions::SearchNext, None),
+            gpui::KeyBinding::new("cmd-shift-g", crate::actions::SearchPrev, None),
+            gpui::KeyBinding::new("cmd-a", crate::actions::SelectAll, None),
+            gpui::KeyBinding::new("cmd-home", crate::actions::GoToBeginning, None),
+            gpui::KeyBinding::new("cmd-end", crate::actions::GoToEnd, None),
+            gpui::KeyBinding::new("cmd-,", crate::actions::OpenSettings, None),
+        ]);
+
         // Parse command line arguments (skip the first one which is the program name)
         let mut files_to_open = Vec::new();
         let mut folder_to_open = None;

@@ -153,6 +153,7 @@ impl Workspace {
     }
 
     fn on_action_add_editor_panel(&mut self, action: &AddEditorPanel, window: &mut Window, cx: &mut Context<Self>) {
+        println!("Workspace::on_action_add_editor_panel triggered");
         let document = action.0.clone();
         let editor = cx.new(|_| Editor::new(document));
 
@@ -176,24 +177,96 @@ impl Workspace {
         });
     }
 
+    fn on_action_open_file_dialog(&mut self, _: &OpenFileDialog, window: &mut Window, cx: &mut Context<Self>) {
+        println!("OpenFileDialog triggered");
+        let path = cx.prompt_for_paths(gpui::PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: false,
+            prompt: Some("Select a file".into()),
+        });
+
+        let view = cx.entity();
+        cx.spawn_in(window, async move |_, window| {
+            println!("OpenFileDialog prompt returned");
+            if let Some(path) = path.await.ok().and_then(|r| r.ok()).flatten().and_then(|mut v| v.pop()) {
+                println!("Selected path: {:?}", path);
+                window.update(|window, cx| {
+                    println!("Directly calling OpenFile handler for {:?}", path);
+                    view.update(cx, |this, cx| {
+                        let action = crate::actions::OpenFile { path: path.to_string_lossy().to_string() };
+                        this.on_action_open_file(&action, window, cx);
+                    });
+                }).ok();
+            } else {
+                println!("No path selected or error occurred");
+            }
+        })
+        .detach();
+    }
+
+    fn on_action_quit(&mut self, _: &Quit, _: &mut Window, cx: &mut Context<Self>) {
+        cx.quit();
+    }
+
+    fn on_action_select_all(&mut self, _: &SelectAll, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(editor) = &self.active_editor {
+            editor.update(cx, |editor, _cx| {
+                editor.select_all();
+            });
+        }
+    }
+
+    fn on_action_go_to_beginning(&mut self, _: &GoToBeginning, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(editor) = &self.active_editor {
+            editor.update(cx, |editor, _cx| {
+                editor.go_to_beginning();
+            });
+        }
+    }
+
+    fn on_action_go_to_end(&mut self, _: &GoToEnd, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(editor) = &self.active_editor {
+            editor.update(cx, |editor, _cx| {
+                editor.go_to_end();
+            });
+        }
+    }
+
     fn on_action_open_file(&mut self, action: &OpenFile, window: &mut Window, cx: &mut Context<Self>) {
+        println!("Workspace::on_action_open_file triggered for {}", action.path);
         let file_path = action.path.clone();
         let path = std::path::PathBuf::from(&file_path);
 
         if let Some(focus_handle) = self.find_existing_panel(&path, cx) {
+            println!("Found existing panel for {:?}", path);
             focus_handle.focus(window);
             return;
         }
 
-        cx.spawn(async move |this, cx| {
-            let app = cx.update(|cx| AppState::global(cx).clone()).ok().unwrap();
-
-            if let Some(add_editor_panel) = this.upgrade() {
-                if let Ok(document) = app.editor_service.open_file(std::path::PathBuf::from(file_path)).await {
-                    let _ = add_editor_panel.update(cx, |_, cx| {
-                        cx.dispatch_action(&AddEditorPanel(document));
-                    });
+        println!("Spawning task to open file {:?}", path);
+        let view = cx.entity();
+        cx.spawn_in(window, async move |_, window| {
+            let editor_service_opt = window.update(|_, cx| AppState::global(cx).editor_service.clone()).ok();
+            
+            if let Some(editor_service) = editor_service_opt {
+                println!("Opening file through editor service...");
+                match editor_service.open_file(std::path::PathBuf::from(&file_path)).await {
+                    Ok(document) => {
+                        println!("File opened successfully. Adding EditorPanel directly");
+                        window.update(|window, cx| {
+                            view.update(cx, |this, cx| {
+                                let action = AddEditorPanel(document);
+                                this.on_action_add_editor_panel(&action, window, cx);
+                            });
+                        }).ok();
+                    }
+                    Err(e) => {
+                        println!("Failed to open file: {:?}", e);
+                    }
                 }
+            } else {
+                println!("Failed to access window state");
             }
         })
         .detach();
@@ -431,6 +504,11 @@ impl Render for Workspace {
         div()
             .id("workspace")
             .on_action(cx.listener(Self::on_action_open_file))
+            .on_action(cx.listener(Self::on_action_open_file_dialog))
+            .on_action(cx.listener(Self::on_action_quit))
+            .on_action(cx.listener(Self::on_action_select_all))
+            .on_action(cx.listener(Self::on_action_go_to_beginning))
+            .on_action(cx.listener(Self::on_action_go_to_end))
             .on_action(cx.listener(Self::on_action_add_editor_panel))
             .on_action(cx.listener(Self::on_action_open_diff))
             .on_action(cx.listener(Self::on_action_toggle_file_tree))

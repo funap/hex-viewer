@@ -100,7 +100,7 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("shift-f3", SearchPrev, Some(CONTEXT)),
         KeyBinding::new("ctrl-shift-g", SearchPrev, Some(CONTEXT)),
         KeyBinding::new("cmd-shift-g", SearchPrev, Some(CONTEXT)),
-        KeyBinding::new("shift-enter", AddCustomBreak, Some(CONTEXT)),
+        KeyBinding::new("enter", AddCustomBreak, Some(CONTEXT)),
         KeyBinding::new("delete", RemoveCustomBreak, Some(CONTEXT)),
         KeyBinding::new("backspace", RemoveCustomBreak, Some(CONTEXT)),
     ]);
@@ -323,7 +323,11 @@ impl HexView {
         }
 
         let row_start = line_starts[row_idx];
-        let row_end = if row_idx + 1 < line_starts.len() { line_starts[row_idx + 1] } else { editor.total_size() };
+        let row_end = if row_idx + 1 < line_starts.len() {
+            line_starts[row_idx + 1]
+        } else {
+            editor.total_size()
+        };
         let row_len = row_end - row_start;
 
         let x_offset = point.x - hex_start_x;
@@ -383,7 +387,11 @@ impl HexView {
 
         let row_idx = row_idx.min(line_starts.len() - 1);
         let row_start = line_starts[row_idx];
-        let row_end = if row_idx + 1 < line_starts.len() { line_starts[row_idx + 1] } else { editor.total_size() };
+        let row_end = if row_idx + 1 < line_starts.len() {
+            line_starts[row_idx + 1]
+        } else {
+            editor.total_size()
+        };
         let row_len = row_end - row_start;
 
         let x_offset = point.x - hex_start_x;
