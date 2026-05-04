@@ -1,132 +1,51 @@
-# 開発ガイドライン
+# xvi
 
-このドキュメントは、プロジェクトにおける開発の進め方、コーディング規約、アーキテクチャ、そして利用するフレームワークについてのガイドラインを定義します。
+`xvi` is a high-performance hex editor built with Rust and the [GPUI](https://www.gpui.rs/) framework (the same framework used by the Zed editor). It provides a modern, fast, and extensible interface for inspecting and editing binary data.
 
-## 1. 開発全般のルール
+## Project Overview
 
-プロジェクトに参加するすべての開発者は、以下のルールを遵守してください。
+- **Main Technologies:** Rust, GPUI, Tokio (for async tasks), Serde (for serialization).
+- **Architecture:**
+    - `src/core/`: Contains the core logic for the editor.
+        - `buffer.rs`: Simple byte buffer management.
+        - `editor.rs`: Manages cursor, selection, line layout, and custom breaks.
+        - `document.rs`: Represents a file or data stream being edited.
+        - `search.rs`: Implementation of search algorithms (hex/text).
+        - `history.rs`: Undo/Redo management.
+        - `encoding.rs`: Support for various character encodings (ASCII, UTF-8, UTF-16).
+    - `src/service/`: High-level services like `EditorService` for managing multiple documents and editors.
+    - `src/ui/`: All UI-related code.
+        - `workspace.rs`: The main window container, managing panels and docks.
+        - `panels/`: Specific UI panels like `EditorPanel`, `FileTreePanel`, `DiffPanel`, and `SettingsPanel`.
+        - `components/`: Reusable UI components like `HexView`, `StatusBar`, `SearchBar`, and `Toolbar`.
+    - `src/app_state.rs`: Global application state accessible throughout the app.
+    - `src/actions.rs`: Definitions of user actions that can be triggered via menus or keybindings.
+- **Key Features:**
+    - **Hex & ASCII Views:** Side-by-side inspection of binary data.
+    - **Custom Line Breaks:** Users can manually split lines for better visualization of structured binary data.
+    - **Multi-Encoding Support:** Toggle between ASCII, UTF-8, and UTF-16 (LE/BE).
+    - **Diff View:** Compare two binary files side-by-side with synchronized scrolling.
+    - **File Tree:** Navigate the filesystem directly within the editor.
+    - **VI-like Bindings:** Support for `h`, `j`, `k`, `l` navigation, and `/` for search.
 
-- **言語**: このドキュメントやコミュニケーションは、原則として日本語を使用します。
-- **コードの理解と編集**: コードベースの分析や大規模な変更は、AIアシスタント(`serena`)に委任することを推奨します。
-- **外部情報の参照**: `gpui`や`gpui-component`のAPI仕様など、プロジェクト内の技術情報を調査する際は、まず`serena`に問い合わせてください。Web検索(`WebFetch`, `google_web_search`)はその次善策とします。
-- **依存関係のバージョン**: `Cargo.toml`に記載されている依存ライブラリのバージョンは、原則として**変更しないでください**。特に、バージョンを下げることは禁止します。
-- **コメント**: コードの動作を要約するコメントは避け、コードだけでは理解が難しい「なぜ」その実装になっているのか、という理由を説明する場合にのみコメントを記述してください。
-- **ビルド確認**: タスクの完了時には`cargo check`を実行し、コンパイルエラーがないことを必ず確認してください。
+## Building and Running
 
----
+### Prerequisites
 
-## 2. コーディング原則とアーキテクチャ
+- Rust (latest stable version recommended)
 
-品質の高いコードを維持するための、コーディング上の原則とアーキテクチャに関する指針です。
+### Commands
 
-### 2.1. 基本原則
+- **Run the application:** `cargo run [file_or_folder_path]`
+- **Build for production:** `cargo build --release`
+- **Run tests:** `cargo test`
+- **Format code:** `cargo fmt`
+- **Lint code:** `cargo clippy`
 
-- **正確性と明確性**: コードのパフォーマンスよりも、まず第一に**正確性**と**明確性**を優先してください。
-- **エラーハンドリング**: 
-    - `unwrap()`のようなパニックを引き起こす可能性のある関数は避け、`?`演算子などを用いてエラーを適切に伝播させてください。
-    - インデックスアクセスなど、範囲外アクセスの可能性がある操作には特に注意してください。
-    - エラーを決して`let _ = ...`のように無視しないでください。エラーは、`?`による伝播、ログ出力(`log_err()`)、あるいは`match`文による明示的なハンドリングなど、状況に応じて適切に処理する必要があります。
-- **非同期処理**:
-    - ファイルI/Oや計算量の多い処理など、UIスレッドをブロックする可能性のある操作は、必ず非同期タスクとして実行してください。
-    - 非同期処理内でエラーが発生した場合は、そのエラーがUI層まで伝播するように設計し、ユーザーにフィードバックが返るようにしてください。
-- **命名**: 変数名には`q`のような省略形を使わず、`queue`のような完全な単語を使用してください。
-- **モジュール構成**:
-    - 新しい論理コンポーネントでない限り、既存のファイルに機能を追加することを検討してください。小さなファイルを不必要に増やすことは避けましょう。
-    - `mod.rs`というファイル名は使用せず、`some_module.rs`のように、モジュール自体に名前を付ける形式を推奨します。
+## Development Conventions
 
-### 2.2. アーキテクチャ原則
-
-- **データとUIの分離 (MVC/MVVM)**:
-    - **Model (`data/`)**: コアとなるデータとロジックのみを扱い、UIライブラリへの依存を排除します。
-    - **View/ViewModel (`ui/`)**: データの表示とユーザー入力のハンドリングに特化します。
-    - **呼び出しフロー**: **UI (`View`) → Service → Logic/Data** の流れを基本とします。
-- **リアクティブな状態管理**: アプリケーションの状態はGPUIの`Entity`を用いてリアクティブに管理します。例えば、`FileBuffer`のデータが変更された場合、関連する`EditorView`が自動的に再描画されるように設計します。
-- **非同期処理の徹底**:
-    - 時間のかかる可能性のあるすべての操作（ファイルI/O、検索、Diff計算など）は、GPUIの非同期機能 (`cx.spawn`) を利用してバックグラウンドで実行し、UIのフリーズを防ぎます。
-    - これらのタスクの管理は、原則として**Service層**が責任を持ちます。
-
----
-
-## 3. GPUIフレームワークガイド
-
-`GPUI`は、UIだけでなく、状態管理や非同期処理のためのプリミティブも提供するフレームワークです。
-
-### 3.1. 主要な概念
-
-- **Context (`cx`)**: グローバルな状態、ウィンドウ、エンティティ、システムサービスへのアクセスを提供します。通常、関数の引数として`cx`という名前で渡されます。
-- **Window**: アプリケーションウィンドウの状態を管理します。フォーカス制御、アクションのディスパッチ、ユーザー入力の取得などに使用します。
-- **Entity (`Entity<T>`)**: `T`という型の状態へのハンドルです。`Model<T>`や`View<T>`は廃止され、`Entity<T>`に統一されました。
-    - `entity.read(cx)`: 状態を不変で参照します。
-    - `entity.update(cx, |this, cx| ...)`: 状態を可変で更新します。このクロージャ内では、内側の`cx`を使用する必要があります。
-    - `WeakEntity<T>`: 循環参照によるメモリリークを避けるための弱いハンドルです。エンティティが存在しない可能性を考慮し、常に`anyhow::Result`を返します。
-
-### 3.2. 非同期処理 (`Concurrency`)
-
-- UIレンダリングやエンティティの操作は、すべて単一のフォアグラウンドスレッドで実行されます。
-- `cx.spawn(async move |cx| ...)`: フォアグラウンドスレッドで非同期タスクを実行します。
-- `cx.background_spawn(async move { ... })`: バックグラウンドスレッドで重い処理を実行します。結果はフォアグラウンドのタスクで待機し、UI状態を更新するのが一般的です。
-- `Task<R>`: `spawn`系のメソッドは`Task`を返します。この`Task`がドロップされると処理はキャンセルされるため、`task.detach()`で分離するか、`await`するか、フィールドに保持するなどの管理が必要です。
-
-#### コード例: `cx.spawn`
-
-```rust
-// `Context<T>`内から呼び出す例
-cx.spawn(|this, cx| async move {
-    // 非同期処理を実行
-    // ...
-    if let Some(this) = this.upgrade() {
-        this.update(&cx, |this, cx| {
-            // 状態を更新
-        }).ok();
-    }
-})
-```
-
-### 3.3. レンダリング (`Elements`)
-
-- `Render`トレイトを実装することで、状態をElementツリーに変換します。
-- `div()`, `child()`などのメソッドチェーンでUIを構築します。スタイリングはTailwind CSSに似ています。
-- `.when(condition, |this| ...)` や `.when_some(option, |this, value| ...)` を使うことで、条件に応じたレンダリングが可能です。
-
-### 3.4. イベントとアクション
-
-- **入力イベント**: `.on_click(|event, window, cx| ...)` のように、Elementにイベントハンドラを登録します。
-- **`cx.listener`**: `Context<T>`内のエンティティを更新したい場合、`.on_click(cx.listener(|this, event, window, cx| ...))` のように使用すると便利です。
-- **アクション**:
-    - `actions!(some_namespace, [SomeAction])` マクロで定義します。
-    - `window.dispatch_action(...)` でアクションを発行します。
-    - `.on_action(|action, window, cx| ...)` でアクションをハンドルします。
-
-### 3.5. 状態変更の通知
-
-- **`cx.notify()`**: Viewの状態が変更され、再描画が必要な場合に呼び出します。
-- **`cx.subscribe()`**: あるエンティティが別のエンティティのイベントを購読するための仕組みです。`cx.emit(event)`で発行されたイベントをハンドルできます。返り値の`Subscription`がドロップされると購読も解除されるため、`Vec<Subscription>`フィールドに保持するのが一般的です。
-
-### 3.6. 最近のAPI変更（重要）
-
-古いAPIは使用せず、常に新しいAPIを使用してください。
-
-- `Model<T>`, `View<T>` は廃止されたので使いません。代わりに`Entity<T>`を使用してください。
-- `AppContext`, `ModelContext<T>` は廃止されたので使いません。代わりに**`App` / `Context<T>`**を使用してください。
-- `WindowContext` や `ViewContext<T>` は廃止されました。`Window`が明示的に引数で渡されるようになりました。
-
----
-
-## 4. プロジェクトの構造と責務
-
-`src`ディレクトリ内の各モジュールは、単一責任の原則に基づき、以下の責務を持ちます。
-
-| パス | 責務の概要 |
-| :--- | :--- |
-| `src/main.rs` | アプリケーションのエントリーポイント。GPUIの初期化と`AppState`の起動。 |
-| `src/actions.rs` | アプリケーション全体で使用されるアクション定義 (`OpenFile`など)。 |
-| `src/app_state.rs` | グローバルな状態管理 (`AppState`構造体)。 |
-| `src/ui/` | **UI層**: GPUIのView/Entity。描画とイベントハンドリング。 |
-| `src/ui/workspace.rs`| メインウィンドウ、ドッキング、タブ、ペインなどの管理。 |
-| `src/data/` | **データ層**: バイナリデータとI/O処理。ファイルシステムとの連携。 |
-| `src/data/file_buffer.rs`| 大規模ファイルへの効率的なメモリアクセスを提供。 |
-| `src/data/encoding.rs`| 文字列エンコーディングの変換と判定。 |
-| `src/service/` | **サービス層**: ワークフローの調整、非同期タスクの統合管理。 |
-| `src/service/editor_service.rs`| UIからの要求を受け、各モジュールを呼び出して状態を更新する。 |
-| `src/analysis/` | **解析層**: バイナリの高度な解析ロジック（状態を持たない純粋関数を推奨）。 |
-| `src/util/` | 共通ユーティリティ、定数、トレイト定義など。 |
+- **UI Framework:** Strictly follow GPUI patterns. Use `cx.new`, `cx.observe`, and `cx.subscribe` for reactive state management.
+- **Actions:** Define new user interactions in `src/actions.rs` and bind them in `src/ui/workspace.rs` or specific components.
+- **Styling:** Use the theme-aware styling provided by `gpui` and the local `theme.rs`. Prefer `cx.theme()` for colors and spacing.
+- **Asynchronous Tasks:** Use `cx.spawn` or `cx.spawn_in` for long-running operations like file I/O or diff computation to keep the UI responsive.
+- **Testing:** Add unit tests for core logic in `src/core/` and integration tests where appropriate.
