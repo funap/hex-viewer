@@ -7,6 +7,7 @@ use gpui::{ScrollWheelEvent, WeakEntity};
 use gpui_component::scroll::*;
 use gpui_component::{ActiveTheme, PixelsExt};
 use std::cmp;
+use std::collections::BTreeSet;
 use std::ops::Range;
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -40,6 +41,8 @@ actions!(
         SelectEnd,
         AddCustomBreak,
         RemoveCustomBreak,
+        JoinLine,
+        ClearAllCustomBreaks,
         TriggerSearch,
         TriggerSearchNext,
         TriggerSearchPrev
@@ -103,6 +106,8 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("enter", AddCustomBreak, Some(CONTEXT)),
         KeyBinding::new("delete", RemoveCustomBreak, Some(CONTEXT)),
         KeyBinding::new("backspace", RemoveCustomBreak, Some(CONTEXT)),
+        KeyBinding::new("shift-enter", JoinLine, Some(CONTEXT)),
+        KeyBinding::new("cmd-shift-backspace", ClearAllCustomBreaks, Some(CONTEXT)),
     ]);
 }
 
@@ -222,10 +227,7 @@ impl HexView {
 
     pub fn scroll_to_offset(&mut self, byte_offset: usize, cx: &mut Context<Self>) {
         let line_starts = self.editor.read(cx).line_starts();
-        let row = match line_starts.binary_search(&byte_offset) {
-            Ok(idx) => idx,
-            Err(idx) => idx - 1,
-        };
+        let row = Editor::find_line_index(byte_offset, &line_starts);
         self.set_scroll_offset(row, cx);
     }
 
@@ -282,10 +284,7 @@ impl HexView {
         let editor = self.editor.read(cx);
         let cursor_offset = editor.cursor_offset;
         let line_starts = editor.line_starts();
-        let cursor_row = match line_starts.binary_search(&cursor_offset) {
-            Ok(idx) => idx,
-            Err(idx) => idx - 1,
-        };
+        let cursor_row = Editor::find_line_index(cursor_offset, &line_starts);
 
         if cursor_row < self.scroll_offset {
             self.scroll_offset = cursor_row;
@@ -684,7 +683,15 @@ impl HexView {
     fn add_custom_break(&mut self, _: &AddCustomBreak, _window: &mut Window, cx: &mut Context<Self>) {
         let cursor_offset = self.editor.read(cx).cursor_offset;
         self.editor.update(cx, |editor, _| {
-            editor.toggle_custom_break(cursor_offset);
+            let line_starts = editor.line_starts();
+            let current_line_idx = Editor::find_line_index(cursor_offset, &line_starts);
+            let current_line_start = line_starts.get(current_line_idx).copied().unwrap_or(0);
+
+            if cursor_offset == current_line_start {
+                editor.add_empty_line(cursor_offset);
+            } else {
+                editor.toggle_custom_break(cursor_offset);
+            }
         });
         cx.notify();
     }
@@ -693,29 +700,41 @@ impl HexView {
         let cursor_offset = self.editor.read(cx).cursor_offset;
         self.editor.update(cx, |editor, _| {
             let line_starts = editor.line_starts();
-            let current_line_idx = match line_starts.binary_search(&cursor_offset) {
-                Ok(idx) => idx,
-                Err(idx) => idx - 1,
-            };
+            let current_line_idx = Editor::find_line_index(cursor_offset, &line_starts);
             let current_line_start = line_starts[current_line_idx];
 
-            if cursor_offset == current_line_start && editor.custom_breaks.contains(&cursor_offset) {
-                // At the start of a custom-broken line
-                editor.remove_custom_break(cursor_offset);
+            if cursor_offset == current_line_start {
+                if !editor.remove_empty_line(cursor_offset) {
+                    if editor.custom_breaks.contains(&cursor_offset) {
+                        editor.remove_custom_break(cursor_offset);
+                    }
+                }
             } else {
-                // Check if the NEXT line starts with a custom break (Delete-like behavior at end of line)
+                // Any Delete/Backspace that is not at the start of the line will try to remove the Custom Break at the end of the line.
                 let current_line_end = if current_line_idx + 1 < line_starts.len() {
                     line_starts[current_line_idx + 1]
                 } else {
                     editor.total_size()
                 };
 
-                if (cursor_offset == current_line_end.saturating_sub(1) || cursor_offset == current_line_end)
-                    && editor.custom_breaks.contains(&current_line_end)
-                {
+                if editor.custom_breaks.contains(&current_line_end) {
                     editor.remove_custom_break(current_line_end);
                 }
             }
+        });
+        cx.notify();
+    }
+
+    fn join_line(&mut self, _: &JoinLine, _window: &mut Window, cx: &mut Context<Self>) {
+        self.editor.update(cx, |editor, _| {
+            editor.join_line();
+        });
+        cx.notify();
+    }
+
+    fn clear_all_custom_breaks(&mut self, _: &ClearAllCustomBreaks, _window: &mut Window, cx: &mut Context<Self>) {
+        self.editor.update(cx, |editor, _| {
+            editor.clear_all_custom_breaks();
         });
         cx.notify();
     }
@@ -773,25 +792,49 @@ impl Render for HexView {
             .on_action(cx.listener(Self::trigger_search))
             .on_action(cx.listener(Self::add_custom_break))
             .on_action(cx.listener(Self::remove_custom_break))
+            .on_action(cx.listener(Self::join_line))
+            .on_action(cx.listener(Self::clear_all_custom_breaks))
             .on_scroll_wheel(cx.listener(Self::on_scroll_wheel))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
-            .child(HexViewElement {
-                view: cx.entity().downgrade(),
-                document,
-                line_starts,
-                selection_start,
-                selection_end,
-                cursor_offset,
-                scroll_offset: self.scroll_offset,
-                focus_handle: self.focus_handle.clone(),
-                highlights: self.highlights.clone(),
-                show_offset: self.show_offset,
-                show_header: self.show_header,
-                show_ascii: self.show_ascii,
-                font_family: self.font_family_prop.clone(),
-                font_size: self.font_size_prop,
+            .child({
+                let editor = self.editor.read(cx);
+                let custom_breaks = editor.custom_breaks.clone();
+
+                // 最大行長を計算（ヘッダーとASCI位置の動的調整に使用）
+                let total_size = editor.total_size();
+                let max_bytes_per_row = {
+                    let mut max_len = BYTES_PER_ROW;
+                    for (idx, &start) in line_starts.iter().enumerate() {
+                        let end = if idx + 1 < line_starts.len() {
+                            line_starts[idx + 1]
+                        } else {
+                            total_size
+                        };
+                        max_len = max_len.max(end - start);
+                    }
+                    max_len
+                };
+
+                HexViewElement {
+                    view: cx.entity().downgrade(),
+                    document,
+                    line_starts,
+                    selection_start,
+                    selection_end,
+                    cursor_offset,
+                    scroll_offset: self.scroll_offset,
+                    focus_handle: self.focus_handle.clone(),
+                    highlights: self.highlights.clone(),
+                    show_offset: self.show_offset,
+                    show_header: self.show_header,
+                    show_ascii: self.show_ascii,
+                    font_family: self.font_family_prop.clone(),
+                    font_size: self.font_size_prop,
+                    custom_breaks,
+                    max_bytes_per_row,
+                }
             })
             .child(
                 div().absolute().top_0().right_0().bottom_0().w_4().child(
@@ -818,13 +861,17 @@ struct HexViewElement {
     show_ascii: bool,
     font_family: SharedString,
     font_size: Pixels,
+    custom_breaks: BTreeSet<usize>,
+    max_bytes_per_row: usize,
 }
 
 struct PrepaintState {
     data_lines: Vec<DataLine>,
     selection_quads: Vec<PaintQuad>,
+    break_indicator_quads: Vec<PaintQuad>,
     cursor: Option<PaintQuad>,
     header: HeaderParts,
+    max_bytes_per_row: usize,
 }
 
 struct HeaderParts {
@@ -924,6 +971,7 @@ impl Element for HexViewElement {
 
         let mut data_lines = Vec::new();
         let mut selection_quads = Vec::new();
+        let mut break_indicator_quads = Vec::new();
 
         let offset_width = if self.show_offset { px(OFFSET_WIDTH) } else { px(0.) };
         let hex_start_x = bounds.left() + px(OFFSET_X_START) + offset_width + px(SECTION_GAP);
@@ -1077,6 +1125,16 @@ impl Element for HexViewElement {
                 hex_lines,
                 ascii_line,
             });
+
+            // Custom Break インジケーター: 行の先頭が custom_breaks に含まれる場合、左端にマーカーを描画
+            if self.custom_breaks.contains(&offset) {
+                let indicator_x = bounds.left() + px(1.);
+                let indicator_width = px(3.);
+                break_indicator_quads.push(fill(
+                    Bounds::new(point(indicator_x, y_pos), size(indicator_width, row_height)),
+                    theme.yellow.opacity(0.8),
+                ));
+            }
         }
 
         let cursor = {
@@ -1085,10 +1143,7 @@ impl Element for HexViewElement {
 
             // Show cursor if focused, even for empty buffer
             if focus_handle.is_focused(window) {
-                let cursor_row = match line_starts.binary_search(&cursor_offset) {
-                    Ok(idx) => idx,
-                    Err(idx) => idx - 1,
-                };
+                let cursor_row = Editor::find_line_index(cursor_offset, &line_starts);
                 let byte_in_row = cursor_offset - line_starts[cursor_row];
 
                 if cursor_row >= start_row && cursor_row < end_row {
@@ -1127,7 +1182,8 @@ impl Element for HexViewElement {
             };
 
             let mut hex_bytes = Vec::new();
-            for i in 0..16 {
+            let header_cols = self.max_bytes_per_row;
+            for i in 0..header_cols {
                 let s = format!("+{:X}", i);
                 let run = TextRun {
                     len: s.len(),
@@ -1160,8 +1216,10 @@ impl Element for HexViewElement {
         PrepaintState {
             data_lines,
             selection_quads,
+            break_indicator_quads,
             cursor,
             header,
+            max_bytes_per_row: self.max_bytes_per_row,
         }
     }
 
@@ -1182,10 +1240,7 @@ impl Element for HexViewElement {
         let hex_start_x = bounds.left() + px(OFFSET_X_START) + offset_width + px(SECTION_GAP);
         let hex_byte_width = px(HEX_BYTE_WIDTH);
         let hex_gap = px(HEX_GAP);
-        // ASCII start depends on the max bytes per row?
-        // Let's use a fixed value based on BYTES_PER_ROW to keep it aligned if possible,
-        // or just enough to clear the longest possible line.
-        let ascii_start_x = hex_start_x + (hex_byte_width + hex_gap) * BYTES_PER_ROW as f32 + px(SECTION_GAP);
+        let ascii_start_x = hex_start_x + (hex_byte_width + hex_gap) * prepaint.max_bytes_per_row as f32 + px(SECTION_GAP);
 
         let theme = cx.theme();
         let bg_color = theme.background;
@@ -1225,6 +1280,11 @@ impl Element for HexViewElement {
 
         for selection_quad in prepaint.selection_quads.drain(..) {
             window.paint_quad(selection_quad);
+        }
+
+        // Custom Break インジケーターを描画
+        for indicator_quad in prepaint.break_indicator_quads.drain(..) {
+            window.paint_quad(indicator_quad);
         }
 
         for (i, data_line) in prepaint.data_lines.iter().enumerate() {

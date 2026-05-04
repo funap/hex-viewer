@@ -48,6 +48,20 @@ impl Render for StatusBar {
             "--".to_string()
         };
 
+        let has_custom_layout = if let Some(editor) = self.active_editor.as_ref().and_then(|e| e.upgrade()) {
+            let editor = editor.read(cx);
+            editor.has_custom_layout()
+        } else {
+            false
+        };
+
+        let custom_layout_count = if let Some(editor) = self.active_editor.as_ref().and_then(|e| e.upgrade()) {
+            let editor = editor.read(cx);
+            editor.custom_layout_count()
+        } else {
+            0
+        };
+
         div()
             .h_8()
             .flex()
@@ -77,7 +91,17 @@ impl Render for StatusBar {
                     .gap_1()
                     .child(div().w(px(240.)).child(format!("Offset: 0x{:08X} ({})", cursor_offset, cursor_offset)))
                     .child(div().w(px(220.)).child(format!("Value: {}", cursor_val)))
-                    .child(div().w(px(200.)).child(format!("Size: {} bytes", total_size))),
+                    .child(div().w(px(200.)).child(format!("Size: {} bytes", total_size)))
+                    .when(has_custom_layout, |el| {
+                        el.child(
+                            div()
+                                .px_2()
+                                .rounded_md()
+                                .bg(theme.yellow.opacity(0.2))
+                                .text_color(theme.yellow)
+                                .child(format!("Layout: {} breaks", custom_layout_count)),
+                        )
+                    }),
             )
     }
 }

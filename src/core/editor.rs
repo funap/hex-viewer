@@ -25,6 +25,11 @@ pub struct Editor {
     pub selection_end: Option<usize>,
     pub search_state: SearchState,
     pub custom_breaks: BTreeSet<usize>,
+    /// 16バイト自然境界のうち、改行を抑制すべき位置を記録する。
+    /// join_line() で追加され、行を16バイト超に結合するために使用。
+    pub custom_joins: BTreeSet<usize>,
+    /// 特定のオフセットに挿入された空行の数を記録する。
+    pub empty_lines: std::collections::BTreeMap<usize, usize>,
 }
 
 impl Editor {
@@ -36,11 +41,61 @@ impl Editor {
             selection_end: None,
             search_state: SearchState::default(),
             custom_breaks: BTreeSet::new(),
+            custom_joins: BTreeSet::new(),
+            empty_lines: std::collections::BTreeMap::new(),
         }
     }
 
     pub fn total_size(&self) -> usize {
         self.document.read().unwrap().buffer.len()
+    }
+
+    /// line_starts の中から、指定オフセットが属するデータ行（空行でない行）のインデックスを返す。
+    /// 空行（重複エントリ）がある場合、最後の重複（データ行）を返す。
+    pub fn find_line_index(offset: usize, line_starts: &[usize]) -> usize {
+        match line_starts.binary_search(&offset) {
+            Ok(mut idx) => {
+                // 重複がある場合、最後の重複（データ行）に移動
+                while idx + 1 < line_starts.len() && line_starts[idx + 1] == offset {
+                    idx += 1;
+                }
+                idx
+            }
+            Err(idx) => idx.saturating_sub(1),
+        }
+    }
+
+    /// 上方向の次のデータ行（空行をスキップ）のインデックスを返す。
+    fn prev_data_line(idx: usize, line_starts: &[usize]) -> Option<usize> {
+        let mut i = idx.checked_sub(1)?;
+        let total_size_proxy = if line_starts.is_empty() { 0 } else {
+            // 行の長さを確認して空行をスキップ
+            loop {
+                let line_start = line_starts[i];
+                let line_end = if i + 1 < line_starts.len() { line_starts[i + 1] } else { return Some(i); };
+                if line_end > line_start {
+                    return Some(i);
+                }
+                if i == 0 { return None; }
+                i -= 1;
+            }
+        };
+        let _ = total_size_proxy;
+        None
+    }
+
+    /// 下方向の次のデータ行（空行をスキップ）のインデックスを返す。
+    fn next_data_line(idx: usize, line_starts: &[usize], total_size: usize) -> Option<usize> {
+        let mut i = idx + 1;
+        while i < line_starts.len() {
+            let line_start = line_starts[i];
+            let line_end = if i + 1 < line_starts.len() { line_starts[i + 1] } else { total_size };
+            if line_end > line_start {
+                return Some(i);
+            }
+            i += 1;
+        }
+        None
     }
 
     pub fn value_at_cursor(&self) -> Option<u8> {
@@ -85,18 +140,16 @@ impl Editor {
 
     pub fn move_up(&mut self) {
         let line_starts = self.line_starts();
-        let current_line_idx = match line_starts.binary_search(&self.cursor_offset) {
-            Ok(idx) => idx,
-            Err(idx) => idx - 1,
-        };
+        let current_line_idx = Self::find_line_index(self.cursor_offset, &line_starts);
 
-        if current_line_idx > 0 {
+        if let Some(prev_idx) = Self::prev_data_line(current_line_idx, &line_starts) {
             let current_line_start = line_starts[current_line_idx];
             let offset_in_line = self.cursor_offset - current_line_start;
-            let prev_line_start = line_starts[current_line_idx - 1];
-            let prev_line_len = current_line_start - prev_line_start;
+            let prev_line_start = line_starts[prev_idx];
+            let prev_line_end = line_starts[prev_idx + 1];
+            let prev_line_len = prev_line_end - prev_line_start;
 
-            self.cursor_offset = prev_line_start + cmp::min(offset_in_line, prev_line_len - 1);
+            self.cursor_offset = prev_line_start + cmp::min(offset_in_line, prev_line_len.saturating_sub(1));
             self.selection_start = None;
             self.selection_end = None;
         }
@@ -104,19 +157,17 @@ impl Editor {
 
     pub fn move_down(&mut self) {
         let line_starts = self.line_starts();
-        let current_line_idx = match line_starts.binary_search(&self.cursor_offset) {
-            Ok(idx) => idx,
-            Err(idx) => idx - 1,
-        };
+        let total_size = self.total_size();
+        let current_line_idx = Self::find_line_index(self.cursor_offset, &line_starts);
 
-        if current_line_idx + 1 < line_starts.len() {
+        if let Some(next_idx) = Self::next_data_line(current_line_idx, &line_starts, total_size) {
             let current_line_start = line_starts[current_line_idx];
             let offset_in_line = self.cursor_offset - current_line_start;
-            let next_line_start = line_starts[current_line_idx + 1];
-            let next_line_end = if current_line_idx + 2 < line_starts.len() {
-                line_starts[current_line_idx + 2]
+            let next_line_start = line_starts[next_idx];
+            let next_line_end = if next_idx + 1 < line_starts.len() {
+                line_starts[next_idx + 1]
             } else {
-                self.total_size()
+                total_size
             };
             let next_line_len = next_line_end - next_line_start;
 
@@ -128,8 +179,7 @@ impl Editor {
             self.selection_start = None;
             self.selection_end = None;
         } else {
-            let buffer_len = self.total_size();
-            self.cursor_offset = buffer_len;
+            self.cursor_offset = total_size;
             self.selection_start = None;
             self.selection_end = None;
         }
@@ -158,44 +208,40 @@ impl Editor {
 
     pub fn select_up(&mut self) {
         let line_starts = self.line_starts();
-        let current_line_idx = match line_starts.binary_search(&self.cursor_offset) {
-            Ok(idx) => idx,
-            Err(idx) => idx - 1,
-        };
+        let current_line_idx = Self::find_line_index(self.cursor_offset, &line_starts);
 
-        if current_line_idx > 0 {
+        if let Some(prev_idx) = Self::prev_data_line(current_line_idx, &line_starts) {
             if self.selection_start.is_none() {
                 self.selection_start = Some(self.cursor_offset);
             }
             let current_line_start = line_starts[current_line_idx];
             let offset_in_line = self.cursor_offset - current_line_start;
-            let prev_line_start = line_starts[current_line_idx - 1];
-            let prev_line_len = current_line_start - prev_line_start;
+            let prev_line_start = line_starts[prev_idx];
+            let prev_line_end = line_starts[prev_idx + 1];
+            let prev_line_len = prev_line_end - prev_line_start;
 
-            self.cursor_offset = prev_line_start + cmp::min(offset_in_line, prev_line_len - 1);
+            self.cursor_offset = prev_line_start + cmp::min(offset_in_line, prev_line_len.saturating_sub(1));
             self.selection_end = Some(self.cursor_offset);
         }
     }
 
     pub fn select_down(&mut self) {
         let line_starts = self.line_starts();
-        let current_line_idx = match line_starts.binary_search(&self.cursor_offset) {
-            Ok(idx) => idx,
-            Err(idx) => idx - 1,
-        };
+        let total_size = self.total_size();
+        let current_line_idx = Self::find_line_index(self.cursor_offset, &line_starts);
 
         if self.selection_start.is_none() {
             self.selection_start = Some(self.cursor_offset);
         }
 
-        if current_line_idx + 1 < line_starts.len() {
+        if let Some(next_idx) = Self::next_data_line(current_line_idx, &line_starts, total_size) {
             let current_line_start = line_starts[current_line_idx];
             let offset_in_line = self.cursor_offset - current_line_start;
-            let next_line_start = line_starts[current_line_idx + 1];
-            let next_line_end = if current_line_idx + 2 < line_starts.len() {
-                line_starts[current_line_idx + 2]
+            let next_line_start = line_starts[next_idx];
+            let next_line_end = if next_idx + 1 < line_starts.len() {
+                line_starts[next_idx + 1]
             } else {
-                self.total_size()
+                total_size
             };
             let next_line_len = next_line_end - next_line_start;
 
@@ -206,8 +252,7 @@ impl Editor {
             }
             self.selection_end = Some(self.cursor_offset);
         } else {
-            let buffer_len = self.total_size();
-            self.cursor_offset = buffer_len;
+            self.cursor_offset = total_size;
             self.selection_end = Some(self.cursor_offset);
         }
     }
@@ -234,10 +279,7 @@ impl Editor {
 
     pub fn page_up(&mut self, visible_rows: usize) {
         let line_starts = self.line_starts();
-        let current_line_idx = match line_starts.binary_search(&self.cursor_offset) {
-            Ok(idx) => idx,
-            Err(idx) => idx - 1,
-        };
+        let current_line_idx = Self::find_line_index(self.cursor_offset, &line_starts);
 
         self.selection_start = None;
         self.selection_end = None;
@@ -259,10 +301,7 @@ impl Editor {
 
     pub fn page_down(&mut self, visible_rows: usize) {
         let line_starts = self.line_starts();
-        let current_line_idx = match line_starts.binary_search(&self.cursor_offset) {
-            Ok(idx) => idx,
-            Err(idx) => idx - 1,
-        };
+        let current_line_idx = Self::find_line_index(self.cursor_offset, &line_starts);
 
         self.selection_start = None;
         self.selection_end = None;
@@ -301,10 +340,7 @@ impl Editor {
 
     pub fn select_page_up(&mut self, visible_rows: usize) {
         let line_starts = self.line_starts();
-        let current_line_idx = match line_starts.binary_search(&self.cursor_offset) {
-            Ok(idx) => idx,
-            Err(idx) => idx - 1,
-        };
+        let current_line_idx = Self::find_line_index(self.cursor_offset, &line_starts);
 
         if self.selection_start.is_none() {
             self.selection_start = Some(self.cursor_offset);
@@ -328,10 +364,7 @@ impl Editor {
 
     pub fn select_page_down(&mut self, visible_rows: usize) {
         let line_starts = self.line_starts();
-        let current_line_idx = match line_starts.binary_search(&self.cursor_offset) {
-            Ok(idx) => idx,
-            Err(idx) => idx - 1,
-        };
+        let current_line_idx = Self::find_line_index(self.cursor_offset, &line_starts);
 
         if self.selection_start.is_none() {
             self.selection_start = Some(self.cursor_offset);
@@ -428,27 +461,38 @@ impl Editor {
     pub fn line_starts(&self) -> Vec<usize> {
         let total_size = self.total_size();
         let mut starts = Vec::new();
+        
         let mut current = 0;
 
         while current < total_size {
-            starts.push(current);
-            // Find the next custom break after current
-            let next_custom = self.custom_breaks.range((current + 1)..).next().copied();
-            // Default break after BYTES_PER_ROW
-            let next_default = current + BYTES_PER_ROW;
+            // 空行が指定されていれば、その数だけ現在のオフセットを重複して挿入する
+            if let Some(&count) = self.empty_lines.get(&current) {
+                for _ in 0..count {
+                    starts.push(current);
+                }
+            }
 
-            match next_custom {
-                Some(break_pos) if break_pos < next_default => {
+            starts.push(current);
+
+            // Find the next custom break after current
+            let next_custom_break = self.custom_breaks.range((current + 1)..).next().copied();
+
+            // Advance in BYTES_PER_ROW increments, skipping any joined boundaries
+            let mut next_pos = current + BYTES_PER_ROW;
+            while self.custom_joins.contains(&next_pos) && next_pos < total_size {
+                next_pos += BYTES_PER_ROW;
+            }
+
+            match next_custom_break {
+                Some(break_pos) if break_pos < next_pos && break_pos > current => {
                     current = break_pos;
                 }
                 _ => {
-                    current = next_default;
+                    current = next_pos;
                 }
             }
         }
 
-        // If the buffer is empty, or the last byte was a break, add one more empty line if needed?
-        // Actually, HexView handles empty buffer by showing at least one line.
         if starts.is_empty() {
             starts.push(0);
         }
@@ -457,8 +501,10 @@ impl Editor {
     }
 
     pub fn add_custom_break(&mut self, offset: usize) {
-        if offset > 0 && offset < self.total_size() {
+        if offset < self.total_size() {
             self.custom_breaks.insert(offset);
+            // Custom break と custom join が同じ位置にある場合、join を解除
+            self.custom_joins.remove(&offset);
         }
     }
 
@@ -472,6 +518,63 @@ impl Editor {
         } else {
             self.add_custom_break(offset);
         }
+    }
+
+    pub fn add_empty_line(&mut self, offset: usize) {
+        if offset <= self.total_size() {
+            *self.empty_lines.entry(offset).or_insert(0) += 1;
+        }
+    }
+
+    pub fn remove_empty_line(&mut self, offset: usize) -> bool {
+        if let Some(count) = self.empty_lines.get_mut(&offset) {
+            if *count > 1 {
+                *count -= 1;
+            } else {
+                self.empty_lines.remove(&offset);
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    /// カーソルの現在行と次の行を結合する。
+    /// 次の行の開始位置がCustom Breakなら削除し、
+    /// 16バイト自然境界ならcustom_joinsに追加して改行を抑制する。
+    pub fn join_line(&mut self) {
+        let line_starts = self.line_starts();
+        let current_line_idx = Self::find_line_index(self.cursor_offset, &line_starts);
+
+        // 次の行がなければ何もしない
+        if current_line_idx + 1 >= line_starts.len() {
+            return;
+        }
+
+        let next_line_start = line_starts[current_line_idx + 1];
+
+        if self.custom_breaks.contains(&next_line_start) {
+            // Custom Break による改行なら、その break を削除
+            self.custom_breaks.remove(&next_line_start);
+        } else if next_line_start % BYTES_PER_ROW == 0 {
+            // 16バイト自然境界による改行なら、join として記録
+            self.custom_joins.insert(next_line_start);
+        }
+    }
+
+    /// 全ての Custom Break と Join をクリアし、デフォルトの16バイト表示に戻す。
+    pub fn clear_all_custom_breaks(&mut self) {
+        self.custom_breaks.clear();
+        self.custom_joins.clear();
+        self.empty_lines.clear();
+    }
+
+    pub fn has_custom_layout(&self) -> bool {
+        !self.custom_breaks.is_empty() || !self.custom_joins.is_empty() || !self.empty_lines.is_empty()
+    }
+
+    pub fn custom_layout_count(&self) -> usize {
+        self.custom_breaks.len() + self.custom_joins.len() + self.empty_lines.values().sum::<usize>()
     }
 
     pub fn prev_search_result(&mut self) -> Option<usize> {
@@ -667,7 +770,6 @@ mod tests {
         // Add custom break at 10
         editor.add_custom_break(10);
         // Should be 0, 10, 26
-        // Wait, current logic:
         // current=0 -> push 0. next_custom=10, next_default=16. 10 < 16, so current=10.
         // current=10 -> push 10. next_custom=None, next_default=26. current=26.
         // current=26 -> push 26. next_custom=None, next_default=42. current=42 (>= 32, loop ends).
@@ -709,5 +811,80 @@ mod tests {
         editor.move_down();
         // Line 2 is 6 bytes long. pos 10 is too far. Clamp to 5. 26 + 5 = 31.
         assert_eq!(editor.cursor_offset, 31);
+    }
+
+    #[test]
+    fn test_join_line_creates_long_rows() {
+        let mut editor = create_editor_with_content(&[0; 48]);
+        // Default: 0, 16, 32
+        assert_eq!(editor.line_starts(), vec![0, 16, 32]);
+
+        // Join line 0 and line 1 (remove 16-byte boundary at offset 16)
+        editor.set_cursor_offset(5); // On line 0
+        editor.join_line();
+        // Now offset 16 is in custom_joins, so line_starts should skip it
+        // current=0 -> push 0. next_pos=16, but 16 is in joins, so next_pos=32. current=32.
+        // current=32 -> push 32. next_pos=48, not in joins. current=48 (>= 48, loop ends).
+        assert_eq!(editor.line_starts(), vec![0, 32]);
+    }
+
+    #[test]
+    fn test_join_line_removes_custom_break() {
+        let mut editor = create_editor_with_content(&[0; 32]);
+        editor.add_custom_break(10);
+        // Lines: [0..10], [10..26], [26..32]
+        assert_eq!(editor.line_starts(), vec![0, 10, 26]);
+
+        // Join line 0 with line 1 (removes custom break at 10)
+        editor.set_cursor_offset(3);
+        editor.join_line();
+        // Custom break at 10 removed, back to default 16-byte lines
+        assert_eq!(editor.line_starts(), vec![0, 16]);
+    }
+
+    #[test]
+    fn test_join_line_multiple_joins() {
+        let mut editor = create_editor_with_content(&[0; 64]);
+        // Default: 0, 16, 32, 48
+        assert_eq!(editor.line_starts(), vec![0, 16, 32, 48]);
+
+        // Join all into one big line
+        editor.set_cursor_offset(0);
+        editor.join_line(); // joins 0+16 -> skip 16
+        editor.join_line(); // joins 0+32 -> skip 32
+        editor.join_line(); // joins 0+48 -> skip 48
+        // All boundaries joined, single line
+        assert_eq!(editor.line_starts(), vec![0]);
+    }
+
+    #[test]
+    fn test_clear_all_custom_breaks() {
+        let mut editor = create_editor_with_content(&[0; 48]);
+        editor.add_custom_break(5);
+        editor.add_custom_break(10);
+        editor.set_cursor_offset(0);
+        editor.join_line(); // join some lines
+
+        assert!(editor.has_custom_layout());
+        assert!(editor.custom_layout_count() > 0);
+
+        editor.clear_all_custom_breaks();
+        assert!(!editor.has_custom_layout());
+        assert_eq!(editor.custom_layout_count(), 0);
+        // Back to default
+        assert_eq!(editor.line_starts(), vec![0, 16, 32]);
+    }
+
+    #[test]
+    fn test_custom_break_overrides_join() {
+        let mut editor = create_editor_with_content(&[0; 48]);
+        // Join at 16
+        editor.set_cursor_offset(0);
+        editor.join_line();
+        assert_eq!(editor.line_starts(), vec![0, 32]);
+
+        // Adding a custom break at 16 should remove the join
+        editor.add_custom_break(16);
+        assert_eq!(editor.line_starts(), vec![0, 16, 32]);
     }
 }
