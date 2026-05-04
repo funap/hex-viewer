@@ -4,5 +4,6 @@ pub mod command;
 pub mod diff;
 pub mod document;
 pub mod editor;
+pub mod encoding;
 pub mod history;
 pub mod search;

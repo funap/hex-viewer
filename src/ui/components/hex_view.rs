@@ -1,6 +1,7 @@
 use crate::actions::{SearchNext, SearchPrev, ToggleSearch};
 use crate::core::document::Document;
 use crate::core::editor::Editor;
+use crate::core::encoding::Encoding;
 use gpui::prelude::*;
 use gpui::*;
 use gpui::{ScrollWheelEvent, WeakEntity};
@@ -834,6 +835,7 @@ impl Render for HexView {
                     font_size: self.font_size_prop,
                     custom_breaks,
                     max_bytes_per_row,
+                    encoding: editor.encoding,
                 }
             })
             .child(
@@ -863,6 +865,7 @@ struct HexViewElement {
     font_size: Pixels,
     custom_breaks: BTreeSet<usize>,
     max_bytes_per_row: usize,
+    encoding: Encoding,
 }
 
 struct PrepaintState {
@@ -1070,37 +1073,38 @@ impl Element for HexViewElement {
             let mut ascii_str = String::new();
             let mut ascii_runs = Vec::new();
             let mut current_run_start = 0;
-            let mut current_color = if let Some(first) = chunk.first() {
-                if *first >= 32 && *first <= 126 {
-                    ascii_printable_color
-                } else {
-                    ascii_non_printable_color
+            let mut current_color = ascii_non_printable_color;
+
+            if !chunk.is_empty() {
+                for (byte_idx, _) in chunk.iter().enumerate() {
+                    let global_offset = offset + byte_idx;
+                    
+                    if self.encoding.is_continuation_byte(buffer.data(), global_offset) {
+                        continue;
+                    }
+                    
+                    let (char_str, color) = if let Some((c, _)) = self.encoding.decode_char_at(buffer.data(), global_offset) {
+                        (c.to_string(), ascii_printable_color)
+                    } else {
+                        (".".to_string(), ascii_non_printable_color)
+                    };
+
+                    if byte_idx == 0 {
+                        current_color = color;
+                    } else if color != current_color {
+                        ascii_runs.push(TextRun {
+                            len: ascii_str.len() - current_run_start,
+                            font: text_style.font(),
+                            color: current_color.into(),
+                            background_color: None,
+                            underline: None,
+                            strikethrough: None,
+                        });
+                        current_run_start = ascii_str.len();
+                        current_color = color;
+                    }
+                    ascii_str.push_str(&char_str);
                 }
-            } else {
-                ascii_non_printable_color
-            };
-
-            for (byte_idx, byte) in chunk.iter().enumerate() {
-                let (char_str, color) = if *byte >= 32 && *byte <= 126 {
-                    ((*byte as char).to_string(), ascii_printable_color)
-                } else {
-                    (".".to_string(), ascii_non_printable_color)
-                };
-
-                if byte_idx > 0 && color != current_color {
-                    ascii_runs.push(TextRun {
-                        len: ascii_str.len() - current_run_start,
-                        font: text_style.font(),
-                        color: current_color.into(),
-                        background_color: None,
-                        underline: None,
-                        strikethrough: None,
-                    });
-                    current_run_start = ascii_str.len();
-                    current_color = color;
-                }
-
-                ascii_str.push_str(&char_str);
             }
 
             if !ascii_str.is_empty() {

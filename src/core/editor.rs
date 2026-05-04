@@ -1,5 +1,6 @@
 use crate::core::command::Command;
 use crate::core::document::Document;
+use crate::core::encoding::Encoding;
 use std::cmp;
 use std::collections::BTreeSet;
 use std::ops::Range;
@@ -30,6 +31,7 @@ pub struct Editor {
     pub custom_joins: BTreeSet<usize>,
     /// 特定のオフセットに挿入された空行の数を記録する。
     pub empty_lines: std::collections::BTreeMap<usize, usize>,
+    pub encoding: Encoding,
 }
 
 impl Editor {
@@ -43,6 +45,7 @@ impl Editor {
             custom_breaks: BTreeSet::new(),
             custom_joins: BTreeSet::new(),
             empty_lines: std::collections::BTreeMap::new(),
+            encoding: Encoding::default(),
         }
     }
 
@@ -102,6 +105,10 @@ impl Editor {
         let binding = self.document.read().unwrap();
         let buffer = &binding.buffer;
         buffer.data().get(self.cursor_offset).copied()
+    }
+
+    pub fn set_encoding(&mut self, encoding: Encoding) {
+        self.encoding = encoding;
     }
 
     pub fn selection_range(&self) -> Option<Range<usize>> {

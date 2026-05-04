@@ -117,3 +117,15 @@ pub struct GoToBeginning;
 
 #[derive(Clone, PartialEq, Action)]
 pub struct GoToEnd;
+
+#[derive(Clone, PartialEq, Action)]
+pub struct SetEncodingAscii;
+
+#[derive(Clone, PartialEq, Action)]
+pub struct SetEncodingUtf8;
+
+#[derive(Clone, PartialEq, Action)]
+pub struct SetEncodingUtf16Le;
+
+#[derive(Clone, PartialEq, Action)]
+pub struct SetEncodingUtf16Be;

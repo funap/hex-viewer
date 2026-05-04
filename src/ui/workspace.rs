@@ -233,6 +233,38 @@ impl Workspace {
         }
     }
 
+    fn on_action_set_encoding_ascii(&mut self, _: &SetEncodingAscii, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(editor) = &self.active_editor {
+            editor.update(cx, |editor, _cx| {
+                editor.set_encoding(crate::core::encoding::Encoding::Ascii);
+            });
+        }
+    }
+
+    fn on_action_set_encoding_utf8(&mut self, _: &SetEncodingUtf8, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(editor) = &self.active_editor {
+            editor.update(cx, |editor, _cx| {
+                editor.set_encoding(crate::core::encoding::Encoding::Utf8);
+            });
+        }
+    }
+
+    fn on_action_set_encoding_utf16le(&mut self, _: &SetEncodingUtf16Le, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(editor) = &self.active_editor {
+            editor.update(cx, |editor, _cx| {
+                editor.set_encoding(crate::core::encoding::Encoding::Utf16Le);
+            });
+        }
+    }
+
+    fn on_action_set_encoding_utf16be(&mut self, _: &SetEncodingUtf16Be, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(editor) = &self.active_editor {
+            editor.update(cx, |editor, _cx| {
+                editor.set_encoding(crate::core::encoding::Encoding::Utf16Be);
+            });
+        }
+    }
+
     fn on_action_open_file(&mut self, action: &OpenFile, window: &mut Window, cx: &mut Context<Self>) {
         println!("Workspace::on_action_open_file triggered for {}", action.path);
         let file_path = action.path.clone();
@@ -509,6 +541,10 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_action_select_all))
             .on_action(cx.listener(Self::on_action_go_to_beginning))
             .on_action(cx.listener(Self::on_action_go_to_end))
+            .on_action(cx.listener(Self::on_action_set_encoding_ascii))
+            .on_action(cx.listener(Self::on_action_set_encoding_utf8))
+            .on_action(cx.listener(Self::on_action_set_encoding_utf16le))
+            .on_action(cx.listener(Self::on_action_set_encoding_utf16be))
             .on_action(cx.listener(Self::on_action_add_editor_panel))
             .on_action(cx.listener(Self::on_action_open_diff))
             .on_action(cx.listener(Self::on_action_toggle_file_tree))

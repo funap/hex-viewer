@@ -61,6 +61,16 @@ fn main() {
             gpui::Menu {
                 name: "View".into(),
                 items: vec![
+                    gpui::MenuItem::submenu(gpui::Menu {
+                        name: "Encoding".into(),
+                        items: vec![
+                            gpui::MenuItem::action("ASCII", crate::actions::SetEncodingAscii),
+                            gpui::MenuItem::action("UTF-8", crate::actions::SetEncodingUtf8),
+                            gpui::MenuItem::action("UTF-16 LE", crate::actions::SetEncodingUtf16Le),
+                            gpui::MenuItem::action("UTF-16 BE", crate::actions::SetEncodingUtf16Be),
+                        ],
+                    }),
+                    gpui::MenuItem::separator(),
                     gpui::MenuItem::action("Settings", crate::actions::OpenSettings),
                 ],
             },
