@@ -41,7 +41,8 @@ actions!(
         SelectHome,
         SelectEnd,
         AddCustomBreak,
-        RemoveCustomBreak,
+        RemoveCustomBreakBackward,
+        RemoveCustomBreakForward,
         JoinLine,
         ClearAllCustomBreaks,
         TriggerSearch,
@@ -105,8 +106,8 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("ctrl-shift-g", SearchPrev, Some(CONTEXT)),
         KeyBinding::new("cmd-shift-g", SearchPrev, Some(CONTEXT)),
         KeyBinding::new("enter", AddCustomBreak, Some(CONTEXT)),
-        KeyBinding::new("delete", RemoveCustomBreak, Some(CONTEXT)),
-        KeyBinding::new("backspace", RemoveCustomBreak, Some(CONTEXT)),
+        KeyBinding::new("delete", RemoveCustomBreakForward, Some(CONTEXT)),
+        KeyBinding::new("backspace", RemoveCustomBreakBackward, Some(CONTEXT)),
         KeyBinding::new("shift-enter", JoinLine, Some(CONTEXT)),
         KeyBinding::new("cmd-shift-backspace", ClearAllCustomBreaks, Some(CONTEXT)),
     ]);
@@ -697,30 +698,31 @@ impl HexView {
         cx.notify();
     }
 
-    fn remove_custom_break(&mut self, _: &RemoveCustomBreak, _window: &mut Window, cx: &mut Context<Self>) {
+    fn remove_custom_break_backward(&mut self, _: &RemoveCustomBreakBackward, _window: &mut Window, cx: &mut Context<Self>) {
+        let cursor_offset = self.editor.read(cx).cursor_offset;
+        self.editor.update(cx, |editor, _| {
+            if !editor.remove_empty_line(cursor_offset) {
+                if editor.custom_breaks.contains(&cursor_offset) {
+                    editor.remove_custom_break(cursor_offset);
+                }
+            }
+        });
+        cx.notify();
+    }
+
+    fn remove_custom_break_forward(&mut self, _: &RemoveCustomBreakForward, _window: &mut Window, cx: &mut Context<Self>) {
         let cursor_offset = self.editor.read(cx).cursor_offset;
         self.editor.update(cx, |editor, _| {
             let line_starts = editor.line_starts();
             let current_line_idx = Editor::find_line_index(cursor_offset, &line_starts);
-            let current_line_start = line_starts[current_line_idx];
-
-            if cursor_offset == current_line_start {
-                if !editor.remove_empty_line(cursor_offset) {
-                    if editor.custom_breaks.contains(&cursor_offset) {
-                        editor.remove_custom_break(cursor_offset);
-                    }
-                }
+            let current_line_end = if current_line_idx + 1 < line_starts.len() {
+                line_starts[current_line_idx + 1]
             } else {
-                // Any Delete/Backspace that is not at the start of the line will try to remove the Custom Break at the end of the line.
-                let current_line_end = if current_line_idx + 1 < line_starts.len() {
-                    line_starts[current_line_idx + 1]
-                } else {
-                    editor.total_size()
-                };
+                editor.total_size()
+            };
 
-                if editor.custom_breaks.contains(&current_line_end) {
-                    editor.remove_custom_break(current_line_end);
-                }
+            if editor.custom_breaks.contains(&current_line_end) {
+                editor.remove_custom_break(current_line_end);
             }
         });
         cx.notify();
@@ -792,7 +794,8 @@ impl Render for HexView {
             .on_action(cx.listener(Self::select_end))
             .on_action(cx.listener(Self::trigger_search))
             .on_action(cx.listener(Self::add_custom_break))
-            .on_action(cx.listener(Self::remove_custom_break))
+            .on_action(cx.listener(Self::remove_custom_break_backward))
+            .on_action(cx.listener(Self::remove_custom_break_forward))
             .on_action(cx.listener(Self::join_line))
             .on_action(cx.listener(Self::clear_all_custom_breaks))
             .on_scroll_wheel(cx.listener(Self::on_scroll_wheel))
