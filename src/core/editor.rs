@@ -219,6 +219,19 @@ impl Editor {
         self.cursor_offset = buffer_len;
     }
 
+    pub fn go_to_beginning(&mut self) {
+        self.cursor_offset = 0;
+        self.selection_start = None;
+        self.selection_end = None;
+    }
+
+    pub fn go_to_end(&mut self) {
+        self.cursor_offset = self.total_size();
+        self.selection_start = None;
+        self.selection_end = None;
+    }
+
+
     pub fn page_up(&mut self, visible_rows: usize) {
         let line_starts = self.line_starts();
         let current_line_idx = match line_starts.binary_search(&self.cursor_offset) {
@@ -455,7 +468,7 @@ impl Editor {
 
     pub fn toggle_custom_break(&mut self, offset: usize) {
         if self.custom_breaks.contains(&offset) {
-            self.custom_breaks.remove(&offset);
+            self.remove_custom_break(offset);
         } else {
             self.add_custom_break(offset);
         }

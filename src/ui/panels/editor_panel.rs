@@ -2,7 +2,7 @@ use gpui::prelude::*;
 use gpui::{App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, KeyBinding, Subscription, Task, Window, div, px};
 use gpui_component::dock::{Panel, PanelEvent};
 
-use crate::actions::{FocusHexView, SearchNext, SearchPrev, ToggleSearch};
+use crate::actions::{FocusHexView, SearchNext, SearchPrev, ToggleSearch, SelectAll, GoToBeginning, GoToEnd};
 use crate::app_state::AppState;
 use crate::core::appearance::Appearance;
 use crate::core::search::SearchMode;
@@ -157,7 +157,7 @@ impl EditorPanel {
 
     fn perform_incremental_search(&mut self, query: &str, mode: SearchMode, cx: &mut Context<Self>) {
         if query.is_empty() {
-            self.editor.update(cx, |editor, cx| {
+            self.editor.update(cx, |editor: &mut Editor, cx| {
                 editor.clear_search();
                 cx.notify();
             });
@@ -167,7 +167,7 @@ impl EditorPanel {
             return;
         }
 
-        self.editor.update(cx, |editor, cx| {
+        self.editor.update(cx, |editor: &mut Editor, cx| {
             editor.set_search_query(query.to_string());
             cx.notify();
         });
@@ -303,7 +303,7 @@ impl EditorPanel {
     }
 
     fn perform_search_next(&mut self, cx: &mut Context<Self>) {
-        self.editor.update(cx, |editor, _| {
+        self.editor.update(cx, |editor: &mut Editor, _| {
             editor.next_search_result();
         });
         self.highlight_current_result(false, cx);
@@ -315,7 +315,7 @@ impl EditorPanel {
     }
 
     fn perform_search_prev(&mut self, cx: &mut Context<Self>) {
-        self.editor.update(cx, |editor, _| {
+        self.editor.update(cx, |editor: &mut Editor, _| {
             editor.prev_search_result();
         });
         self.highlight_current_result(false, cx);
@@ -324,6 +324,27 @@ impl EditorPanel {
 
     fn focus_hex_view(&mut self, _: &FocusHexView, window: &mut Window, cx: &mut Context<Self>) {
         self.hex_view.read(cx).focus_handle(cx).focus(window);
+    }
+
+    fn select_all(&mut self, _: &SelectAll, _window: &mut Window, cx: &mut Context<Self>) {
+        self.editor.update(cx, |editor: &mut Editor, _| {
+            editor.select_all();
+        });
+        cx.notify();
+    }
+
+    fn go_to_beginning(&mut self, _: &GoToBeginning, _window: &mut Window, cx: &mut Context<Self>) {
+        self.editor.update(cx, |editor: &mut Editor, _| {
+            editor.go_to_beginning();
+        });
+        cx.notify();
+    }
+
+    fn go_to_end(&mut self, _: &GoToEnd, _window: &mut Window, cx: &mut Context<Self>) {
+        self.editor.update(cx, |editor: &mut Editor, _| {
+            editor.go_to_end();
+        });
+        cx.notify();
     }
 }
 
@@ -408,6 +429,9 @@ impl Render for EditorPanel {
             .on_action(cx.listener(Self::search_next))
             .on_action(cx.listener(Self::search_prev))
             .on_action(cx.listener(Self::focus_hex_view))
+            .on_action(cx.listener(Self::select_all))
+            .on_action(cx.listener(Self::go_to_beginning))
+            .on_action(cx.listener(Self::go_to_end))
             .when(self.is_search_visible, |el| el.child(self.search_bar.clone()))
             .child(self.hex_view.clone())
     }

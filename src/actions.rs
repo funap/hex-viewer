@@ -102,3 +102,18 @@ impl PartialEq for AddEditorPanel {
         Arc::ptr_eq(&self.0, &other.0)
     }
 }
+
+#[derive(Clone, PartialEq, Action)]
+pub struct OpenFileDialog;
+
+#[derive(Clone, PartialEq, Action)]
+pub struct Quit;
+
+#[derive(Clone, PartialEq, Action)]
+pub struct SelectAll;
+
+#[derive(Clone, PartialEq, Action)]
+pub struct GoToBeginning;
+
+#[derive(Clone, PartialEq, Action)]
+pub struct GoToEnd;
