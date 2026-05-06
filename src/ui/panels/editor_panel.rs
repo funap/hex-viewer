@@ -66,6 +66,9 @@ impl EditorPanel {
             }
             SearchBarEvent::Dismiss => {
                 this.is_search_visible = false;
+                this.hex_view.update(cx, |view, cx| {
+                    view.set_highlights(Vec::new(), cx);
+                });
                 cx.dispatch_action(&FocusHexView);
                 cx.notify();
             }
@@ -106,6 +109,9 @@ impl EditorPanel {
 
         let _editor_subscription = cx.observe(&editor, |this, _, cx| {
             this.update_search_bar_results(cx);
+            if this.is_search_visible {
+                this.update_viewport_highlights(cx);
+            }
             cx.notify();
         });
 
@@ -171,6 +177,9 @@ impl EditorPanel {
             editor.set_search_query(query.to_string());
             cx.notify();
         });
+
+        // Immediately update highlights to clear old ones (since editor results were just cleared)
+        self.update_viewport_highlights(cx);
 
         // 1. Start viewport search for immediate feedback
         self.perform_viewport_search(cx);
