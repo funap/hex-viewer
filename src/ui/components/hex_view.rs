@@ -119,6 +119,7 @@ pub struct HexView {
     focus_handle: FocusHandle,
     is_dragging: bool,
     last_bounds: Option<Bounds<Pixels>>,
+    last_ascii_layout: Option<(Pixels, Pixels)>, // (ascii_start_x, ascii_char_width)
     scroll_offset: usize,
     scroll_handle: ScrollHandle,
     highlights: Vec<(Range<usize>, Hsla)>,
@@ -145,6 +146,7 @@ impl HexView {
             focus_handle: cx.focus_handle(),
             is_dragging: false,
             last_bounds: None,
+            last_ascii_layout: None,
             scroll_offset: 0,
             scroll_handle: ScrollHandle::new(),
             highlights: Vec::new(),
@@ -332,21 +334,30 @@ impl HexView {
         let row_len = row_end - row_start;
 
         let x_offset = point.x - hex_start_x;
-        if x_offset < px(0.) {
-            return None;
+        if x_offset >= px(0.) {
+            let byte_in_row = (x_offset / (hex_byte_width + hex_gap)).floor() as usize;
+            if byte_in_row < row_len {
+                let byte_pos = row_start + byte_in_row;
+                if byte_pos < editor.total_size() {
+                    return Some(byte_pos);
+                }
+            }
         }
 
-        let byte_in_row = (x_offset / (hex_byte_width + hex_gap)).floor() as usize;
-        if byte_in_row >= row_len {
-            return None;
+        if let Some((ascii_start_x, ascii_char_width)) = self.last_ascii_layout {
+            let ascii_x_offset = point.x - ascii_start_x;
+            if ascii_x_offset >= px(0.) && ascii_char_width > px(0.) {
+                let byte_in_row = (ascii_x_offset / ascii_char_width).floor() as usize;
+                if byte_in_row < row_len {
+                    let byte_pos = row_start + byte_in_row;
+                    if byte_pos < editor.total_size() {
+                        return Some(byte_pos);
+                    }
+                }
+            }
         }
 
-        let byte_pos = row_start + byte_in_row;
-        if byte_pos >= editor.total_size() {
-            return None;
-        }
-
-        Some(byte_pos)
+        None
     }
 
     fn on_mouse_down(&mut self, event: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -396,7 +407,17 @@ impl HexView {
         let row_len = row_end - row_start;
 
         let x_offset = point.x - hex_start_x;
-        let byte_in_row = (x_offset / (hex_byte_width + hex_gap)).floor() as i32;
+        let byte_in_row = if let Some((ascii_start_x, ascii_char_width)) = self.last_ascii_layout {
+            if point.x > ascii_start_x - px(SECTION_GAP) / 2.0 && ascii_char_width > px(0.) {
+                let ascii_x_offset = point.x - ascii_start_x;
+                (ascii_x_offset / ascii_char_width).floor() as i32
+            } else {
+                (x_offset / (hex_byte_width + hex_gap)).floor() as i32
+            }
+        } else {
+            (x_offset / (hex_byte_width + hex_gap)).floor() as i32
+        };
+
         let byte_in_row = if row_len > 0 {
             byte_in_row.max(0).min((row_len - 1) as i32) as usize
         } else {
@@ -875,9 +896,10 @@ struct PrepaintState {
     data_lines: Vec<DataLine>,
     selection_quads: Vec<PaintQuad>,
     break_indicator_quads: Vec<PaintQuad>,
-    cursor: Option<PaintQuad>,
+    cursor_quads: Vec<PaintQuad>,
     header: HeaderParts,
     max_bytes_per_row: usize,
+    ascii_char_width: Pixels,
 }
 
 struct HeaderParts {
@@ -889,7 +911,7 @@ struct HeaderParts {
 struct DataLine {
     offset_line: ShapedLine,
     hex_lines: Vec<ShapedLine>,
-    ascii_line: ShapedLine,
+    ascii_chars: Vec<(ShapedLine, usize, usize)>,
 }
 
 impl IntoElement for HexViewElement {
@@ -985,6 +1007,21 @@ impl Element for HexViewElement {
         let hex_byte_width = px(HEX_BYTE_WIDTH);
         let hex_gap = px(HEX_GAP);
 
+        let ascii_start_x = hex_start_x + (hex_byte_width + hex_gap) * self.max_bytes_per_row as f32 + px(SECTION_GAP);
+        let ascii_char_width = {
+            let font = text_style.font();
+            let ascii_run = TextRun {
+                len: 5,
+                font: font.clone(),
+                color: theme.foreground.into(),
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            };
+            let ascii = window.text_system().shape_line("ASCII".into(), font_size, &[ascii_run], None);
+            if ascii.len() > 0 { ascii.width / 5.0 } else { px(10.0) }
+        };
+
         let (min_sel, max_sel) = if let (Some(start), Some(end)) = (selection_start, selection_end) {
             if start <= end { (start, end) } else { (end, start) }
         } else {
@@ -1021,6 +1058,19 @@ impl Element for HexViewElement {
                         Bounds::new(point(x_start - px(SELECTION_PADDING), y_pos), size(width + px(SELECTION_PADDING), row_height)),
                         *color,
                     ));
+
+                    if self.show_ascii {
+                        let ascii_x_start = ascii_start_x + ascii_char_width * start_in_line as f32;
+                        let ascii_x_end = ascii_start_x + ascii_char_width * end_in_line as f32;
+                        let ascii_width = ascii_x_end - ascii_x_start;
+                        
+                        if ascii_width > px(0.) {
+                            selection_quads.push(fill(
+                                Bounds::new(point(ascii_x_start, y_pos), size(ascii_width, row_height)),
+                                *color,
+                            ));
+                        }
+                    }
                 }
             }
 
@@ -1039,6 +1089,22 @@ impl Element for HexViewElement {
                     Bounds::new(point(x_start - px(SELECTION_PADDING), y_pos), size(width + px(SELECTION_PADDING), row_height)),
                     selection_bg_color,
                 ));
+
+                if self.show_ascii {
+                    let ascii_x_start = ascii_start_x + ascii_char_width * start_in_line as f32;
+                    let ascii_x_end = ascii_start_x + ascii_char_width * (end_in_line + 1) as f32;
+                    let mut ascii_width = ascii_x_end - ascii_x_start;
+                    if buffer.is_empty() {
+                        ascii_width = ascii_char_width;
+                    }
+                    
+                    if ascii_width > px(0.) {
+                        selection_quads.push(fill(
+                            Bounds::new(point(ascii_x_start, y_pos), size(ascii_width, row_height)),
+                            selection_bg_color,
+                        ));
+                    }
+                }
             }
 
             let offset_str = format!("{:08x}", offset);
@@ -1073,12 +1139,9 @@ impl Element for HexViewElement {
                 hex_lines.push(hex_line);
             }
 
-            let mut ascii_str = String::new();
-            let mut ascii_runs = Vec::new();
-            let mut current_run_start = 0;
-            let mut current_color = ascii_non_printable_color;
+            let mut ascii_chars = Vec::new();
 
-            if !chunk.is_empty() {
+            if self.show_ascii && !chunk.is_empty() {
                 for (byte_idx, _) in chunk.iter().enumerate() {
                     let global_offset = offset + byte_idx;
                     
@@ -1086,51 +1149,30 @@ impl Element for HexViewElement {
                         continue;
                     }
                     
-                    let (char_str, color) = if let Some((c, _)) = self.encoding.decode_char_at(buffer.data(), global_offset) {
-                        (c.to_string(), ascii_printable_color)
+                    let (char_str, color, len) = if let Some((c, char_len)) = self.encoding.decode_char_at(buffer.data(), global_offset) {
+                        (c.to_string(), ascii_printable_color, char_len)
                     } else {
-                        (".".to_string(), ascii_non_printable_color)
+                        (".".to_string(), ascii_non_printable_color, 1)
                     };
 
-                    if byte_idx == 0 {
-                        current_color = color;
-                    } else if color != current_color {
-                        ascii_runs.push(TextRun {
-                            len: ascii_str.len() - current_run_start,
-                            font: text_style.font(),
-                            color: current_color.into(),
-                            background_color: None,
-                            underline: None,
-                            strikethrough: None,
-                        });
-                        current_run_start = ascii_str.len();
-                        current_color = color;
-                    }
-                    ascii_str.push_str(&char_str);
+                    let ascii_run = TextRun {
+                        len: char_str.len(),
+                        font: text_style.font(),
+                        color: color.into(),
+                        background_color: None,
+                        underline: None,
+                        strikethrough: None,
+                    };
+                    
+                    let shaped = window.text_system().shape_line(char_str.into(), font_size, &[ascii_run], None);
+                    ascii_chars.push((shaped, byte_idx, len));
                 }
             }
-
-            if !ascii_str.is_empty() {
-                ascii_runs.push(TextRun {
-                    len: ascii_str.len() - current_run_start,
-                    font: text_style.font(),
-                    color: current_color.into(),
-                    background_color: None,
-                    underline: None,
-                    strikethrough: None,
-                });
-            }
-
-            let ascii_line = if self.show_ascii {
-                window.text_system().shape_line(ascii_str.into(), font_size, &ascii_runs, None)
-            } else {
-                window.text_system().shape_line("".into(), font_size, &[], None)
-            };
 
             data_lines.push(DataLine {
                 offset_line,
                 hex_lines,
-                ascii_line,
+                ascii_chars,
             });
 
             // Custom Break インジケーター: 行の先頭が custom_breaks に含まれる場合、左端にマーカーを描画
@@ -1144,7 +1186,10 @@ impl Element for HexViewElement {
             }
         }
 
-        let cursor = {
+        // ascii_start_x and ascii_char_width already computed above
+        
+        let mut cursor_quads = Vec::new();
+        {
             let cursor_offset = self.cursor_offset;
             let focus_handle = self.focus_handle.clone();
 
@@ -1158,17 +1203,21 @@ impl Element for HexViewElement {
                     let y_pos = bounds.top() + header_height + row_height * visible_cursor_row as f32;
                     let cursor_x = hex_start_x + (hex_byte_width + hex_gap) * byte_in_row as f32;
 
-                    Some(fill(
+                    cursor_quads.push(fill(
                         Bounds::new(point(cursor_x, y_pos), size(hex_byte_width, row_height)),
                         theme.accent.opacity(0.3),
-                    ))
-                } else {
-                    None
+                    ));
+                    
+                    if self.show_ascii {
+                        let ascii_cursor_x = ascii_start_x + ascii_char_width * byte_in_row as f32;
+                        cursor_quads.push(fill(
+                            Bounds::new(point(ascii_cursor_x, y_pos), size(ascii_char_width, row_height)),
+                            theme.accent.opacity(0.3),
+                        ));
+                    }
                 }
-            } else {
-                None
             }
-        };
+        }
 
         let header = {
             let header_color = theme.foreground;
@@ -1224,9 +1273,10 @@ impl Element for HexViewElement {
             data_lines,
             selection_quads,
             break_indicator_quads,
-            cursor,
+            cursor_quads,
             header,
             max_bytes_per_row: self.max_bytes_per_row,
+            ascii_char_width,
         }
     }
 
@@ -1310,22 +1360,23 @@ impl Element for HexViewElement {
             }
 
             if self.show_ascii {
-                data_line.ascii_line.paint(point(ascii_start_x, y_pos), row_height, window, cx).ok();
+                let ascii_char_width = prepaint.ascii_char_width;
+                for (shaped, byte_idx, _len) in &data_line.ascii_chars {
+                    let x_start = ascii_start_x + ascii_char_width * (*byte_idx as f32);
+                    shaped.paint(point(x_start, y_pos), row_height, window, cx).ok();
+                }
             }
         }
 
         // Draw cursor last so it's always visible on top of highlights and selection
-        if let Some(cursor_quad) = prepaint.cursor.take() {
-            // Get cursor bounds before moving cursor_quad
+        for cursor_quad in prepaint.cursor_quads.drain(..) {
             let cursor_bounds = cursor_quad.bounds;
 
             // Draw cursor background
             window.paint_quad(cursor_quad);
 
             // Draw cursor border for better visibility
-            // Top border
             window.paint_quad(fill(Bounds::new(cursor_bounds.origin, size(cursor_bounds.size.width, px(2.))), accent_color));
-            // Bottom border
             window.paint_quad(fill(
                 Bounds::new(
                     point(cursor_bounds.origin.x, cursor_bounds.origin.y + cursor_bounds.size.height - px(2.)),
@@ -1333,7 +1384,6 @@ impl Element for HexViewElement {
                 ),
                 accent_color,
             ));
-            // Left border
             window.paint_quad(fill(
                 Bounds::new(
                     point(cursor_bounds.origin.x - px(SELECTION_PADDING), cursor_bounds.origin.y),
@@ -1341,7 +1391,6 @@ impl Element for HexViewElement {
                 ),
                 accent_color,
             ));
-            // Right border
             window.paint_quad(fill(
                 Bounds::new(
                     point(cursor_bounds.origin.x + cursor_bounds.size.width - px(2.), cursor_bounds.origin.y),
@@ -1351,9 +1400,11 @@ impl Element for HexViewElement {
             ));
         }
 
+        let ascii_char_width = prepaint.ascii_char_width;
         self.view
             .update(cx, |view, _cx| {
                 view.last_bounds = Some(bounds);
+                view.last_ascii_layout = Some((ascii_start_x, ascii_char_width));
             })
             .ok();
     }
