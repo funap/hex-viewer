@@ -7,3 +7,4 @@ pub mod editor;
 pub mod encoding;
 pub mod history;
 pub mod search;
+pub mod structure;

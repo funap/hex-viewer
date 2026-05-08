@@ -6,6 +6,7 @@ use crate::actions::*;
 
 use crate::ui::panels::editor_panel::EditorPanel;
 use crate::ui::panels::file_tree_panel::FileTreePanel;
+use crate::ui::panels::struct_tree_panel::StructTreePanel;
 
 use crate::ui::components::toolbar::AppTitleBar;
 
@@ -26,6 +27,7 @@ pub struct Workspace {
     pub title_bar: Entity<AppTitleBar>,
     pub status_bar: Entity<StatusBar>,
     pub active_editor: Option<Entity<Editor>>,
+    pub struct_tree: Entity<StructTreePanel>,
 }
 
 const MAIN_DOCK_AREA_ID: &str = "main_dock_area";
@@ -58,6 +60,8 @@ impl Workspace {
         })
         .detach();
 
+        let struct_tree = cx.new(|cx| StructTreePanel::new(cx));
+
         let status_bar = cx.new(|cx| StatusBar::new(cx));
         cx.subscribe(&status_bar, |this, _, event, cx| match event {
             crate::ui::components::status_bar::StatusBarEvent::ToggleFileTree => {
@@ -85,6 +89,7 @@ impl Workspace {
         .detach();
 
         Self::reset_default_layout(weak_dock_area, window, cx);
+        let struct_tree = cx.new(|cx| StructTreePanel::new(cx));
 
         Self {
             dock_area,
@@ -93,6 +98,7 @@ impl Workspace {
             title_bar,
             status_bar,
             active_editor: None,
+            struct_tree,
         }
     }
 
