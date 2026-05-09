@@ -52,16 +52,7 @@ impl Render for StructTreePanel {
             .w_full()
             .h_full()
             .bg(theme.background)
-            .child(
-                div()
-                    .w_full()
-                    .py(px(4.0))
-                    .px(px(8.0))
-                    .border_b_1()
-                    .border_color(theme.border)
-                    .text_color(theme.foreground)
-                    .child("Structure Definition")
-            )
+
             .child(self.tree_view.clone())
     }
 }

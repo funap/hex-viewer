@@ -41,7 +41,7 @@ fn main() {
                     gpui::MenuItem::action("Open Folder...", crate::actions::OpenFolder),
                     gpui::MenuItem::action("Close Folder", crate::actions::CloseFolder),
                     gpui::MenuItem::separator(),
-                    gpui::MenuItem::action("Toggle File Tree", crate::actions::ToggleFileTree),
+                    gpui::MenuItem::action("Toggle Left Panel", crate::actions::ToggleLeftPanel),
                     gpui::MenuItem::separator(),
                     gpui::MenuItem::action("Quit", crate::actions::Quit),
                 ],
@@ -72,8 +72,7 @@ fn main() {
                     }),
                     gpui::MenuItem::separator(),
                     gpui::MenuItem::action("Settings", crate::actions::OpenSettings),
-                    gpui::MenuItem::separator(),
-                    gpui::MenuItem::action("Toggle Structure Panel", crate::actions::ToggleStructTree),
+
                 ],
             },
         ]);
@@ -81,7 +80,7 @@ fn main() {
         cx.bind_keys([
             gpui::KeyBinding::new("cmd-o", crate::actions::OpenFileDialog, None),
             gpui::KeyBinding::new("cmd-shift-o", crate::actions::OpenFolder, None),
-            gpui::KeyBinding::new("cmd-b", crate::actions::ToggleFileTree, None),
+            gpui::KeyBinding::new("cmd-b", crate::actions::ToggleLeftPanel, None),
             gpui::KeyBinding::new("cmd-q", crate::actions::Quit, None),
             gpui::KeyBinding::new("cmd-f", crate::actions::ToggleSearch, None),
             gpui::KeyBinding::new("cmd-g", crate::actions::SearchNext, None),
@@ -90,7 +89,7 @@ fn main() {
             gpui::KeyBinding::new("cmd-home", crate::actions::GoToBeginning, None),
             gpui::KeyBinding::new("cmd-end", crate::actions::GoToEnd, None),
             gpui::KeyBinding::new("cmd-,", crate::actions::OpenSettings, None),
-            gpui::KeyBinding::new("cmd-shift-b", crate::actions::ToggleStructTree, None),
+
         ]);
 
         // Parse command line arguments (skip the first one which is the program name)

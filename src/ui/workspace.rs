@@ -20,15 +20,21 @@ use gpui_component::resizable::{h_resizable, resizable_panel};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum LeftPanelTab {
+    Files,
+    Structure,
+}
+
 pub struct Workspace {
     pub dock_area: Entity<DockArea>,
     pub file_tree: Entity<FileTreePanel>,
-    pub is_file_tree_visible: bool,
     pub title_bar: Entity<AppTitleBar>,
     pub status_bar: Entity<StatusBar>,
     pub active_editor: Option<Entity<Editor>>,
     pub struct_tree: Entity<StructTreePanel>,
-    pub is_struct_tree_visible: bool,
+    pub is_left_panel_visible: bool,
+    pub left_panel_tab: LeftPanelTab,
 }
 
 const MAIN_DOCK_AREA_ID: &str = "main_dock_area";
@@ -65,8 +71,8 @@ impl Workspace {
 
         let status_bar = cx.new(|cx| StatusBar::new(cx));
         cx.subscribe(&status_bar, |this, _, event, cx| match event {
-            crate::ui::components::status_bar::StatusBarEvent::ToggleFileTree => {
-                this.is_file_tree_visible = !this.is_file_tree_visible;
+            crate::ui::components::status_bar::StatusBarEvent::ToggleLeftPanel => {
+                this.is_left_panel_visible = !this.is_left_panel_visible;
                 cx.notify();
             }
         })
@@ -93,12 +99,12 @@ impl Workspace {
         Self {
             dock_area,
             file_tree,
-            is_file_tree_visible: true,
             title_bar,
             status_bar,
             active_editor: None,
             struct_tree,
-            is_struct_tree_visible: true,
+            is_left_panel_visible: true,
+            left_panel_tab: LeftPanelTab::Files,
         }
     }
 
@@ -365,13 +371,8 @@ impl Workspace {
         .detach();
     }
 
-    fn on_action_toggle_file_tree(&mut self, _: &ToggleFileTree, _: &mut Window, cx: &mut Context<Self>) {
-        self.is_file_tree_visible = !self.is_file_tree_visible;
-        cx.notify();
-    }
-
-    fn on_action_toggle_struct_tree(&mut self, _: &ToggleStructTree, _: &mut Window, cx: &mut Context<Self>) {
-        self.is_struct_tree_visible = !self.is_struct_tree_visible;
+    fn on_action_toggle_left_panel(&mut self, _: &ToggleLeftPanel, _: &mut Window, cx: &mut Context<Self>) {
+        self.is_left_panel_visible = !self.is_left_panel_visible;
         cx.notify();
     }
 
@@ -558,7 +559,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_action_set_encoding_utf16be))
             .on_action(cx.listener(Self::on_action_add_editor_panel))
             .on_action(cx.listener(Self::on_action_open_diff))
-            .on_action(cx.listener(Self::on_action_toggle_file_tree))
+            .on_action(cx.listener(Self::on_action_toggle_left_panel))
             .on_action(cx.listener(Self::on_action_open_settings))
             .relative()
             .size_full()
@@ -569,7 +570,7 @@ impl Render for Workspace {
                 h_resizable("workspace-h-resize")
                     .child(
                         resizable_panel()
-                            .visible(self.is_file_tree_visible)
+                            .visible(self.is_left_panel_visible)
                             .size(px(250.))
                             .child(self.file_tree.clone()),
                     )

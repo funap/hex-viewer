@@ -5,7 +5,7 @@ use gpui::*;
 use gpui_component::ActiveTheme;
 
 pub enum StatusBarEvent {
-    ToggleFileTree,
+    ToggleLeftPanel,
 }
 
 pub struct StatusBar {
@@ -146,7 +146,7 @@ impl Render for StatusBar {
                         .cursor_pointer()
                         .hover(|style| style.bg(theme.accent).text_color(theme.accent_foreground))
                         .on_click(cx.listener(|_, _, _window, cx| {
-                            cx.emit(StatusBarEvent::ToggleFileTree);
+                            cx.emit(StatusBarEvent::ToggleLeftPanel);
                         }))
                         .child(gpui_component::Icon::new(gpui_component::IconName::Folder).size(px(14.0))),
                 ),
