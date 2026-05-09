@@ -28,6 +28,7 @@ pub struct Workspace {
     pub status_bar: Entity<StatusBar>,
     pub active_editor: Option<Entity<Editor>>,
     pub struct_tree: Entity<StructTreePanel>,
+    pub is_struct_tree_visible: bool,
 }
 
 const MAIN_DOCK_AREA_ID: &str = "main_dock_area";
@@ -89,8 +90,6 @@ impl Workspace {
         .detach();
 
         Self::reset_default_layout(weak_dock_area, window, cx);
-        let struct_tree = cx.new(|cx| StructTreePanel::new(cx));
-
         Self {
             dock_area,
             file_tree,
@@ -99,6 +98,7 @@ impl Workspace {
             status_bar,
             active_editor: None,
             struct_tree,
+            is_struct_tree_visible: true,
         }
     }
 
@@ -367,6 +367,11 @@ impl Workspace {
 
     fn on_action_toggle_file_tree(&mut self, _: &ToggleFileTree, _: &mut Window, cx: &mut Context<Self>) {
         self.is_file_tree_visible = !self.is_file_tree_visible;
+        cx.notify();
+    }
+
+    fn on_action_toggle_struct_tree(&mut self, _: &ToggleStructTree, _: &mut Window, cx: &mut Context<Self>) {
+        self.is_struct_tree_visible = !self.is_struct_tree_visible;
         cx.notify();
     }
 

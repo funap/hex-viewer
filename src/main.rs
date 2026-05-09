@@ -72,6 +72,8 @@ fn main() {
                     }),
                     gpui::MenuItem::separator(),
                     gpui::MenuItem::action("Settings", crate::actions::OpenSettings),
+                    gpui::MenuItem::separator(),
+                    gpui::MenuItem::action("Toggle Structure Panel", crate::actions::ToggleStructTree),
                 ],
             },
         ]);
@@ -88,6 +90,7 @@ fn main() {
             gpui::KeyBinding::new("cmd-home", crate::actions::GoToBeginning, None),
             gpui::KeyBinding::new("cmd-end", crate::actions::GoToEnd, None),
             gpui::KeyBinding::new("cmd-,", crate::actions::OpenSettings, None),
+            gpui::KeyBinding::new("cmd-shift-b", crate::actions::ToggleStructTree, None),
         ]);
 
         // Parse command line arguments (skip the first one which is the program name)
