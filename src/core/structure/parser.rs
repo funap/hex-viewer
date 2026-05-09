@@ -123,9 +123,11 @@ impl<'a> StructParser<'a> {
     }
 
     fn parse_field(&mut self, field_def: &FieldDef) -> Option<ParsedField> {
-        // Evaluate condition (basic support for now)
-        if let Some(_cond) = &field_def.condition {
-             // To be handled fully by expression evaluator
+        // Evaluate condition
+        if let Some(cond) = &field_def.condition {
+             if !crate::core::structure::expression::ExprEvaluator::evaluate(cond) {
+                 return None;
+             }
         }
 
         let start_offset = self.offset;

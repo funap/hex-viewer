@@ -136,3 +136,9 @@ pub struct ShowFilesTab;
 
 #[derive(Clone, PartialEq, Action)]
 pub struct ShowStructureTab;
+
+#[derive(Clone, PartialEq, Action)]
+pub struct LoadStructureDefinition;
+
+#[derive(Clone, PartialEq, Action)]
+pub struct ClearStructureDefinition;

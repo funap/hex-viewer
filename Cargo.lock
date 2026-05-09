@@ -701,6 +701,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63044e1ae8e69f3b5a92c736ca6269b8d12fa7efe39bf34ddb06d102cf0e2cab"
 dependencies = [
  "memchr",
+ "regex-automata",
  "serde",
 ]
 
@@ -1393,6 +1394,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "89a09f22a6c6069a18470eb92d2298acf25463f14256d24778e1230d789a2aec"
 dependencies = [
  "bitflags 2.10.0",
+ "block2",
+ "libc",
  "objc2",
 ]
 
@@ -3752,6 +3755,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d49e936b501e5c5bf01fda3a9452ff86dc3ea98ad5f283e1455153142d97518c"
 dependencies = [
  "bitflags 2.10.0",
+ "block2",
  "objc2",
  "objc2-core-foundation",
  "objc2-foundation",
@@ -4196,6 +4200,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5da3b0203fd7ee5720aa0b5e790b591aa5d3f41c3ed2c34a3a393382198af2f7"
 
 [[package]]
+name = "pollster"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f3a9f18d041e6d0e102a0a46750538147e5e8992d3b4873aaafee2520b00ce3"
+
+[[package]]
 name = "postage"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4207,7 +4217,7 @@ dependencies = [
  "log",
  "parking_lot",
  "pin-project",
- "pollster",
+ "pollster 0.2.5",
  "static_assertions",
  "thiserror 1.0.69",
 ]
@@ -4691,6 +4701,33 @@ dependencies = [
  "svgtypes",
  "tiny-skia",
  "usvg",
+]
+
+[[package]]
+name = "rfd"
+version = "0.17.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20dafead71c16a34e1ff357ddefc8afc11e7d51d6d2b9fbd07eaa48e3e540220"
+dependencies = [
+ "block2",
+ "dispatch2",
+ "js-sys",
+ "libc",
+ "log",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-core-foundation",
+ "objc2-foundation",
+ "percent-encoding",
+ "pollster 0.4.0",
+ "raw-window-handle",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols 0.32.9",
+ "web-sys",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7358,10 +7395,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "autocorrect",
+ "bstr",
  "gpui",
  "gpui-component",
  "gpui-component-assets",
  "gpui_util",
+ "rfd",
  "schemars",
  "serde",
  "serde_json",
