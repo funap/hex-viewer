@@ -170,7 +170,10 @@ impl Workspace {
                 let editor = editor_panel.read(cx).editor();
                 this.active_editor = Some(editor.clone());
                 this.status_bar.update(cx, |status_bar, _| {
-                    status_bar.set_active_editor(Some(editor));
+                    status_bar.set_active_editor(Some(editor.clone()));
+                });
+                this.left_panel.update(cx, |panel, cx| {
+                    panel.set_editor(Some(editor.clone()), cx);
                 });
                 cx.notify();
             }
@@ -370,6 +373,56 @@ impl Workspace {
         cx.notify();
     }
 
+    fn on_action_show_files_tab(&mut self, _: &ShowFilesTab, _: &mut Window, cx: &mut Context<Self>) {
+        self.left_panel.update(cx, |p, cx| p.set_tab(crate::ui::panels::left_panel::LeftPanelTab::Files, cx));
+        self.is_left_panel_visible = true;
+        cx.notify();
+    }
+
+    fn on_action_show_structure_tab(&mut self, _: &ShowStructureTab, _: &mut Window, cx: &mut Context<Self>) {
+        self.left_panel.update(cx, |p, cx| p.set_tab(crate::ui::panels::left_panel::LeftPanelTab::Structure, cx));
+        self.is_left_panel_visible = true;
+        cx.notify();
+    }
+
+    fn on_action_load_structure_definition(&mut self, _: &LoadStructureDefinition, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(editor_entity) = self.active_editor.as_ref() {
+            let paths = rfd::FileDialog::new()
+                .add_filter("TOML Files", &["toml"])
+                .pick_file();
+
+            if let Some(path) = paths {
+                if let Ok(contents) = std::fs::read_to_string(path) {
+                    if let Ok(def) = toml::from_str::<crate::core::structure::StructDefinition>(&contents) {
+                        editor_entity.update(cx, |editor, cx| {
+                            editor.set_structure_definition(def);
+                            cx.notify();
+                        });
+                        self.left_panel.update(cx, |p, cx| {
+                            p.set_editor(Some(editor_entity.clone()), cx);
+                            p.set_tab(crate::ui::panels::left_panel::LeftPanelTab::Structure, cx);
+                        });
+                        self.is_left_panel_visible = true;
+                        cx.notify();
+                    }
+                }
+            }
+        }
+    }
+
+    fn on_action_clear_structure_definition(&mut self, _: &ClearStructureDefinition, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(editor_entity) = self.active_editor.as_ref() {
+            editor_entity.update(cx, |editor, cx| {
+                editor.clear_structure_definition();
+                cx.notify();
+            });
+            self.left_panel.update(cx, |p, cx| {
+                p.set_editor(Some(editor_entity.clone()), cx);
+            });
+            cx.notify();
+        }
+    }
+
     fn on_action_open_settings(&mut self, _: &OpenSettings, window: &mut Window, cx: &mut Context<Self>) {
         self.open_settings_panel(window, cx);
     }
@@ -555,6 +608,10 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_action_open_diff))
             .on_action(cx.listener(Self::on_action_toggle_left_panel))
             .on_action(cx.listener(Self::on_action_open_settings))
+            .on_action(cx.listener(Self::on_action_show_files_tab))
+            .on_action(cx.listener(Self::on_action_show_structure_tab))
+            .on_action(cx.listener(Self::on_action_load_structure_definition))
+            .on_action(cx.listener(Self::on_action_clear_structure_definition))
             .relative()
             .size_full()
             .flex()

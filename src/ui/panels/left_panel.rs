@@ -44,19 +44,34 @@ impl Render for StructTreePanel {
             Vec::new()
         };
 
+        let is_empty = fields.is_empty();
         self.tree_view.update(cx, |view, cx| {
             view.fields = fields;
             cx.notify();
         });
 
         let theme = cx.global::<Theme>();
+        let content = if is_empty {
+            div()
+                .w_full()
+                .h_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .text_color(theme.foreground)
+                .child("No structure loaded")
+                .into_any_element()
+        } else {
+            self.tree_view.clone().into_any_element()
+        };
+
         div()
             .flex()
             .flex_col()
             .w_full()
             .h_full()
             .bg(theme.background)
-            .child(self.tree_view.clone())
+            .child(content)
     }
 }
 
