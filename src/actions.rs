@@ -137,8 +137,10 @@ pub struct ShowFilesTab;
 #[derive(Clone, PartialEq, Action)]
 pub struct ShowStructureTab;
 
-#[derive(Clone, PartialEq, Action)]
+#[derive(Clone, PartialEq, Deserialize, JsonSchema, Action)]
+#[action(namespace = app)]
 pub struct LoadStructureDefinition;
 
-#[derive(Clone, PartialEq, Action)]
+#[derive(Clone, PartialEq, Deserialize, JsonSchema, Action)]
+#[action(namespace = app)]
 pub struct ClearStructureDefinition;
