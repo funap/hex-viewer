@@ -129,3 +129,10 @@ pub struct SetEncodingUtf16Le;
 
 #[derive(Clone, PartialEq, Action)]
 pub struct SetEncodingUtf16Be;
+
+
+#[derive(Clone, PartialEq, Action)]
+pub struct ShowFilesTab;
+
+#[derive(Clone, PartialEq, Action)]
+pub struct ShowStructureTab;

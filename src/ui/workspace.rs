@@ -6,7 +6,8 @@ use crate::actions::*;
 
 use crate::ui::panels::editor_panel::EditorPanel;
 use crate::ui::panels::file_tree_panel::FileTreePanel;
-use crate::ui::panels::struct_tree_panel::StructTreePanel;
+use crate::ui::panels::left_panel::LeftPanel;
+
 
 use crate::ui::components::toolbar::AppTitleBar;
 
@@ -20,21 +21,15 @@ use gpui_component::resizable::{h_resizable, resizable_panel};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-#[derive(Clone, Copy, PartialEq)]
-pub enum LeftPanelTab {
-    Files,
-    Structure,
-}
+
 
 pub struct Workspace {
     pub dock_area: Entity<DockArea>,
-    pub file_tree: Entity<FileTreePanel>,
     pub title_bar: Entity<AppTitleBar>,
     pub status_bar: Entity<StatusBar>,
     pub active_editor: Option<Entity<Editor>>,
-    pub struct_tree: Entity<StructTreePanel>,
+    pub left_panel: Entity<LeftPanel>,
     pub is_left_panel_visible: bool,
-    pub left_panel_tab: LeftPanelTab,
 }
 
 const MAIN_DOCK_AREA_ID: &str = "main_dock_area";
@@ -67,7 +62,8 @@ impl Workspace {
         })
         .detach();
 
-        let struct_tree = cx.new(|cx| StructTreePanel::new(cx));
+        let file_tree = cx.new(|cx| FileTreePanel::new("FILES", cx));
+        let left_panel = cx.new(|cx| LeftPanel::new(file_tree.clone(), cx));
 
         let status_bar = cx.new(|cx| StatusBar::new(cx));
         cx.subscribe(&status_bar, |this, _, event, cx| match event {
@@ -86,7 +82,7 @@ impl Workspace {
             cx.notify();
         })
         .detach();
-        cx.subscribe(&file_tree, |_, _, event, cx| match event {
+        cx.subscribe(&left_panel, |_, _, event, cx| match event {
             crate::ui::panels::file_tree_panel::FileTreeEvent::OpenFile(path) => {
                 cx.dispatch_action(&crate::actions::OpenFile {
                     path: path.to_string_lossy().to_string(),
@@ -98,13 +94,11 @@ impl Workspace {
         Self::reset_default_layout(weak_dock_area, window, cx);
         Self {
             dock_area,
-            file_tree,
             title_bar,
             status_bar,
             active_editor: None,
-            struct_tree,
+            left_panel,
             is_left_panel_visible: true,
-            left_panel_tab: LeftPanelTab::Files,
         }
     }
 
@@ -572,7 +566,7 @@ impl Render for Workspace {
                         resizable_panel()
                             .visible(self.is_left_panel_visible)
                             .size(px(250.))
-                            .child(self.file_tree.clone()),
+                            .child(self.left_panel.clone()),
                     )
                     .child(
                         resizable_panel()

@@ -81,6 +81,8 @@ fn main() {
             gpui::KeyBinding::new("cmd-o", crate::actions::OpenFileDialog, None),
             gpui::KeyBinding::new("cmd-shift-o", crate::actions::OpenFolder, None),
             gpui::KeyBinding::new("cmd-b", crate::actions::ToggleLeftPanel, None),
+            gpui::KeyBinding::new("cmd-1", crate::actions::ShowFilesTab, None),
+            gpui::KeyBinding::new("cmd-2", crate::actions::ShowStructureTab, None),
             gpui::KeyBinding::new("cmd-q", crate::actions::Quit, None),
             gpui::KeyBinding::new("cmd-f", crate::actions::ToggleSearch, None),
             gpui::KeyBinding::new("cmd-g", crate::actions::SearchNext, None),

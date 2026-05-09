@@ -1,0 +1,164 @@
+use gpui::*;
+use gpui_component::theme::Theme;
+
+use crate::core::editor::Editor;
+use crate::ui::components::struct_tree_view::StructTreeView;
+use crate::ui::panels::file_tree_panel::{FileTreePanel, FileTreeEvent};
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum LeftPanelTab {
+    Files,
+    Structure,
+}
+
+pub struct StructTreePanel {
+    pub editor: Option<Entity<Editor>>,
+    pub tree_view: Entity<StructTreeView>,
+}
+
+impl StructTreePanel {
+    pub fn new(cx: &mut Context<Self>) -> Self {
+        let tree_view = cx.new(|_| StructTreeView::new(Vec::new()));
+        Self {
+            editor: None,
+            tree_view,
+        }
+    }
+
+    pub fn set_editor(&mut self, editor: Entity<Editor>, cx: &mut Context<Self>) {
+        self.editor = Some(editor.clone());
+        cx.notify();
+    }
+}
+
+impl Render for StructTreePanel {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let fields = if let Some(editor) = &self.editor {
+            let editor_lock = editor.read(cx);
+            if let Some(res) = &editor_lock.parse_result {
+                res.fields.clone()
+            } else {
+                Vec::new()
+            }
+        } else {
+            Vec::new()
+        };
+
+        self.tree_view.update(cx, |view, cx| {
+            view.fields = fields;
+            cx.notify();
+        });
+
+        let theme = cx.global::<Theme>();
+        div()
+            .flex()
+            .flex_col()
+            .w_full()
+            .h_full()
+            .bg(theme.background)
+            .child(self.tree_view.clone())
+    }
+}
+
+pub struct LeftPanel {
+    pub file_tree: Entity<FileTreePanel>,
+    pub struct_tree: Entity<StructTreePanel>,
+    pub active_tab: LeftPanelTab,
+}
+
+impl EventEmitter<FileTreeEvent> for LeftPanel {}
+
+impl LeftPanel {
+    pub fn new(file_tree: Entity<FileTreePanel>, cx: &mut Context<Self>) -> Self {
+        let struct_tree = cx.new(|cx| StructTreePanel::new(cx));
+
+        cx.subscribe(&file_tree, |_, _, event: &FileTreeEvent, cx| {
+            match event {
+                FileTreeEvent::OpenFile(path) => cx.emit(FileTreeEvent::OpenFile(path.clone())),
+            }
+        }).detach();
+
+        Self {
+            file_tree,
+            struct_tree,
+            active_tab: LeftPanelTab::Files,
+        }
+    }
+
+    pub fn set_editor(&mut self, editor: Option<Entity<Editor>>, cx: &mut Context<Self>) {
+        self.struct_tree.update(cx, |panel, cx| {
+            if let Some(ed) = editor {
+                panel.set_editor(ed, cx);
+            } else {
+                panel.editor = None;
+                cx.notify();
+            }
+        });
+    }
+
+    pub fn set_tab(&mut self, tab: LeftPanelTab, cx: &mut Context<Self>) {
+        self.active_tab = tab;
+        cx.notify();
+    }
+}
+
+impl Render for LeftPanel {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.global::<Theme>();
+
+        div()
+            .flex()
+            .flex_col()
+            .w_full()
+            .h_full()
+            // Tabs
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .w_full()
+                    .h(px(28.0))
+                    .border_b_1()
+                    .border_color(theme.border)
+                    .child(
+                        div()
+                            .flex_1()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .text_color(if self.active_tab == LeftPanelTab::Files { theme.foreground } else { theme.foreground })
+                            .bg(if self.active_tab == LeftPanelTab::Files { theme.background } else { theme.background })
+                            .cursor_pointer()
+                            .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                                this.set_tab(LeftPanelTab::Files, cx);
+                            }))
+                            .child("Files"),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .text_color(if self.active_tab == LeftPanelTab::Structure { theme.foreground } else { theme.foreground })
+                            .bg(if self.active_tab == LeftPanelTab::Structure { theme.background } else { theme.background })
+                            .cursor_pointer()
+                            .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                                this.set_tab(LeftPanelTab::Structure, cx);
+                            }))
+                            .child("Structure"),
+                    ),
+            )
+            // Content
+            .child(
+                div()
+                    .flex_1()
+                    .overflow_hidden()
+                    .child(if self.active_tab == LeftPanelTab::Files {
+                        self.file_tree.clone().into_any_element()
+                    } else {
+                        self.struct_tree.clone().into_any_element()
+                    }),
+            )
+    }
+}
