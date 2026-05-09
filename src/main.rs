@@ -72,7 +72,13 @@ fn main() {
                     }),
                     gpui::MenuItem::separator(),
                     gpui::MenuItem::action("Settings", crate::actions::OpenSettings),
-
+                ],
+            },
+            gpui::Menu {
+                name: "Structure".into(),
+                items: vec![
+                    gpui::MenuItem::action("Load Definition...", crate::actions::LoadStructureDefinition),
+                    gpui::MenuItem::action("Clear Definition", crate::actions::ClearStructureDefinition),
                 ],
             },
         ]);
@@ -91,7 +97,7 @@ fn main() {
             gpui::KeyBinding::new("cmd-home", crate::actions::GoToBeginning, None),
             gpui::KeyBinding::new("cmd-end", crate::actions::GoToEnd, None),
             gpui::KeyBinding::new("cmd-,", crate::actions::OpenSettings, None),
-
+            gpui::KeyBinding::new("cmd-shift-s", crate::actions::LoadStructureDefinition, None),
         ]);
 
         // Parse command line arguments (skip the first one which is the program name)
