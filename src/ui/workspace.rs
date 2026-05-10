@@ -29,12 +29,12 @@ pub struct Workspace {
     pub status_bar: Entity<StatusBar>,
     pub active_editor: Option<Entity<Editor>>,
     pub left_panel: Entity<LeftPanel>,
+    pub ksy_definition: Option<crate::core::structure::KsyDefinition>,
     pub is_left_panel_visible: bool,
 }
 
 const MAIN_DOCK_AREA_ID: &str = "main_dock_area";
 const MAIN_DOCK_AREA_VERSION: usize = 1;
-const FILE_TREE_PANEL_TITLE: &str = "FILES";
 
 pub fn init(cx: &mut App) {
     cx.bind_keys(vec![
@@ -74,11 +74,13 @@ impl Workspace {
         })
         .detach();
 
-        let file_tree = cx.new(|cx| FileTreePanel::new(FILE_TREE_PANEL_TITLE, cx));
         cx.on_focus_in(&file_tree.read(cx).focus_handle(cx), window, |this, _, cx| {
             this.active_editor = None;
             this.status_bar
                 .update(cx, |status_bar, _| status_bar.set_active_editor(None));
+            this.left_panel.update(cx, |panel, cx| {
+                panel.set_editor(None, cx);
+            });
             cx.notify();
         })
         .detach();
@@ -98,6 +100,7 @@ impl Workspace {
             status_bar,
             active_editor: None,
             left_panel,
+            ksy_definition: None,
             is_left_panel_visible: true,
         }
     }
@@ -163,12 +166,30 @@ impl Workspace {
         let document = action.0.clone();
         let editor = cx.new(|_| Editor::new(document));
 
+        if let Some(ksy) = &self.ksy_definition {
+            let ksy = ksy.clone();
+            editor.update(cx, |editor, cx| {
+                editor.set_kaitai_definition(ksy);
+                cx.notify();
+            });
+        }
+
         let editor_panel = cx.new(|cx| EditorPanel::new(editor, window, cx));
         cx.on_focus_in(&editor_panel.read(cx).focus_handle(cx), window, {
             let editor_panel = editor_panel.clone();
             move |this, _window, cx| {
                 let editor = editor_panel.read(cx).editor();
                 this.active_editor = Some(editor.clone());
+
+                // Apply workspace-wide definition to the newly active editor
+                if let Some(ksy) = &this.ksy_definition {
+                    let ksy = ksy.clone();
+                    editor.update(cx, |editor, cx| {
+                        editor.set_kaitai_definition(ksy);
+                        cx.notify();
+                    });
+                }
+
                 this.status_bar.update(cx, |status_bar, _| {
                     status_bar.set_active_editor(Some(editor.clone()));
                 });
@@ -402,15 +423,21 @@ impl Workspace {
                         Ok(contents) => {
                             match serde_yaml::from_str::<crate::core::structure::KsyDefinition>(&contents) {
                                 Ok(ksy) => {
-                                    window.update(|_, cx| {
-                                        editor_entity.update(cx, |editor, cx| {
-                                            editor.set_kaitai_definition(ksy);
-                                            cx.notify();
-                                        });
-
+                                    window.update(|window, cx| {
                                         view.update(cx, |this, cx| {
+                                            this.ksy_definition = Some(ksy.clone());
+                                            
+                                            if let Some(editor_entity) = &this.active_editor {
+                                                editor_entity.update(cx, |editor, cx| {
+                                                    editor.set_kaitai_definition(ksy.clone());
+                                                    cx.notify();
+                                                });
+                                            }
+
                                             this.left_panel.update(cx, |p, cx| {
-                                                p.set_editor(Some(editor_entity.clone()), cx);
+                                                if let Some(editor_entity) = &this.active_editor {
+                                                    p.set_editor(Some(editor_entity.clone()), cx);
+                                                }
                                                 p.set_tab(crate::ui::panels::left_panel::LeftPanelTab::Structure, cx);
                                             });
                                             this.is_left_panel_visible = true;
@@ -434,6 +461,7 @@ impl Workspace {
     }
 
     fn on_action_clear_structure_definition(&mut self, _: &ClearStructureDefinition, _: &mut Window, cx: &mut Context<Self>) {
+        self.ksy_definition = None;
         if let Some(editor_entity) = self.active_editor.as_ref() {
             editor_entity.update(cx, |editor, cx| {
                 editor.clear_structure_definition();
@@ -442,8 +470,8 @@ impl Workspace {
             self.left_panel.update(cx, |p, cx| {
                 p.set_editor(Some(editor_entity.clone()), cx);
             });
-            cx.notify();
         }
+        cx.notify();
     }
 
     fn on_action_open_settings(&mut self, _: &OpenSettings, window: &mut Window, cx: &mut Context<Self>) {

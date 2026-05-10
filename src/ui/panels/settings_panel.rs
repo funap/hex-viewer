@@ -154,6 +154,10 @@ impl Panel for SettingsPanel {
     fn visible(&self, _: &App) -> bool {
         true
     }
-    fn set_active(&mut self, _: bool, _: &mut Window, _: &mut Context<Self>) {}
+    fn set_active(&mut self, active: bool, window: &mut Window, _cx: &mut Context<Self>) {
+        if active {
+            self.focus_handle.focus(window);
+        }
+    }
     fn set_zoomed(&mut self, _: bool, _: &mut Window, _: &mut Context<Self>) {}
 }

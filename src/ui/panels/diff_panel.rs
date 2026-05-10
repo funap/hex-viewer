@@ -249,7 +249,11 @@ impl Panel for DiffPanel {
         true
     }
 
-    fn set_active(&mut self, _active: bool, _window: &mut Window, _cx: &mut Context<Self>) {}
+    fn set_active(&mut self, active: bool, window: &mut Window, _cx: &mut Context<Self>) {
+        if active {
+            self.focus_handle.focus(window);
+        }
+    }
 
     fn set_zoomed(&mut self, _zoomed: bool, _window: &mut Window, _cx: &mut Context<Self>) {}
 

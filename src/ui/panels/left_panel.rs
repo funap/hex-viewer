@@ -32,18 +32,19 @@ impl StructTreePanel {
     pub fn set_editor(&mut self, editor: Option<Entity<Editor>>, cx: &mut Context<Self>) {
         self._editor_subscription = None;
         self.editor = editor.clone();
+        self.last_parse_id = None; // Reset to force sync on new editor
+        
+        // Reset tree view to empty state for the new editor
+        self.tree_view.update(cx, |view, cx| {
+            view.set_fields(Vec::new(), cx);
+            view.editor = editor.clone();
+        });
         
         if let Some(ed) = editor {
             self._editor_subscription = Some(cx.observe(&ed, |this, editor, cx| {
                 this.sync_fields(&editor, cx);
             }));
             self.sync_fields(&ed, cx);
-        } else {
-            self.tree_view.update(cx, |view, cx| {
-                view.set_fields(Vec::new(), cx);
-                view.editor = None;
-            });
-            self.last_parse_id = None;
         }
         cx.notify();
     }

@@ -33,6 +33,7 @@ pub struct Editor {
     /// 特定のオフセットに挿入された空行の数を記録する。
     pub empty_lines: std::collections::BTreeMap<usize, usize>,
     pub encoding: Encoding,
+    pub ksy_definition: Option<crate::core::structure::KsyDefinition>,
     pub parse_result: Option<ParseResult>,
 }
 
@@ -48,6 +49,7 @@ impl Editor {
             custom_joins: BTreeSet::new(),
             empty_lines: std::collections::BTreeMap::new(),
             encoding: Encoding::default(),
+            ksy_definition: None,
             parse_result: None,
         }
     }
@@ -913,17 +915,27 @@ mod tests {
 
 impl Editor {
     pub fn set_kaitai_definition(&mut self, ksy: crate::core::structure::KsyDefinition) {
+        // If the definition is already the same, skip re-parsing unless necessary.
+        // We compare by ID for now.
+        if let Some(existing) = &self.ksy_definition {
+            if existing.meta.id == ksy.meta.id {
+                return;
+            }
+        }
+
         let buffer_lock = self.document.read().unwrap();
         let bytes = buffer_lock.buffer.data();
         let mut stream = std::io::Cursor::new(bytes);
 
-        let interpreter = crate::core::structure::KaitaiInterpreter::new(ksy, &mut stream);
+        let interpreter = crate::core::structure::KaitaiInterpreter::new(ksy.clone(), &mut stream);
         let result = interpreter.parse();
 
+        self.ksy_definition = Some(ksy);
         self.parse_result = Some(result);
     }
 
     pub fn clear_structure_definition(&mut self) {
+        self.ksy_definition = None;
         self.parse_result = None;
     }
 }
