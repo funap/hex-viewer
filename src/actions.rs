@@ -67,7 +67,7 @@ pub struct PrevDifference;
 pub struct ToggleSyncScroll;
 
 #[derive(Clone, PartialEq, Action)]
-pub struct ToggleFileTree;
+pub struct ToggleLeftPanel;
 
 #[derive(Clone, PartialEq, Action)]
 pub struct OpenSettings;
@@ -129,3 +129,18 @@ pub struct SetEncodingUtf16Le;
 
 #[derive(Clone, PartialEq, Action)]
 pub struct SetEncodingUtf16Be;
+
+
+#[derive(Clone, PartialEq, Action)]
+pub struct ShowFilesTab;
+
+#[derive(Clone, PartialEq, Action)]
+pub struct ShowStructureTab;
+
+#[derive(Clone, PartialEq, Deserialize, JsonSchema, Action)]
+#[action(namespace = app)]
+pub struct LoadStructureDefinition;
+
+#[derive(Clone, PartialEq, Deserialize, JsonSchema, Action)]
+#[action(namespace = app)]
+pub struct ClearStructureDefinition;

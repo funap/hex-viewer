@@ -1,6 +1,7 @@
 use crate::core::command::Command;
 use crate::core::document::Document;
 use crate::core::encoding::Encoding;
+use crate::core::structure::{StructDefinition, ParseResult, StructParser};
 use std::cmp;
 use std::collections::BTreeSet;
 use std::ops::Range;
@@ -32,6 +33,8 @@ pub struct Editor {
     /// 特定のオフセットに挿入された空行の数を記録する。
     pub empty_lines: std::collections::BTreeMap<usize, usize>,
     pub encoding: Encoding,
+    pub structure_def: Option<StructDefinition>,
+    pub parse_result: Option<ParseResult>,
 }
 
 impl Editor {
@@ -46,6 +49,8 @@ impl Editor {
             custom_joins: BTreeSet::new(),
             empty_lines: std::collections::BTreeMap::new(),
             encoding: Encoding::default(),
+            structure_def: None,
+            parse_result: None,
         }
     }
 
@@ -669,7 +674,7 @@ mod tests {
 
     #[test]
     fn test_initialization() {
-        let mut editor = create_editor_with_content(b"Hello");
+        let editor = create_editor_with_content(b"Hello");
         assert_eq!(editor.total_size(), 5);
         assert_eq!(editor.cursor_offset, 0);
         assert!(editor.selection_start.is_none());
@@ -905,5 +910,24 @@ mod tests {
         // Adding a custom break at 16 should remove the join
         editor.add_custom_break(16);
         assert_eq!(editor.line_starts(), vec![0, 16, 32]);
+    }
+}
+
+impl Editor {
+    pub fn set_structure_definition(&mut self, def: StructDefinition) {
+        let buffer_lock = self.document.read().unwrap();
+        // Since buffer is not locked with a mutex but directly accessible, we use it directly:
+        let bytes = buffer_lock.buffer.data().to_vec();
+
+        let parser = StructParser::new(&def, &bytes);
+        let result = parser.parse();
+
+        self.structure_def = Some(def);
+        self.parse_result = Some(result);
+    }
+
+    pub fn clear_structure_definition(&mut self) {
+        self.structure_def = None;
+        self.parse_result = None;
     }
 }

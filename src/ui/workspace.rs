@@ -6,6 +6,8 @@ use crate::actions::*;
 
 use crate::ui::panels::editor_panel::EditorPanel;
 use crate::ui::panels::file_tree_panel::FileTreePanel;
+use crate::ui::panels::left_panel::LeftPanel;
+
 
 use crate::ui::components::toolbar::AppTitleBar;
 
@@ -19,13 +21,15 @@ use gpui_component::resizable::{h_resizable, resizable_panel};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+
+
 pub struct Workspace {
     pub dock_area: Entity<DockArea>,
-    pub file_tree: Entity<FileTreePanel>,
-    pub is_file_tree_visible: bool,
     pub title_bar: Entity<AppTitleBar>,
     pub status_bar: Entity<StatusBar>,
     pub active_editor: Option<Entity<Editor>>,
+    pub left_panel: Entity<LeftPanel>,
+    pub is_left_panel_visible: bool,
 }
 
 const MAIN_DOCK_AREA_ID: &str = "main_dock_area";
@@ -58,10 +62,13 @@ impl Workspace {
         })
         .detach();
 
+        let file_tree = cx.new(|cx| FileTreePanel::new("FILES", cx));
+        let left_panel = cx.new(|cx| LeftPanel::new(file_tree.clone(), cx));
+
         let status_bar = cx.new(|cx| StatusBar::new(cx));
         cx.subscribe(&status_bar, |this, _, event, cx| match event {
-            crate::ui::components::status_bar::StatusBarEvent::ToggleFileTree => {
-                this.is_file_tree_visible = !this.is_file_tree_visible;
+            crate::ui::components::status_bar::StatusBarEvent::ToggleLeftPanel => {
+                this.is_left_panel_visible = !this.is_left_panel_visible;
                 cx.notify();
             }
         })
@@ -75,7 +82,7 @@ impl Workspace {
             cx.notify();
         })
         .detach();
-        cx.subscribe(&file_tree, |_, _, event, cx| match event {
+        cx.subscribe(&left_panel, |_, _, event, cx| match event {
             crate::ui::panels::file_tree_panel::FileTreeEvent::OpenFile(path) => {
                 cx.dispatch_action(&crate::actions::OpenFile {
                     path: path.to_string_lossy().to_string(),
@@ -85,14 +92,13 @@ impl Workspace {
         .detach();
 
         Self::reset_default_layout(weak_dock_area, window, cx);
-
         Self {
             dock_area,
-            file_tree,
-            is_file_tree_visible: true,
             title_bar,
             status_bar,
             active_editor: None,
+            left_panel,
+            is_left_panel_visible: true,
         }
     }
 
@@ -164,7 +170,10 @@ impl Workspace {
                 let editor = editor_panel.read(cx).editor();
                 this.active_editor = Some(editor.clone());
                 this.status_bar.update(cx, |status_bar, _| {
-                    status_bar.set_active_editor(Some(editor));
+                    status_bar.set_active_editor(Some(editor.clone()));
+                });
+                this.left_panel.update(cx, |panel, cx| {
+                    panel.set_editor(Some(editor.clone()), cx);
                 });
                 cx.notify();
             }
@@ -359,9 +368,59 @@ impl Workspace {
         .detach();
     }
 
-    fn on_action_toggle_file_tree(&mut self, _: &ToggleFileTree, _: &mut Window, cx: &mut Context<Self>) {
-        self.is_file_tree_visible = !self.is_file_tree_visible;
+    fn on_action_toggle_left_panel(&mut self, _: &ToggleLeftPanel, _: &mut Window, cx: &mut Context<Self>) {
+        self.is_left_panel_visible = !self.is_left_panel_visible;
         cx.notify();
+    }
+
+    fn on_action_show_files_tab(&mut self, _: &ShowFilesTab, _: &mut Window, cx: &mut Context<Self>) {
+        self.left_panel.update(cx, |p, cx| p.set_tab(crate::ui::panels::left_panel::LeftPanelTab::Files, cx));
+        self.is_left_panel_visible = true;
+        cx.notify();
+    }
+
+    fn on_action_show_structure_tab(&mut self, _: &ShowStructureTab, _: &mut Window, cx: &mut Context<Self>) {
+        self.left_panel.update(cx, |p, cx| p.set_tab(crate::ui::panels::left_panel::LeftPanelTab::Structure, cx));
+        self.is_left_panel_visible = true;
+        cx.notify();
+    }
+
+    fn on_action_load_structure_definition(&mut self, _: &LoadStructureDefinition, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(editor_entity) = self.active_editor.as_ref() {
+            let paths = rfd::FileDialog::new()
+                .add_filter("TOML Files", &["toml"])
+                .pick_file();
+
+            if let Some(path) = paths {
+                if let Ok(contents) = std::fs::read_to_string(path) {
+                    if let Ok(def) = toml::from_str::<crate::core::structure::StructDefinition>(&contents) {
+                        editor_entity.update(cx, |editor, cx| {
+                            editor.set_structure_definition(def);
+                            cx.notify();
+                        });
+                        self.left_panel.update(cx, |p, cx| {
+                            p.set_editor(Some(editor_entity.clone()), cx);
+                            p.set_tab(crate::ui::panels::left_panel::LeftPanelTab::Structure, cx);
+                        });
+                        self.is_left_panel_visible = true;
+                        cx.notify();
+                    }
+                }
+            }
+        }
+    }
+
+    fn on_action_clear_structure_definition(&mut self, _: &ClearStructureDefinition, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(editor_entity) = self.active_editor.as_ref() {
+            editor_entity.update(cx, |editor, cx| {
+                editor.clear_structure_definition();
+                cx.notify();
+            });
+            self.left_panel.update(cx, |p, cx| {
+                p.set_editor(Some(editor_entity.clone()), cx);
+            });
+            cx.notify();
+        }
     }
 
     fn on_action_open_settings(&mut self, _: &OpenSettings, window: &mut Window, cx: &mut Context<Self>) {
@@ -547,8 +606,12 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_action_set_encoding_utf16be))
             .on_action(cx.listener(Self::on_action_add_editor_panel))
             .on_action(cx.listener(Self::on_action_open_diff))
-            .on_action(cx.listener(Self::on_action_toggle_file_tree))
+            .on_action(cx.listener(Self::on_action_toggle_left_panel))
             .on_action(cx.listener(Self::on_action_open_settings))
+            .on_action(cx.listener(Self::on_action_show_files_tab))
+            .on_action(cx.listener(Self::on_action_show_structure_tab))
+            .on_action(cx.listener(Self::on_action_load_structure_definition))
+            .on_action(cx.listener(Self::on_action_clear_structure_definition))
             .relative()
             .size_full()
             .flex()
@@ -558,9 +621,9 @@ impl Render for Workspace {
                 h_resizable("workspace-h-resize")
                     .child(
                         resizable_panel()
-                            .visible(self.is_file_tree_visible)
+                            .visible(self.is_left_panel_visible)
                             .size(px(250.))
-                            .child(self.file_tree.clone()),
+                            .child(self.left_panel.clone()),
                     )
                     .child(
                         resizable_panel()
