@@ -1252,8 +1252,14 @@ impl Element for HexViewElement {
                 hex_bytes.push(window.text_system().shape_line(s.into(), font_size, &[run], None));
             }
 
+            let encoding_name = match self.encoding {
+                crate::core::encoding::Encoding::Ascii => "ASCII",
+                crate::core::encoding::Encoding::Utf8 => "UTF-8",
+                crate::core::encoding::Encoding::Utf16Le => "UTF-16 LE",
+                crate::core::encoding::Encoding::Utf16Be => "UTF-16 BE",
+            };
             let ascii_run = TextRun {
-                len: 5,
+                len: encoding_name.len(),
                 font: font.clone(),
                 color: header_color.into(),
                 background_color: None,
@@ -1261,7 +1267,7 @@ impl Element for HexViewElement {
                 strikethrough: None,
             };
             let ascii = if self.show_ascii {
-                window.text_system().shape_line("ASCII".into(), font_size, &[ascii_run], None)
+                window.text_system().shape_line(encoding_name.into(), font_size, &[ascii_run], None)
             } else {
                 window.text_system().shape_line("".into(), font_size, &[], None)
             };
