@@ -18,7 +18,7 @@ pub struct StructTreePanel {
 
 impl StructTreePanel {
     pub fn new(cx: &mut Context<Self>) -> Self {
-        let tree_view = cx.new(|_| StructTreeView::new(Vec::new()));
+        let tree_view = cx.new(|_| StructTreeView::new(Vec::new(), None));
         Self {
             editor: None,
             tree_view,
@@ -47,6 +47,7 @@ impl Render for StructTreePanel {
         let is_empty = fields.is_empty();
         self.tree_view.update(cx, |view, cx| {
             view.fields = fields;
+            view.editor = self.editor.clone();
             cx.notify();
         });
 

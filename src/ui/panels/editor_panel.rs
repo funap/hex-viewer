@@ -109,9 +109,7 @@ impl EditorPanel {
 
         let _editor_subscription = cx.observe(&editor, |this, _, cx| {
             this.update_search_bar_results(cx);
-            if this.is_search_visible {
-                this.update_viewport_highlights(cx);
-            }
+            this.update_highlights(cx);
             cx.notify();
         });
 
@@ -222,89 +220,63 @@ impl EditorPanel {
         });
     }
 
+    fn update_highlights(&mut self, cx: &mut Context<Self>) {
+        let editor = self.editor.read(cx);
+        let mut highlights = Vec::new();
+
+        // 1. Structure highlights (Background)
+        if let Some(res) = &editor.parse_result {
+            highlights.extend(res.to_highlights());
+        }
+
+        // 2. Search highlights (Foreground/Overlay)
+        if self.is_search_visible {
+            let bar = self.search_bar.read(cx);
+            let query = bar.query(cx);
+            if !query.is_empty() {
+                let mode = bar.mode();
+                let pattern_len = match mode {
+                    crate::core::search::SearchMode::Text => query.len(),
+                    crate::core::search::SearchMode::Hex => {
+                        let hex_str: String = query.chars().filter(|c| c.is_ascii_hexdigit()).collect();
+                        hex_str.len() / 2
+                    }
+                };
+
+                let (viewport_start, viewport_end) = self.hex_view.read(cx).viewport_byte_range(cx);
+                let theme = cx.theme();
+
+                for &pos in &editor.search_state.results {
+                    if pos >= viewport_start && pos < viewport_end {
+                        let end = pos + pattern_len;
+                        highlights.push((pos..end, theme.yellow.opacity(0.4)));
+                    }
+                }
+            }
+        }
+
+        self.hex_view.update(cx, |view, cx| {
+            view.set_highlights(highlights, cx);
+        });
+    }
+
     fn highlight_current_result(&mut self, preserve_scroll: bool, cx: &mut Context<Self>) {
         let editor = self.editor.read(cx);
         if let Some(offset) = editor.current_search_result() {
-            let bar = self.search_bar.read(cx);
-            let query = bar.query(cx);
-            let mode = bar.mode();
-            let pattern_len = match mode {
-                SearchMode::Text => query.len(),
-                SearchMode::Hex => {
-                    let hex_str: String = query.chars().filter(|c| c.is_ascii_hexdigit()).collect();
-                    hex_str.len() / 2
-                }
-            };
-
-            let theme = cx.theme();
-
-            // If preserving scroll, filter to viewport range
-            let all_highlights: Vec<_> = if preserve_scroll {
-                let (viewport_start, viewport_end) = self.hex_view.read(cx).viewport_byte_range(cx);
-                editor
-                    .search_state
-                    .results
-                    .iter()
-                    .filter(|&&pos| pos >= viewport_start && pos < viewport_end)
-                    .map(|&pos| {
-                        let end = pos + pattern_len;
-                        (pos..end, theme.yellow.opacity(0.4))
-                    })
-                    .collect()
-            } else {
-                editor
-                    .search_state
-                    .results
-                    .iter()
-                    .map(|&pos| {
-                        let end = pos + pattern_len;
-                        (pos..end, theme.yellow.opacity(0.4))
-                    })
-                    .collect()
-            };
-
-            // Update highlights and scroll to current result
-            self.hex_view.update(cx, |view, cx| {
-                view.set_highlights(all_highlights, cx);
-                // Only update scroll position and cursor if not preserving
-                if !preserve_scroll {
+            self.update_highlights(cx);
+            
+            // Scroll to current result if not preserving
+            if !preserve_scroll {
+                self.hex_view.update(cx, |view, cx| {
                     view.set_scroll_offset(offset / 16, cx);
                     view.set_cursor_offset(offset, cx);
-                }
-            });
+                });
+            }
         }
     }
 
     fn update_viewport_highlights(&mut self, cx: &mut Context<Self>) {
-        let editor = self.editor.read(cx);
-        let bar = self.search_bar.read(cx);
-        let query = bar.query(cx);
-        let mode = bar.mode();
-        let pattern_len = match mode {
-            SearchMode::Text => query.len(),
-            SearchMode::Hex => {
-                let hex_str: String = query.chars().filter(|c| c.is_ascii_hexdigit()).collect();
-                hex_str.len() / 2
-            }
-        };
-
-        // Filter search results to viewport range
-        let (viewport_start, viewport_end) = self.hex_view.read(cx).viewport_byte_range(cx);
-        let theme = cx.theme();
-        let viewport_highlights: Vec<_> = editor
-            .search_state
-            .results
-            .iter()
-            .filter(|&&pos| pos >= viewport_start && pos < viewport_end)
-            .map(|&pos| {
-                let end = pos + pattern_len;
-                (pos..end, theme.yellow.opacity(0.4))
-            })
-            .collect();
-
-        self.hex_view.update(cx, |view, cx| {
-            view.set_highlights(viewport_highlights, cx);
-        });
+        self.update_highlights(cx);
     }
 
     fn search_next(&mut self, _: &SearchNext, _window: &mut Window, cx: &mut Context<Self>) {

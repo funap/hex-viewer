@@ -18,6 +18,22 @@ pub enum FieldValue {
     Struct, // Complex type container
 }
 
+impl FieldValue {
+    pub fn to_i64(&self) -> i64 {
+        match self {
+            FieldValue::U8(v) => *v as i64,
+            FieldValue::U16(v) => *v as i64,
+            FieldValue::U32(v) => *v as i64,
+            FieldValue::U64(v) => *v as i64,
+            FieldValue::I8(v) => *v as i64,
+            FieldValue::I16(v) => *v as i64,
+            FieldValue::I32(v) => *v as i64,
+            FieldValue::I64(v) => *v,
+            _ => 0,
+        }
+    }
+}
+
 impl std::fmt::Display for FieldValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -63,6 +79,26 @@ pub struct ParseResult {
     pub errors: Vec<ParseError>,
 }
 
+impl ParseResult {
+    pub fn to_highlights(&self) -> Vec<(std::ops::Range<usize>, gpui::Hsla)> {
+        let mut highlights = Vec::new();
+        Self::collect_highlights(&self.fields, &mut highlights);
+        highlights
+    }
+
+    fn collect_highlights(fields: &[ParsedField], highlights: &mut Vec<(std::ops::Range<usize>, gpui::Hsla)>) {
+        for field in fields {
+            // Add parent then children so children are drawn on top
+            if field.size > 0 {
+                highlights.push((field.offset..field.offset + field.size, field.color));
+            }
+            if !field.children.is_empty() {
+                Self::collect_highlights(&field.children, highlights);
+            }
+        }
+    }
+}
+
 pub struct StructParser<'a> {
     def: &'a StructDefinition,
     buffer: &'a [u8],
@@ -70,6 +106,8 @@ pub struct StructParser<'a> {
     errors: Vec<ParseError>,
     color_index: usize,
     global_endian: String,
+    context: std::collections::HashMap<String, i64>,
+    id_stack: Vec<String>,
 }
 
 impl<'a> StructParser<'a> {
@@ -82,6 +120,8 @@ impl<'a> StructParser<'a> {
             errors: Vec::new(),
             color_index: 0,
             global_endian,
+            context: std::collections::HashMap::new(),
+            id_stack: Vec::new(),
         }
     }
 
@@ -107,10 +147,10 @@ impl<'a> StructParser<'a> {
 
         let def_fields = self.def.fields.clone();
         for field_def in def_fields {
-            if let Some(parsed) = self.parse_field(&field_def) {
-                fields.push(parsed);
-            } else {
-                break; // Stop parsing on hard error (e.g., out of bounds)
+            let parsed_fields = self.parse_field_repeated(&field_def);
+            fields.extend(parsed_fields);
+            if self.offset >= self.buffer.len() && !self.errors.is_empty() {
+                break;
             }
         }
 
@@ -122,10 +162,67 @@ impl<'a> StructParser<'a> {
         }
     }
 
-    fn parse_field(&mut self, field_def: &FieldDef) -> Option<ParsedField> {
+    fn parse_field_repeated(&mut self, field_def: &FieldDef) -> Vec<ParsedField> {
+        let mut results = Vec::new();
+
+        if let Some(repeat_type) = &field_def.repeat {
+            match repeat_type.as_str() {
+                "expr" => {
+                    if let Some(expr) = &field_def.repeat_expr {
+                        let count = crate::core::structure::expression::ExprEvaluator::evaluate(expr, &self.context) as usize;
+                        for i in 0..count {
+                            // Update context with loop index? Not in spec, but useful.
+                            // For now just repeat.
+                            if let Some(field) = self.parse_field_once(field_def, Some(i)) {
+                                results.push(field);
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                }
+                "until" => {
+                    if let Some(expr) = &field_def.repeat_until {
+                        let mut i = 0;
+                        while self.offset < self.buffer.len() {
+                            if crate::core::structure::expression::ExprEvaluator::evaluate_bool(expr, &self.context) {
+                                break;
+                            }
+                            if let Some(field) = self.parse_field_once(field_def, Some(i)) {
+                                results.push(field);
+                                i += 1;
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                }
+                "eof" => {
+                    let mut i = 0;
+                    while self.offset < self.buffer.len() {
+                        if let Some(field) = self.parse_field_once(field_def, Some(i)) {
+                            results.push(field);
+                            i += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        } else {
+            if let Some(field) = self.parse_field_once(field_def, None) {
+                results.push(field);
+            }
+        }
+
+        results
+    }
+
+    fn parse_field_once(&mut self, field_def: &FieldDef, index: Option<usize>) -> Option<ParsedField> {
         // Evaluate condition
         if let Some(cond) = &field_def.condition {
-             if !crate::core::structure::expression::ExprEvaluator::evaluate(cond) {
+             if !crate::core::structure::expression::ExprEvaluator::evaluate_bool(cond, &self.context) {
                  return None;
              }
         }
@@ -210,8 +307,12 @@ impl<'a> StructParser<'a> {
                 (FieldValue::String(s), size, Vec::new())
             }
             "bytes" | "padding" => {
-                let size = field_def.size.unwrap_or(0);
-                // In phase 4, resolve size_ref
+                let size = if let Some(size_expr) = &field_def.size_ref {
+                    crate::core::structure::expression::ExprEvaluator::evaluate(size_expr, &self.context) as usize
+                } else {
+                    field_def.size.unwrap_or(0)
+                };
+
                 if self.offset + size > self.buffer.len() { return None; }
                 let bytes = self.buffer[self.offset..self.offset + size].to_vec();
                 self.offset += size;
@@ -219,15 +320,14 @@ impl<'a> StructParser<'a> {
             }
             custom_type => {
                 if let Some(type_def) = self.def.types.get(custom_type) {
+                    self.id_stack.push(field_def.id.clone());
                     let mut nested_fields = Vec::new();
                     let type_fields = type_def.fields.clone();
                     for nested_def in type_fields {
-                         if let Some(parsed_nested) = self.parse_field(&nested_def) {
-                             nested_fields.push(parsed_nested);
-                         } else {
-                             break;
-                         }
+                         let nested_results = self.parse_field_repeated(&nested_def);
+                         nested_fields.extend(nested_results);
                     }
+                    self.id_stack.pop();
                     let total_size = self.offset - start_offset;
                     (FieldValue::Struct, total_size, nested_fields)
                 } else {
@@ -266,8 +366,21 @@ impl<'a> StructParser<'a> {
             }
         }
 
+        // Add to context
+        let mut field_id = field_def.id.clone();
+        if let Some(i) = index {
+            field_id = format!("{}[{}]", field_id, i);
+        }
+
+        let full_id = if self.id_stack.is_empty() {
+            field_id.clone()
+        } else {
+            format!("{}.{}", self.id_stack.join("."), field_id)
+        };
+        self.context.insert(full_id, value.to_i64());
+
         Some(ParsedField {
-            id: field_def.id.clone(),
+            id: field_id,
             field_type: field_def.field_type.clone(),
             offset: start_offset,
             size,
