@@ -7430,6 +7430,7 @@ dependencies = [
  "gpui-component",
  "gpui-component-assets",
  "gpui_util",
+ "memmap2",
  "rfd",
  "schemars",
  "serde",

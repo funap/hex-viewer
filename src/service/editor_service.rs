@@ -35,9 +35,13 @@ impl EditorService {
             return Ok(document.clone());
         }
 
-        // If not in the cache, read the file without holding any lock.
-        let data = tokio::fs::read(&path).await?;
-        let buffer = Buffer::new(data);
+        // If not in the cache, read the file using memory mapping without holding any lock.
+        let path_clone = path.clone();
+        let buffer = tokio::task::spawn_blocking(move || -> anyhow::Result<Buffer> {
+            let file = std::fs::File::open(&path_clone)?;
+            let mmap = unsafe { memmap2::MmapOptions::new().map(&file)? };
+            Ok(Buffer::from_mmap(mmap))
+        }).await??;
         let new_document = Arc::new(RwLock::new(Document::new(path.clone(), buffer)));
 
         // Acquire a write lock to insert the new document into the cache.

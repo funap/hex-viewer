@@ -240,11 +240,11 @@ impl HexView {
     pub fn viewport_byte_range(&self, cx: &App) -> (usize, usize) {
         let editor = self.editor.read(cx);
         let line_starts = editor.line_starts();
-        let start_byte = line_starts[self.scroll_offset];
+        let start_byte = line_starts.get(self.scroll_offset).unwrap_or(0);
         let visible_rows = self.get_visible_rows();
         let end_row = (self.scroll_offset + visible_rows).min(line_starts.len());
         let end_byte = if end_row < line_starts.len() {
-            line_starts[end_row]
+            line_starts.get(end_row).unwrap()
         } else {
             editor.total_size()
         };
@@ -325,9 +325,9 @@ impl HexView {
             return None;
         }
 
-        let row_start = line_starts[row_idx];
+        let row_start = line_starts.get(row_idx).unwrap();
         let row_end = if row_idx + 1 < line_starts.len() {
-            line_starts[row_idx + 1]
+            line_starts.get(row_idx + 1).unwrap()
         } else {
             editor.total_size()
         };
@@ -398,9 +398,9 @@ impl HexView {
         }
 
         let row_idx = row_idx.min(line_starts.len() - 1);
-        let row_start = line_starts[row_idx];
+        let row_start = line_starts.get(row_idx).unwrap();
         let row_end = if row_idx + 1 < line_starts.len() {
-            line_starts[row_idx + 1]
+            line_starts.get(row_idx + 1).unwrap()
         } else {
             editor.total_size()
         };
@@ -708,7 +708,7 @@ impl HexView {
         self.editor.update(cx, |editor, _| {
             let line_starts = editor.line_starts();
             let current_line_idx = Editor::find_line_index(cursor_offset, &line_starts);
-            let current_line_start = line_starts.get(current_line_idx).copied().unwrap_or(0);
+            let current_line_start = line_starts.get(current_line_idx).unwrap_or(0);
 
             if cursor_offset == current_line_start {
                 editor.add_empty_line(cursor_offset);
@@ -737,7 +737,7 @@ impl HexView {
             let line_starts = editor.line_starts();
             let current_line_idx = Editor::find_line_index(cursor_offset, &line_starts);
             let current_line_end = if current_line_idx + 1 < line_starts.len() {
-                line_starts[current_line_idx + 1]
+                line_starts.get(current_line_idx + 1).unwrap()
             } else {
                 editor.total_size()
             };
@@ -829,17 +829,20 @@ impl Render for HexView {
 
                 // 最大行長を計算（ヘッダーとASCI位置の動的調整に使用）
                 let total_size = editor.total_size();
-                let max_bytes_per_row = {
-                    let mut max_len = BYTES_PER_ROW;
-                    for (idx, &start) in line_starts.iter().enumerate() {
-                        let end = if idx + 1 < line_starts.len() {
-                            line_starts[idx + 1]
-                        } else {
-                            total_size
-                        };
-                        max_len = max_len.max(end - start);
+                let max_bytes_per_row = match &line_starts {
+                    crate::core::editor::LineMap::Standard { .. } => BYTES_PER_ROW,
+                    crate::core::editor::LineMap::Custom(vec) => {
+                        let mut max_len = BYTES_PER_ROW;
+                        for (idx, &start) in vec.iter().enumerate() {
+                            let end = if idx + 1 < vec.len() {
+                                vec[idx + 1]
+                            } else {
+                                total_size
+                            };
+                            max_len = max_len.max(end - start);
+                        }
+                        max_len
                     }
-                    max_len
                 };
 
                 HexViewElement {
@@ -875,7 +878,7 @@ impl Render for HexView {
 struct HexViewElement {
     view: WeakEntity<HexView>,
     document: Arc<RwLock<Document>>,
-    line_starts: Vec<usize>,
+    line_starts: crate::core::editor::LineMap,
     selection_start: Option<usize>,
     selection_end: Option<usize>,
     cursor_offset: usize,
@@ -1029,8 +1032,8 @@ impl Element for HexViewElement {
         };
 
         for i in start_row..end_row {
-            let offset = line_starts[i];
-            let next_offset = if i + 1 < line_starts.len() { line_starts[i + 1] } else { buffer.len() };
+            let offset = line_starts.get(i).unwrap();
+            let next_offset = if i + 1 < line_starts.len() { line_starts.get(i + 1).unwrap() } else { buffer.len() };
             let chunk_len = next_offset - offset;
             let chunk = buffer.get_range(offset, chunk_len);
             let row_index = i - start_row;
@@ -1196,7 +1199,7 @@ impl Element for HexViewElement {
             // Show cursor if focused, even for empty buffer
             if focus_handle.is_focused(window) {
                 let cursor_row = Editor::find_line_index(cursor_offset, &line_starts);
-                let byte_in_row = cursor_offset - line_starts[cursor_row];
+                let byte_in_row = cursor_offset - line_starts.get(cursor_row).unwrap();
 
                 if cursor_row >= start_row && cursor_row < end_row {
                     let visible_cursor_row = cursor_row - start_row;

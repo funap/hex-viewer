@@ -1,55 +1,95 @@
+use std::sync::Arc;
+
+#[derive(Clone)]
+pub enum BufferData {
+    Memory(Arc<Vec<u8>>),
+    Mmap(Arc<memmap2::Mmap>),
+}
+
+impl BufferData {
+    pub fn as_slice(&self) -> &[u8] {
+        match self {
+            BufferData::Memory(vec) => vec.as_slice(),
+            BufferData::Mmap(mmap) => mmap.as_ref(),
+        }
+    }
+
+    pub fn make_mut(&mut self) -> &mut Vec<u8> {
+        match self {
+            BufferData::Memory(vec) => Arc::make_mut(vec),
+            BufferData::Mmap(mmap) => {
+                let vec = mmap.as_ref().to_vec();
+                *self = BufferData::Memory(Arc::new(vec));
+                if let BufferData::Memory(v) = self {
+                    Arc::make_mut(v)
+                } else {
+                    unreachable!()
+                }
+            }
+        }
+    }
+}
+
 /// A buffer to hold the contents of a file.
 #[allow(dead_code)]
 #[derive(Clone)]
 pub struct Buffer {
-    data: Vec<u8>,
+    data: BufferData,
 }
 
 #[allow(dead_code)]
 impl Buffer {
     /// Creates a new Buffer with the given data.
     pub fn new(data: Vec<u8>) -> Self {
-        Self { data }
+        Self { data: BufferData::Memory(Arc::new(data)) }
+    }
+
+    /// Creates a new Buffer from a memory-mapped file.
+    pub fn from_mmap(mmap: memmap2::Mmap) -> Self {
+        Self { data: BufferData::Mmap(Arc::new(mmap)) }
     }
 
     /// Creates an empty Buffer.
     pub fn empty() -> Self {
-        Self { data: Vec::new() }
+        Self { data: BufferData::Memory(Arc::new(Vec::new())) }
     }
 
     /// Returns the length of the buffer.
     pub fn len(&self) -> usize {
-        self.data.len()
+        self.data.as_slice().len()
     }
 
     /// Returns true if the buffer is empty.
     pub fn is_empty(&self) -> bool {
-        self.data.is_empty()
+        self.data.as_slice().is_empty()
     }
 
     /// Returns a slice of the buffer's data.
     pub fn data(&self) -> &[u8] {
-        &self.data
+        self.data.as_slice()
     }
 
     /// Returns a slice of the buffer's data in the given range.
     /// If the range is out of bounds, it is clamped to the valid range.
     pub fn get_range(&self, start: usize, len: usize) -> &[u8] {
-        let start = start.min(self.data.len());
-        let end = (start + len).min(self.data.len());
-        &self.data[start..end]
+        let slice = self.data.as_slice();
+        let start = start.min(slice.len());
+        let end = (start + len).min(slice.len());
+        &slice[start..end]
     }
 
     /// Inserts a byte at the specified index.
     pub fn insert(&mut self, index: usize, byte: u8) {
-        if index <= self.data.len() {
-            self.data.insert(index, byte);
+        let vec = self.data.make_mut();
+        if index <= vec.len() {
+            vec.insert(index, byte);
         }
     }
 
     /// Removes a byte at the specified index and returns it.
     pub fn remove(&mut self, index: usize) -> Option<u8> {
-        if index < self.data.len() { Some(self.data.remove(index)) } else { None }
+        let vec = self.data.make_mut();
+        if index < vec.len() { Some(vec.remove(index)) } else { None }
     }
 }
 
