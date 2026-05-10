@@ -1,7 +1,7 @@
-pub mod definition;
 pub mod palette;
-pub mod parser;
 pub mod expression;
+pub mod kaitai;
+pub mod types;
 
-pub use definition::*;
-pub use parser::*;
+pub use types::*;
+pub use kaitai::*;

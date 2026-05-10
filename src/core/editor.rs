@@ -1,7 +1,7 @@
 use crate::core::command::Command;
 use crate::core::document::Document;
 use crate::core::encoding::Encoding;
-use crate::core::structure::{StructDefinition, ParseResult, StructParser};
+use crate::core::structure::ParseResult;
 use std::cmp;
 use std::collections::BTreeSet;
 use std::ops::Range;
@@ -33,7 +33,6 @@ pub struct Editor {
     /// 特定のオフセットに挿入された空行の数を記録する。
     pub empty_lines: std::collections::BTreeMap<usize, usize>,
     pub encoding: Encoding,
-    pub structure_def: Option<StructDefinition>,
     pub parse_result: Option<ParseResult>,
 }
 
@@ -49,7 +48,6 @@ impl Editor {
             custom_joins: BTreeSet::new(),
             empty_lines: std::collections::BTreeMap::new(),
             encoding: Encoding::default(),
-            structure_def: None,
             parse_result: None,
         }
     }
@@ -914,20 +912,18 @@ mod tests {
 }
 
 impl Editor {
-    pub fn set_structure_definition(&mut self, def: StructDefinition) {
+    pub fn set_kaitai_definition(&mut self, ksy: crate::core::structure::KsyDefinition) {
         let buffer_lock = self.document.read().unwrap();
-        // Since buffer is not locked with a mutex but directly accessible, we use it directly:
-        let bytes = buffer_lock.buffer.data().to_vec();
+        let bytes = buffer_lock.buffer.data();
+        let mut stream = std::io::Cursor::new(bytes);
 
-        let parser = StructParser::new(&def, &bytes);
-        let result = parser.parse();
+        let interpreter = crate::core::structure::KaitaiInterpreter::new(ksy, &mut stream);
+        let result = interpreter.parse();
 
-        self.structure_def = Some(def);
         self.parse_result = Some(result);
     }
 
     pub fn clear_structure_definition(&mut self) {
-        self.structure_def = None;
         self.parse_result = None;
     }
 }

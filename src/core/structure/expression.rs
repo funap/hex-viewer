@@ -157,17 +157,29 @@ impl<'a> Lexer<'a> {
     }
 }
 
+impl ExprEvaluator {
+    pub fn evaluate(expr: &str, context: &HashMap<String, i64>, base_path: &[String]) -> i64 {
+        let mut parser = Parser::new(expr, context, base_path);
+        parser.parse_expr()
+    }
+
+    pub fn evaluate_bool(expr: &str, context: &HashMap<String, i64>, base_path: &[String]) -> bool {
+        Self::evaluate(expr, context, base_path) != 0
+    }
+}
+
 struct Parser<'a> {
     lexer: Lexer<'a>,
     current_token: Token,
     context: &'a HashMap<String, i64>,
+    base_path: &'a [String],
 }
 
 impl<'a> Parser<'a> {
-    fn new(input: &'a str, context: &'a HashMap<String, i64>) -> Self {
+    fn new(input: &'a str, context: &'a HashMap<String, i64>, base_path: &'a [String]) -> Self {
         let mut lexer = Lexer::new(input);
         let current_token = lexer.next_token();
-        Self { lexer, current_token, context }
+        Self { lexer, current_token, context, base_path }
     }
 
     fn advance(&mut self) {
@@ -247,26 +259,64 @@ impl<'a> Parser<'a> {
             }
             Token::Identifier(id) => {
                 self.advance();
-                // Handle nested ID: a.b.c
-                let mut full_id = id;
+                
+                let mut path_parts;
+                let current_id = id;
+                
+                if current_id == "_root" {
+                    path_parts = Vec::new();
+                } else if current_id == "_parent" {
+                    let mut p = self.base_path.to_vec();
+                    if !p.is_empty() { p.pop(); }
+                    path_parts = p;
+                } else {
+                    path_parts = self.base_path.to_vec();
+                    path_parts.push(current_id);
+                }
+
                 while self.current_token == Token::Dot {
                     self.advance();
                     if let Token::Identifier(sub) = &self.current_token {
-                        full_id.push('.');
-                        full_id.push_str(sub);
+                        if sub == "_parent" {
+                            if !path_parts.is_empty() { path_parts.pop(); }
+                        } else if sub == "_root" {
+                            path_parts = Vec::new();
+                        } else {
+                            path_parts.push(sub.clone());
+                        }
                         self.advance();
                     } else {
                         break;
                     }
                 }
-                *self.context.get(&full_id).unwrap_or(&0)
+                
+                // Try to resolve the path
+                // First try absolute path from parts
+                let full_id = path_parts.join(".");
+                if let Some(val) = self.context.get(&full_id) {
+                    return *val;
+                }
+                
+                // If not found, and it was a simple identifier (no dots),
+                // try to find it as a sibling of the current base_path
+                if path_parts.len() == 1 {
+                    let mut sibling_path = self.base_path.to_vec();
+                    sibling_path.push(path_parts[0].clone());
+                    let sibling_id = sibling_path.join(".");
+                    if let Some(val) = self.context.get(&sibling_id) {
+                        return *val;
+                    }
+                }
+
+                // If not found, try as a simple global identifier (top-level sibling)
+                if let Some(val) = self.context.get(&path_parts.last().unwrap_or(&"".to_string()).clone()) {
+                    return *val;
+                }
+
+                0
             }
             Token::String(s) => {
                 self.advance();
-                // For strings, we can only do limited things, but for comparison, 
-                // maybe treat as hash or some constant if needed.
-                // Spec says chunk_type == 'IEND'. We need to handle this.
-                // For now, let's treat string literal as its first 8 bytes as i64 if possible
                 let mut bytes = [0u8; 8];
                 let s_bytes = s.as_bytes();
                 let len = s_bytes.len().min(8);
@@ -290,17 +340,5 @@ impl<'a> Parser<'a> {
                 0
             }
         }
-    }
-}
-
-impl ExprEvaluator {
-    pub fn evaluate(expr: &str, context: &HashMap<String, i64>) -> i64 {
-        let mut parser = Parser::new(expr, context);
-        parser.parse_expr()
-    }
-
-    // Helper for boolean evaluation
-    pub fn evaluate_bool(expr: &str, context: &HashMap<String, i64>) -> bool {
-        Self::evaluate(expr, context) != 0
     }
 }

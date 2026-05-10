@@ -14,42 +14,65 @@ pub enum LeftPanelTab {
 pub struct StructTreePanel {
     pub editor: Option<Entity<Editor>>,
     pub tree_view: Entity<StructTreeView>,
+    last_parse_id: Option<String>,
+    _editor_subscription: Option<Subscription>,
 }
 
 impl StructTreePanel {
     pub fn new(cx: &mut Context<Self>) -> Self {
-        let tree_view = cx.new(|_| StructTreeView::new(Vec::new(), None));
+        let tree_view = cx.new(|cx| StructTreeView::new(Vec::new(), None, cx));
         Self {
             editor: None,
             tree_view,
+            last_parse_id: None,
+            _editor_subscription: None,
         }
     }
 
-    pub fn set_editor(&mut self, editor: Entity<Editor>, cx: &mut Context<Self>) {
-        self.editor = Some(editor.clone());
+    pub fn set_editor(&mut self, editor: Option<Entity<Editor>>, cx: &mut Context<Self>) {
+        self._editor_subscription = None;
+        self.editor = editor.clone();
+        
+        if let Some(ed) = editor {
+            self._editor_subscription = Some(cx.observe(&ed, |this, editor, cx| {
+                this.sync_fields(&editor, cx);
+            }));
+            self.sync_fields(&ed, cx);
+        } else {
+            self.tree_view.update(cx, |view, cx| {
+                view.set_fields(Vec::new(), cx);
+                view.editor = None;
+            });
+            self.last_parse_id = None;
+        }
         cx.notify();
+    }
+
+    fn sync_fields(&mut self, editor: &Entity<Editor>, cx: &mut Context<Self>) {
+        let editor_lock = editor.read(cx);
+        let current_parse_id = editor_lock.parse_result.as_ref().map(|r| {
+            // Use a combination of definition ID, parsed bytes, and field count to ensure uniqueness
+            format!("{}-{}-{}", r.definition_id, r.total_parsed_bytes, r.fields.len())
+        });
+        
+        if current_parse_id != self.last_parse_id {
+            let fields = editor_lock.parse_result.as_ref()
+                .map(|res| res.fields.clone())
+                .unwrap_or_default();
+            
+            self.tree_view.update(cx, |view, cx| {
+                view.set_fields(fields, cx);
+                view.editor = Some(editor.clone());
+            });
+            self.last_parse_id = current_parse_id;
+            cx.notify();
+        }
     }
 }
 
 impl Render for StructTreePanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let fields = if let Some(editor) = &self.editor {
-            let editor_lock = editor.read(cx);
-            if let Some(res) = &editor_lock.parse_result {
-                res.fields.clone()
-            } else {
-                Vec::new()
-            }
-        } else {
-            Vec::new()
-        };
-
-        let is_empty = fields.is_empty();
-        self.tree_view.update(cx, |view, cx| {
-            view.fields = fields;
-            view.editor = self.editor.clone();
-            cx.notify();
-        });
+        let is_empty = self.tree_view.read(cx).fields.is_empty();
 
         let theme = cx.global::<Theme>();
         let content = if is_empty {
@@ -103,12 +126,7 @@ impl LeftPanel {
 
     pub fn set_editor(&mut self, editor: Option<Entity<Editor>>, cx: &mut Context<Self>) {
         self.struct_tree.update(cx, |panel, cx| {
-            if let Some(ed) = editor {
-                panel.set_editor(ed, cx);
-            } else {
-                panel.editor = None;
-                cx.notify();
-            }
+            panel.set_editor(editor, cx);
         });
     }
 
@@ -142,7 +160,7 @@ impl Render for LeftPanel {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .text_color(if self.active_tab == LeftPanelTab::Files { theme.foreground } else { theme.foreground })
+                            .text_color(if self.active_tab == LeftPanelTab::Files { theme.foreground } else { theme.muted_foreground })
                             .bg(if self.active_tab == LeftPanelTab::Files { theme.background } else { theme.background })
                             .cursor_pointer()
                             .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
@@ -156,7 +174,7 @@ impl Render for LeftPanel {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .text_color(if self.active_tab == LeftPanelTab::Structure { theme.foreground } else { theme.foreground })
+                            .text_color(if self.active_tab == LeftPanelTab::Structure { theme.foreground } else { theme.muted_foreground })
                             .bg(if self.active_tab == LeftPanelTab::Structure { theme.background } else { theme.background })
                             .cursor_pointer()
                             .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {

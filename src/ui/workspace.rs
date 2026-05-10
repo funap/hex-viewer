@@ -385,28 +385,51 @@ impl Workspace {
         cx.notify();
     }
 
-    fn on_action_load_structure_definition(&mut self, _: &LoadStructureDefinition, _: &mut Window, cx: &mut Context<Self>) {
+    fn on_action_load_structure_definition(&mut self, _: &LoadStructureDefinition, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(editor_entity) = self.active_editor.as_ref() {
-            let paths = rfd::FileDialog::new()
-                .add_filter("TOML Files", &["toml"])
-                .pick_file();
+            let editor_entity = editor_entity.clone();
+            let view = cx.entity().clone();
 
-            if let Some(path) = paths {
-                if let Ok(contents) = std::fs::read_to_string(path) {
-                    if let Ok(def) = toml::from_str::<crate::core::structure::StructDefinition>(&contents) {
-                        editor_entity.update(cx, |editor, cx| {
-                            editor.set_structure_definition(def);
-                            cx.notify();
-                        });
-                        self.left_panel.update(cx, |p, cx| {
-                            p.set_editor(Some(editor_entity.clone()), cx);
-                            p.set_tab(crate::ui::panels::left_panel::LeftPanelTab::Structure, cx);
-                        });
-                        self.is_left_panel_visible = true;
-                        cx.notify();
+            cx.spawn_in(window, async move |_, window| {
+                let file = rfd::AsyncFileDialog::new()
+                    .add_filter("Kaitai Struct Definitions", &["ksy", "yaml"])
+                    .pick_file()
+                    .await;
+
+                if let Some(handle) = file {
+                    let path = handle.path().to_path_buf();
+                    match std::fs::read_to_string(&path) {
+                        Ok(contents) => {
+                            match serde_yaml::from_str::<crate::core::structure::KsyDefinition>(&contents) {
+                                Ok(ksy) => {
+                                    window.update(|_, cx| {
+                                        editor_entity.update(cx, |editor, cx| {
+                                            editor.set_kaitai_definition(ksy);
+                                            cx.notify();
+                                        });
+
+                                        view.update(cx, |this, cx| {
+                                            this.left_panel.update(cx, |p, cx| {
+                                                p.set_editor(Some(editor_entity.clone()), cx);
+                                                p.set_tab(crate::ui::panels::left_panel::LeftPanelTab::Structure, cx);
+                                            });
+                                            this.is_left_panel_visible = true;
+                                            cx.notify();
+                                        });
+                                    }).ok();
+                                }
+                                Err(e) => {
+                                    eprintln!("Failed to parse KSY definition: {}", e);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to read KSY file at {:?}: {}", path, e);
+                        }
                     }
                 }
-            }
+            })
+            .detach();
         }
     }
 

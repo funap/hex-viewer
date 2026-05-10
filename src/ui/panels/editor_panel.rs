@@ -37,6 +37,8 @@ pub struct EditorPanel {
     search_bar: Entity<SearchBar>,
     search_task: Option<Task<()>>,
     viewport_search_task: Option<Task<()>>,
+    cached_structure_highlights: Vec<(std::ops::Range<usize>, gpui::Hsla)>,
+    last_parse_id: Option<String>,
     _appearance_subscription: Subscription,
     _editor_subscription: Subscription,
 }
@@ -133,6 +135,8 @@ impl EditorPanel {
             search_bar,
             search_task: None,
             viewport_search_task: None,
+            cached_structure_highlights: Vec::new(),
+            last_parse_id: None,
             _appearance_subscription,
             _editor_subscription,
         }
@@ -222,14 +226,27 @@ impl EditorPanel {
 
     fn update_highlights(&mut self, cx: &mut Context<Self>) {
         let editor = self.editor.read(cx);
-        let mut highlights = Vec::new();
-
-        // 1. Structure highlights (Background)
-        if let Some(res) = &editor.parse_result {
-            highlights.extend(res.to_highlights());
+        
+        // 1. Update structure highlights cache if needed
+        let current_parse_id = editor.parse_result.as_ref().map(|r| format!("{}-{}", r.definition_id, r.total_parsed_bytes));
+        if current_parse_id != self.last_parse_id {
+            self.cached_structure_highlights = editor.parse_result.as_ref()
+                .map(|res| res.to_highlights())
+                .unwrap_or_default();
+            self.last_parse_id = current_parse_id;
         }
 
-        // 2. Search highlights (Foreground/Overlay)
+        let mut highlights = Vec::new();
+        let (viewport_start, viewport_end) = self.hex_view.read(cx).viewport_byte_range(cx);
+
+        // 2. Add visible structure highlights from cache
+        for (range, color) in &self.cached_structure_highlights {
+            if range.start < viewport_end && range.end > viewport_start {
+                highlights.push((range.clone(), *color));
+            }
+        }
+
+        // 3. Add visible search highlights
         if self.is_search_visible {
             let bar = self.search_bar.read(cx);
             let query = bar.query(cx);
@@ -243,12 +260,10 @@ impl EditorPanel {
                     }
                 };
 
-                let (viewport_start, viewport_end) = self.hex_view.read(cx).viewport_byte_range(cx);
                 let theme = cx.theme();
-
                 for &pos in &editor.search_state.results {
-                    if pos >= viewport_start && pos < viewport_end {
-                        let end = pos + pattern_len;
+                    let end = pos + pattern_len;
+                    if pos < viewport_end && end > viewport_start {
                         highlights.push((pos..end, theme.yellow.opacity(0.4)));
                     }
                 }
