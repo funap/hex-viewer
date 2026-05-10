@@ -407,57 +407,54 @@ impl Workspace {
     }
 
     fn on_action_load_structure_definition(&mut self, _: &LoadStructureDefinition, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(editor_entity) = self.active_editor.as_ref() {
-            let editor_entity = editor_entity.clone();
-            let view = cx.entity().clone();
+        let view = cx.entity().clone();
 
-            cx.spawn_in(window, async move |_, window| {
-                let file = rfd::AsyncFileDialog::new()
-                    .add_filter("Kaitai Struct Definitions", &["ksy", "yaml"])
-                    .pick_file()
-                    .await;
+        cx.spawn_in(window, async move |_, window| {
+            let file = rfd::AsyncFileDialog::new()
+                .add_filter("Kaitai Struct Definitions", &["ksy", "yaml"])
+                .pick_file()
+                .await;
 
-                if let Some(handle) = file {
-                    let path = handle.path().to_path_buf();
-                    match std::fs::read_to_string(&path) {
-                        Ok(contents) => {
-                            match serde_yaml::from_str::<crate::core::structure::KsyDefinition>(&contents) {
-                                Ok(ksy) => {
-                                    window.update(|window, cx| {
-                                        view.update(cx, |this, cx| {
-                                            this.ksy_definition = Some(ksy.clone());
-                                            
-                                            if let Some(editor_entity) = &this.active_editor {
-                                                editor_entity.update(cx, |editor, cx| {
-                                                    editor.set_kaitai_definition(ksy.clone());
-                                                    cx.notify();
-                                                });
-                                            }
-
-                                            this.left_panel.update(cx, |p, cx| {
-                                                if let Some(editor_entity) = &this.active_editor {
-                                                    p.set_editor(Some(editor_entity.clone()), cx);
-                                                }
-                                                p.set_tab(crate::ui::panels::left_panel::LeftPanelTab::Structure, cx);
+            if let Some(handle) = file {
+                let path = handle.path().to_path_buf();
+                match std::fs::read_to_string(&path) {
+                    Ok(contents) => {
+                        match serde_yaml::from_str::<crate::core::structure::KsyDefinition>(&contents) {
+                            Ok(ksy) => {
+                                window.update(|window, cx| {
+                                    view.update(cx, |this, cx| {
+                                        this.ksy_definition = Some(ksy.clone());
+                                        
+                                        if let Some(editor_entity) = &this.active_editor {
+                                            editor_entity.update(cx, |editor, cx| {
+                                                editor.set_kaitai_definition(ksy.clone());
+                                                cx.notify();
                                             });
-                                            this.is_left_panel_visible = true;
-                                            cx.notify();
+                                        }
+
+                                        this.left_panel.update(cx, |p, cx| {
+                                            if let Some(editor_entity) = &this.active_editor {
+                                                p.set_editor(Some(editor_entity.clone()), cx);
+                                            }
+                                            p.set_tab(crate::ui::panels::left_panel::LeftPanelTab::Structure, cx);
                                         });
-                                    }).ok();
-                                }
-                                Err(e) => {
-                                    eprintln!("Failed to parse KSY definition: {}", e);
-                                }
+                                        this.is_left_panel_visible = true;
+                                        cx.notify();
+                                    });
+                                }).ok();
+                            }
+                            Err(e) => {
+                                eprintln!("Failed to parse KSY definition: {}", e);
                             }
                         }
-                        Err(e) => {
-                            eprintln!("Failed to read KSY file at {:?}: {}", path, e);
-                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to read KSY file at {:?}: {}", path, e);
                     }
                 }
-            })
-            .detach();
-        }
+            }
+        })
+        .detach();
     }
 
     fn on_action_clear_structure_definition(&mut self, _: &ClearStructureDefinition, _: &mut Window, cx: &mut Context<Self>) {
@@ -472,6 +469,37 @@ impl Workspace {
             });
         }
         cx.notify();
+    }
+
+    fn on_action_open_folder(&mut self, _: &OpenFolder, window: &mut Window, cx: &mut Context<Self>) {
+        let path = cx.prompt_for_paths(gpui::PathPromptOptions {
+            files: false,
+            directories: true,
+            multiple: false,
+            prompt: Some("Select a folder".into()),
+        });
+
+        let left_panel = self.left_panel.clone();
+        cx.spawn_in(window, async move |_, window| {
+            if let Some(path) = path.await.ok().and_then(|r| r.ok()).flatten().and_then(|mut p| p.pop()) {
+                window.update(|_, cx| {
+                    left_panel.update(cx, |p, cx| {
+                        p.file_tree.update(cx, |ft, cx| {
+                            ft.set_root_path(path, cx);
+                        });
+                    });
+                }).ok();
+            }
+        })
+        .detach();
+    }
+
+    fn on_action_close_folder(&mut self, _: &CloseFolder, _: &mut Window, cx: &mut Context<Self>) {
+        self.left_panel.update(cx, |p, cx| {
+            p.file_tree.update(cx, |ft, cx| {
+                ft.close_folder(cx);
+            });
+        });
     }
 
     fn on_action_open_settings(&mut self, _: &OpenSettings, window: &mut Window, cx: &mut Context<Self>) {
@@ -663,6 +691,8 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_action_show_structure_tab))
             .on_action(cx.listener(Self::on_action_load_structure_definition))
             .on_action(cx.listener(Self::on_action_clear_structure_definition))
+            .on_action(cx.listener(Self::on_action_open_folder))
+            .on_action(cx.listener(Self::on_action_close_folder))
             .relative()
             .size_full()
             .flex()

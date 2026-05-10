@@ -181,7 +181,9 @@ impl FileTreePanel {
         }
     }
 
-    fn on_action_open_folder(&mut self, _: &OpenFolder, window: &mut Window, cx: &mut gpui::Context<Self>) {
+
+
+    pub fn prompt_open_folder(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
         let path = cx.prompt_for_paths(gpui::PathPromptOptions {
             files: false,
             directories: true,
@@ -189,25 +191,20 @@ impl FileTreePanel {
             prompt: Some("Select a folder".into()),
         });
 
-        let view = cx.entity();
+        let view = cx.entity().clone();
         cx.spawn_in(window, async move |_, window| {
-            let path = path.await.ok()?.ok()??.iter().next()?.clone();
-
-            window
-                .update(|_window, cx| {
+            if let Some(path) = path.await.ok().and_then(|r| r.ok()).flatten().and_then(|mut p| p.pop()) {
+                window.update(|_, cx| {
                     view.update(cx, |this, cx| {
-                        this.root_path = Some(path.clone());
-                        this.loaded_paths.clear();
-                        this.loaded_paths.insert(path.to_string_lossy().to_string());
-                        this.load_root(path, cx);
+                        this.set_root_path(path, cx);
                     });
-                })
-                .ok()
+                }).ok();
+            }
         })
         .detach();
     }
 
-    fn on_action_close_folder(&mut self, _: &CloseFolder, _: &mut Window, cx: &mut gpui::Context<Self>) {
+    pub fn close_folder(&mut self, cx: &mut gpui::Context<Self>) {
         self.root_path = None;
         self.loaded_paths.clear();
         self.items.clear();
@@ -252,7 +249,6 @@ impl Render for FileTreePanel {
             return v_flex()
                 .id("file-tree-panel")
                 .key_context(CONTEXT)
-                .on_action(cx.listener(Self::on_action_open_folder))
                 .size_full()
                 .justify_center()
                 .items_center()
@@ -262,7 +258,7 @@ impl Render for FileTreePanel {
                             .on_mouse_down(
                                 gpui::MouseButton::Left,
                                 cx.listener(|this, _, window, cx| {
-                                    this.on_action_open_folder(&OpenFolder, window, cx);
+                                    this.prompt_open_folder(window, cx);
                                 }),
                             )
                             .id("open-folder-btn")
@@ -281,7 +277,6 @@ impl Render for FileTreePanel {
             .key_context(CONTEXT)
             .on_action(cx.listener(Self::on_action_rename))
             .on_action(cx.listener(Self::on_action_select_item))
-            .on_action(cx.listener(Self::on_action_close_folder))
             .on_action(cx.listener(Self::on_action_set_file_tree_folder))
             .on_action(cx.listener(Self::on_action_load_children))
             .size_full()
