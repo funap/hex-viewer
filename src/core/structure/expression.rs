@@ -5,12 +5,15 @@ pub struct ExprEvaluator;
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
     Number(i64),
+    Float(f64),
     Identifier(String),
     String(String),
     Plus, Minus, Star, Slash, Percent,
     Equal, NotEqual, GreaterEqual, LessEqual, Greater, Less,
     And, Or, Amp, Pipe, Bang,
-    LParen, RParen, Dot,
+    Shl, Shr, Caret, Tilde,
+    LParen, RParen, Dot, Comma,
+    Question, Colon, ColonColon,
     EOF,
 }
 
@@ -51,8 +54,20 @@ impl<'a> Lexer<'a> {
             '(' => Token::LParen,
             ')' => Token::RParen,
             '.' => Token::Dot,
+            ',' => Token::Comma,
+            '?' => Token::Question,
+            '^' => Token::Caret,
+            '~' => Token::Tilde,
+            ':' => {
+                if self.pos < self.input.len() && self.current_char() == ':' {
+                    self.pos += 1;
+                    Token::ColonColon
+                } else {
+                    Token::Colon
+                }
+            }
             '!' => {
-                if self.current_char() == '=' {
+                if self.pos < self.input.len() && self.current_char() == '=' {
                     self.pos += 1;
                     Token::NotEqual
                 } else {
@@ -60,31 +75,35 @@ impl<'a> Lexer<'a> {
                 }
             }
             '=' => {
-                if self.current_char() == '=' {
+                if self.pos < self.input.len() && self.current_char() == '=' {
                     self.pos += 1;
-                    Token::Equal
-                } else {
-                    Token::Equal // Default to equal for single = too?
                 }
+                Token::Equal
             }
             '>' => {
-                if self.current_char() == '=' {
+                if self.pos < self.input.len() && self.current_char() == '=' {
                     self.pos += 1;
                     Token::GreaterEqual
+                } else if self.pos < self.input.len() && self.current_char() == '>' {
+                    self.pos += 1;
+                    Token::Shr
                 } else {
                     Token::Greater
                 }
             }
             '<' => {
-                if self.current_char() == '=' {
+                if self.pos < self.input.len() && self.current_char() == '=' {
                     self.pos += 1;
                     Token::LessEqual
+                } else if self.pos < self.input.len() && self.current_char() == '<' {
+                    self.pos += 1;
+                    Token::Shl
                 } else {
                     Token::Less
                 }
             }
             '&' => {
-                if self.current_char() == '&' {
+                if self.pos < self.input.len() && self.current_char() == '&' {
                     self.pos += 1;
                     Token::And
                 } else {
@@ -92,7 +111,7 @@ impl<'a> Lexer<'a> {
                 }
             }
             '|' => {
-                if self.current_char() == '|' {
+                if self.pos < self.input.len() && self.current_char() == '|' {
                     self.pos += 1;
                     Token::Or
                 } else {
@@ -117,18 +136,43 @@ impl<'a> Lexer<'a> {
         let start = self.pos;
         if self.current_char() == '0' {
             self.pos += 1;
-            if self.current_char() == 'x' || self.current_char() == 'X' {
-                self.pos += 1;
-                let hex_start = self.pos;
-                while self.pos < self.input.len() && self.current_char().is_ascii_hexdigit() {
+            if self.pos < self.input.len() {
+                let next = self.current_char();
+                if next == 'x' || next == 'X' {
                     self.pos += 1;
+                    let hex_start = self.pos;
+                    while self.pos < self.input.len() && self.current_char().is_ascii_hexdigit() {
+                        self.pos += 1;
+                    }
+                    let val = i64::from_str_radix(&self.input[hex_start..self.pos], 16).unwrap_or(0);
+                    return Token::Number(val);
                 }
-                let val = i64::from_str_radix(&self.input[hex_start..self.pos], 16).unwrap_or(0);
-                return Token::Number(val);
+                if next == 'b' || next == 'B' {
+                    self.pos += 1;
+                    let bin_start = self.pos;
+                    while self.pos < self.input.len() && (self.current_char() == '0' || self.current_char() == '1' || self.current_char() == '_') {
+                        self.pos += 1;
+                    }
+                    let bin_str: String = self.input[bin_start..self.pos].chars().filter(|c| *c != '_').collect();
+                    let val = i64::from_str_radix(&bin_str, 2).unwrap_or(0);
+                    return Token::Number(val);
+                }
             }
         }
         while self.pos < self.input.len() && self.current_char().is_ascii_digit() {
             self.pos += 1;
+        }
+        // Check for float
+        if self.pos < self.input.len() && self.current_char() == '.' {
+            let next_pos = self.pos + 1;
+            if next_pos < self.input.len() && self.input[next_pos..].chars().next().map_or(false, |c| c.is_ascii_digit()) {
+                self.pos += 1; // consume '.'
+                while self.pos < self.input.len() && self.current_char().is_ascii_digit() {
+                    self.pos += 1;
+                }
+                let val: f64 = self.input[start..self.pos].parse().unwrap_or(0.0);
+                return Token::Float(val);
+            }
         }
         let val = self.input[start..self.pos].parse().unwrap_or(0);
         Token::Number(val)
@@ -157,188 +201,515 @@ impl<'a> Lexer<'a> {
     }
 }
 
+/// Context for expression evaluation, providing access to parsed field values,
+/// stream state, and enum definitions.
+pub struct EvalContext<'a> {
+    pub values: &'a HashMap<String, i64>,
+    pub string_values: &'a HashMap<String, String>,
+    pub base_path: &'a [String],
+    pub stream_eof: bool,
+    pub stream_size: usize,
+    pub stream_pos: usize,
+    pub enums: &'a HashMap<String, HashMap<String, String>>,
+}
+
+impl<'a> EvalContext<'a> {
+    pub fn simple(values: &'a HashMap<String, i64>, base_path: &'a [String]) -> Self {
+        let empty_strings = &EMPTY_STRING_MAP;
+        let empty_enums = &EMPTY_ENUM_MAP;
+        Self {
+            values,
+            string_values: empty_strings,
+            base_path,
+            stream_eof: false,
+            stream_size: 0,
+            stream_pos: 0,
+            enums: empty_enums,
+        }
+    }
+}
+
+static EMPTY_STRING_MAP: std::sync::LazyLock<HashMap<String, String>> = std::sync::LazyLock::new(HashMap::new);
+static EMPTY_ENUM_MAP: std::sync::LazyLock<HashMap<String, HashMap<String, String>>> = std::sync::LazyLock::new(HashMap::new);
+
+/// Expression value - can be integer, float, string, or bool
+#[derive(Debug, Clone)]
+pub enum ExprValue {
+    Int(i64),
+    Float(f64),
+    Str(String),
+    Bool(bool),
+}
+
+impl ExprValue {
+    pub fn to_i64(&self) -> i64 {
+        match self {
+            ExprValue::Int(v) => *v,
+            ExprValue::Float(v) => *v as i64,
+            ExprValue::Str(_) => 0,
+            ExprValue::Bool(v) => if *v { 1 } else { 0 },
+        }
+    }
+    pub fn to_bool(&self) -> bool {
+        match self {
+            ExprValue::Int(v) => *v != 0,
+            ExprValue::Float(v) => *v != 0.0,
+            ExprValue::Str(s) => !s.is_empty(),
+            ExprValue::Bool(v) => *v,
+        }
+    }
+    pub fn to_string_val(&self) -> String {
+        match self {
+            ExprValue::Int(v) => v.to_string(),
+            ExprValue::Float(v) => v.to_string(),
+            ExprValue::Str(s) => s.clone(),
+            ExprValue::Bool(v) => v.to_string(),
+        }
+    }
+    fn is_float(&self) -> bool {
+        matches!(self, ExprValue::Float(_))
+    }
+    fn to_f64(&self) -> f64 {
+        match self {
+            ExprValue::Int(v) => *v as f64,
+            ExprValue::Float(v) => *v,
+            ExprValue::Str(_) => 0.0,
+            ExprValue::Bool(v) => if *v { 1.0 } else { 0.0 },
+        }
+    }
+}
+
 impl ExprEvaluator {
+    /// Legacy evaluate - returns i64
     pub fn evaluate(expr: &str, context: &HashMap<String, i64>, base_path: &[String]) -> i64 {
-        let mut parser = Parser::new(expr, context, base_path);
-        parser.parse_expr()
+        let ctx = EvalContext::simple(context, base_path);
+        Self::evaluate_rich(expr, &ctx).to_i64()
     }
 
+    /// Legacy evaluate_bool
     pub fn evaluate_bool(expr: &str, context: &HashMap<String, i64>, base_path: &[String]) -> bool {
-        Self::evaluate(expr, context, base_path) != 0
+        let ctx = EvalContext::simple(context, base_path);
+        Self::evaluate_rich(expr, &ctx).to_bool()
+    }
+
+    /// Rich evaluation returning ExprValue
+    pub fn evaluate_rich(expr: &str, ctx: &EvalContext) -> ExprValue {
+        let mut parser = Parser::new(expr, ctx);
+        parser.parse_ternary()
+    }
+
+    /// Evaluate with full context, return i64
+    pub fn eval_i64(expr: &str, ctx: &EvalContext) -> i64 {
+        Self::evaluate_rich(expr, ctx).to_i64()
+    }
+
+    /// Evaluate with full context, return bool
+    pub fn eval_bool(expr: &str, ctx: &EvalContext) -> bool {
+        Self::evaluate_rich(expr, ctx).to_bool()
+    }
+
+    /// Evaluate with full context, return string
+    pub fn eval_string(expr: &str, ctx: &EvalContext) -> String {
+        Self::evaluate_rich(expr, ctx).to_string_val()
     }
 }
 
 struct Parser<'a> {
     lexer: Lexer<'a>,
     current_token: Token,
-    context: &'a HashMap<String, i64>,
-    base_path: &'a [String],
+    ctx: &'a EvalContext<'a>,
 }
 
 impl<'a> Parser<'a> {
-    fn new(input: &'a str, context: &'a HashMap<String, i64>, base_path: &'a [String]) -> Self {
+    fn new(input: &'a str, ctx: &'a EvalContext<'a>) -> Self {
         let mut lexer = Lexer::new(input);
         let current_token = lexer.next_token();
-        Self { lexer, current_token, context, base_path }
+        Self { lexer, current_token, ctx }
     }
 
     fn advance(&mut self) {
         self.current_token = self.lexer.next_token();
     }
 
-    fn parse_expr(&mut self) -> i64 {
+    fn parse_ternary(&mut self) -> ExprValue {
+        let val = self.parse_or();
+        if self.current_token == Token::Question {
+            self.advance();
+            let then_val = self.parse_ternary();
+            if self.current_token == Token::Colon {
+                self.advance();
+            }
+            let else_val = self.parse_ternary();
+            if val.to_bool() { then_val } else { else_val }
+        } else {
+            val
+        }
+    }
+
+    fn parse_or(&mut self) -> ExprValue {
+        let mut val = self.parse_and();
+        while matches!(self.current_token, Token::Or) {
+            self.advance();
+            let right = self.parse_and();
+            val = ExprValue::Bool(val.to_bool() || right.to_bool());
+        }
+        // Handle 'or' keyword
+        while matches!(self.current_token, Token::Identifier(ref s) if s == "or") {
+            self.advance();
+            let right = self.parse_and();
+            val = ExprValue::Bool(val.to_bool() || right.to_bool());
+        }
+        val
+    }
+
+    fn parse_and(&mut self) -> ExprValue {
+        let mut val = self.parse_bit_or();
+        while matches!(self.current_token, Token::And) {
+            self.advance();
+            let right = self.parse_bit_or();
+            val = ExprValue::Bool(val.to_bool() && right.to_bool());
+        }
+        while matches!(self.current_token, Token::Identifier(ref s) if s == "and") {
+            self.advance();
+            let right = self.parse_bit_or();
+            val = ExprValue::Bool(val.to_bool() && right.to_bool());
+        }
+        val
+    }
+
+    fn parse_bit_or(&mut self) -> ExprValue {
+        let mut val = self.parse_bit_xor();
+        while matches!(self.current_token, Token::Pipe) {
+            self.advance();
+            let right = self.parse_bit_xor();
+            val = ExprValue::Int(val.to_i64() | right.to_i64());
+        }
+        val
+    }
+
+    fn parse_bit_xor(&mut self) -> ExprValue {
+        let mut val = self.parse_bit_and();
+        while matches!(self.current_token, Token::Caret) {
+            self.advance();
+            let right = self.parse_bit_and();
+            val = ExprValue::Int(val.to_i64() ^ right.to_i64());
+        }
+        val
+    }
+
+    fn parse_bit_and(&mut self) -> ExprValue {
         let mut val = self.parse_comparison();
-        while matches!(self.current_token, Token::And | Token::Or) {
-            let op = self.current_token.clone();
+        while matches!(self.current_token, Token::Amp) {
             self.advance();
             let right = self.parse_comparison();
-            match op {
-                Token::And => val = if val != 0 && right != 0 { 1 } else { 0 },
-                Token::Or => val = if val != 0 || right != 0 { 1 } else { 0 },
-                _ => {}
+            val = ExprValue::Int(val.to_i64() & right.to_i64());
+        }
+        val
+    }
+
+    fn parse_comparison(&mut self) -> ExprValue {
+        let mut val = self.parse_shift();
+        while matches!(self.current_token, Token::Equal | Token::NotEqual | Token::Greater | Token::GreaterEqual | Token::Less | Token::LessEqual) {
+            let op = self.current_token.clone();
+            self.advance();
+            let right = self.parse_shift();
+            // String comparison
+            if matches!(val, ExprValue::Str(_)) || matches!(right, ExprValue::Str(_)) {
+                let ls = val.to_string_val();
+                let rs = right.to_string_val();
+                val = match op {
+                    Token::Equal => ExprValue::Bool(ls == rs),
+                    Token::NotEqual => ExprValue::Bool(ls != rs),
+                    _ => ExprValue::Bool(false),
+                };
+            } else if val.is_float() || right.is_float() {
+                let l = val.to_f64();
+                let r = right.to_f64();
+                val = match op {
+                    Token::Equal => ExprValue::Bool(l == r),
+                    Token::NotEqual => ExprValue::Bool(l != r),
+                    Token::Greater => ExprValue::Bool(l > r),
+                    Token::GreaterEqual => ExprValue::Bool(l >= r),
+                    Token::Less => ExprValue::Bool(l < r),
+                    Token::LessEqual => ExprValue::Bool(l <= r),
+                    _ => ExprValue::Bool(false),
+                };
+            } else {
+                let l = val.to_i64();
+                let r = right.to_i64();
+                val = match op {
+                    Token::Equal => ExprValue::Bool(l == r),
+                    Token::NotEqual => ExprValue::Bool(l != r),
+                    Token::Greater => ExprValue::Bool(l > r),
+                    Token::GreaterEqual => ExprValue::Bool(l >= r),
+                    Token::Less => ExprValue::Bool(l < r),
+                    Token::LessEqual => ExprValue::Bool(l <= r),
+                    _ => ExprValue::Bool(false),
+                };
             }
         }
         val
     }
 
-    fn parse_comparison(&mut self) -> i64 {
+    fn parse_shift(&mut self) -> ExprValue {
         let mut val = self.parse_term();
-        while matches!(self.current_token, Token::Equal | Token::NotEqual | Token::Greater | Token::GreaterEqual | Token::Less | Token::LessEqual) {
+        while matches!(self.current_token, Token::Shl | Token::Shr) {
             let op = self.current_token.clone();
             self.advance();
             let right = self.parse_term();
             match op {
-                Token::Equal => val = if val == right { 1 } else { 0 },
-                Token::NotEqual => val = if val != right { 1 } else { 0 },
-                Token::Greater => val = if val > right { 1 } else { 0 },
-                Token::GreaterEqual => val = if val >= right { 1 } else { 0 },
-                Token::Less => val = if val < right { 1 } else { 0 },
-                Token::LessEqual => val = if val <= right { 1 } else { 0 },
+                Token::Shl => val = ExprValue::Int(val.to_i64().wrapping_shl(right.to_i64() as u32)),
+                Token::Shr => val = ExprValue::Int(val.to_i64().wrapping_shr(right.to_i64() as u32)),
                 _ => {}
             }
         }
         val
     }
 
-    fn parse_term(&mut self) -> i64 {
+    fn parse_term(&mut self) -> ExprValue {
         let mut val = self.parse_factor();
         while matches!(self.current_token, Token::Plus | Token::Minus) {
             let op = self.current_token.clone();
             self.advance();
             let right = self.parse_factor();
-            match op {
-                Token::Plus => val += right,
-                Token::Minus => val -= right,
-                _ => {}
+            if val.is_float() || right.is_float() {
+                match op {
+                    Token::Plus => val = ExprValue::Float(val.to_f64() + right.to_f64()),
+                    Token::Minus => val = ExprValue::Float(val.to_f64() - right.to_f64()),
+                    _ => {}
+                }
+            } else {
+                match op {
+                    Token::Plus => val = ExprValue::Int(val.to_i64() + right.to_i64()),
+                    Token::Minus => val = ExprValue::Int(val.to_i64() - right.to_i64()),
+                    _ => {}
+                }
             }
         }
         val
     }
 
-    fn parse_factor(&mut self) -> i64 {
-        let mut val = self.parse_primary();
+    fn parse_factor(&mut self) -> ExprValue {
+        let mut val = self.parse_unary();
         while matches!(self.current_token, Token::Star | Token::Slash | Token::Percent) {
             let op = self.current_token.clone();
             self.advance();
-            let right = self.parse_primary();
-            match op {
-                Token::Star => val *= right,
-                Token::Slash => val = if right != 0 { val / right } else { 0 },
-                Token::Percent => val = if right != 0 { val % right } else { 0 },
-                _ => {}
+            let right = self.parse_unary();
+            if val.is_float() || right.is_float() {
+                match op {
+                    Token::Star => val = ExprValue::Float(val.to_f64() * right.to_f64()),
+                    Token::Slash => {
+                        let r = right.to_f64();
+                        val = ExprValue::Float(if r != 0.0 { val.to_f64() / r } else { 0.0 });
+                    }
+                    Token::Percent => {
+                        let r = right.to_i64();
+                        val = ExprValue::Int(if r != 0 { val.to_i64() % r } else { 0 });
+                    }
+                    _ => {}
+                }
+            } else {
+                match op {
+                    Token::Star => val = ExprValue::Int(val.to_i64() * right.to_i64()),
+                    Token::Slash => {
+                        let r = right.to_i64();
+                        val = ExprValue::Int(if r != 0 { val.to_i64() / r } else { 0 });
+                    }
+                    Token::Percent => {
+                        let r = right.to_i64();
+                        val = ExprValue::Int(if r != 0 { val.to_i64() % r } else { 0 });
+                    }
+                    _ => {}
+                }
             }
         }
         val
     }
 
-    fn parse_primary(&mut self) -> i64 {
+    fn parse_unary(&mut self) -> ExprValue {
+        match &self.current_token {
+            Token::Bang => {
+                self.advance();
+                let val = self.parse_unary();
+                ExprValue::Bool(!val.to_bool())
+            }
+            Token::Minus => {
+                self.advance();
+                let val = self.parse_unary();
+                if val.is_float() {
+                    ExprValue::Float(-val.to_f64())
+                } else {
+                    ExprValue::Int(-val.to_i64())
+                }
+            }
+            Token::Tilde => {
+                self.advance();
+                let val = self.parse_unary();
+                ExprValue::Int(!val.to_i64())
+            }
+            Token::Identifier(s) if s == "not" => {
+                self.advance();
+                let val = self.parse_unary();
+                ExprValue::Bool(!val.to_bool())
+            }
+            _ => self.parse_primary(),
+        }
+    }
+
+    fn parse_primary(&mut self) -> ExprValue {
         match self.current_token.clone() {
             Token::Number(n) => {
                 self.advance();
-                n
+                ExprValue::Int(n)
+            }
+            Token::Float(f) => {
+                self.advance();
+                ExprValue::Float(f)
             }
             Token::Identifier(id) => {
                 self.advance();
-                
-                let mut path_parts;
-                let current_id = id;
-                
-                if current_id == "_root" {
-                    path_parts = Vec::new();
-                } else if current_id == "_parent" {
-                    let mut p = self.base_path.to_vec();
-                    if !p.is_empty() { p.pop(); }
-                    path_parts = p;
-                } else {
-                    path_parts = self.base_path.to_vec();
-                    path_parts.push(current_id);
-                }
-
-                while self.current_token == Token::Dot {
-                    self.advance();
-                    if let Token::Identifier(sub) = &self.current_token {
-                        if sub == "_parent" {
-                            if !path_parts.is_empty() { path_parts.pop(); }
-                        } else if sub == "_root" {
-                            path_parts = Vec::new();
-                        } else {
-                            path_parts.push(sub.clone());
-                        }
-                        self.advance();
-                    } else {
-                        break;
-                    }
-                }
-                
-                // Try to resolve the path
-                // First try absolute path from parts
-                let full_id = path_parts.join(".");
-                if let Some(val) = self.context.get(&full_id) {
-                    return *val;
-                }
-                
-                // If not found, and it was a simple identifier (no dots),
-                // try to find it as a sibling of the current base_path
-                if path_parts.len() == 1 {
-                    let mut sibling_path = self.base_path.to_vec();
-                    sibling_path.push(path_parts[0].clone());
-                    let sibling_id = sibling_path.join(".");
-                    if let Some(val) = self.context.get(&sibling_id) {
-                        return *val;
-                    }
-                }
-
-                // If not found, try as a simple global identifier (top-level sibling)
-                if let Some(val) = self.context.get(&path_parts.last().unwrap_or(&"".to_string()).clone()) {
-                    return *val;
-                }
-
-                0
+                self.resolve_identifier(&id)
             }
             Token::String(s) => {
                 self.advance();
-                let mut bytes = [0u8; 8];
-                let s_bytes = s.as_bytes();
-                let len = s_bytes.len().min(8);
-                bytes[..len].copy_from_slice(&s_bytes[..len]);
-                i64::from_le_bytes(bytes)
+                ExprValue::Str(s)
             }
             Token::LParen => {
                 self.advance();
-                let val = self.parse_expr();
+                let val = self.parse_ternary();
                 if self.current_token == Token::RParen {
                     self.advance();
                 }
                 val
             }
-            Token::Bang => {
-                self.advance();
-                if self.parse_primary() == 0 { 1 } else { 0 }
-            }
             _ => {
                 self.advance();
-                0
+                ExprValue::Int(0)
             }
         }
+    }
+
+    fn resolve_identifier(&mut self, id: &str) -> ExprValue {
+        // Keywords
+        match id {
+            "true" => return ExprValue::Bool(true),
+            "false" => return ExprValue::Bool(false),
+            _ => {}
+        }
+
+        let mut path_parts: Vec<String>;
+
+        if id == "_io" {
+            // Handle _io.eof, _io.size, _io.pos
+            if self.current_token == Token::Dot {
+                self.advance();
+                if let Token::Identifier(prop) = &self.current_token {
+                    let prop = prop.clone();
+                    self.advance();
+                    return match prop.as_str() {
+                        "eof" => ExprValue::Bool(self.ctx.stream_eof),
+                        "size" => ExprValue::Int(self.ctx.stream_size as i64),
+                        "pos" => ExprValue::Int(self.ctx.stream_pos as i64),
+                        _ => ExprValue::Int(0),
+                    };
+                }
+            }
+            return ExprValue::Int(0);
+        }
+
+        if id == "_root" {
+            path_parts = Vec::new();
+        } else if id == "_parent" {
+            let mut p = self.ctx.base_path.to_vec();
+            if !p.is_empty() { p.pop(); }
+            path_parts = p;
+        } else if id == "_" {
+            // In repeat-until, _ refers to the last element. Check context for "_" prefixed values.
+            path_parts = self.ctx.base_path.to_vec();
+            path_parts.push("_".to_string());
+        } else {
+            path_parts = self.ctx.base_path.to_vec();
+            path_parts.push(id.to_string());
+        }
+
+        // Handle dot-chain and :: (enum resolution)
+        while self.current_token == Token::Dot || self.current_token == Token::ColonColon {
+            let is_enum_access = self.current_token == Token::ColonColon;
+            self.advance();
+            if let Token::Identifier(sub) = &self.current_token {
+                let sub = sub.clone();
+                self.advance();
+
+                if is_enum_access {
+                    // enum_name::value — resolve enum value
+                    let enum_name = path_parts.last().cloned().unwrap_or_default();
+                    return self.resolve_enum_value(&enum_name, &sub);
+                }
+
+                if sub == "_parent" {
+                    if !path_parts.is_empty() { path_parts.pop(); }
+                } else if sub == "_root" {
+                    path_parts = Vec::new();
+                } else if sub == "to_i" {
+                    // .to_i — identity for integer values
+                    break;
+                } else {
+                    path_parts.push(sub);
+                }
+            } else {
+                break;
+            }
+        }
+
+        // Try to resolve the path
+        let full_id = path_parts.join(".");
+        if let Some(val) = self.ctx.values.get(&full_id) {
+            return ExprValue::Int(*val);
+        }
+
+        // Try string values
+        if let Some(val) = self.ctx.string_values.get(&full_id) {
+            return ExprValue::Str(val.clone());
+        }
+
+        // Try as a sibling of base_path
+        if path_parts.len() == 1 {
+            let mut sibling_path = self.ctx.base_path.to_vec();
+            sibling_path.push(path_parts[0].clone());
+            let sibling_id = sibling_path.join(".");
+            if let Some(val) = self.ctx.values.get(&sibling_id) {
+                return ExprValue::Int(*val);
+            }
+            if let Some(val) = self.ctx.string_values.get(&sibling_id) {
+                return ExprValue::Str(val.clone());
+            }
+        }
+
+        // Try as global identifier
+        if let Some(last) = path_parts.last() {
+            if let Some(val) = self.ctx.values.get(last) {
+                return ExprValue::Int(*val);
+            }
+            if let Some(val) = self.ctx.string_values.get(last) {
+                return ExprValue::Str(val.clone());
+            }
+        }
+
+        ExprValue::Int(0)
+    }
+
+    fn resolve_enum_value(&self, enum_name: &str, value_name: &str) -> ExprValue {
+        if let Some(enum_def) = self.ctx.enums.get(enum_name) {
+            // enum_def maps numeric_key -> label_name
+            // We need reverse lookup: label_name -> numeric_key
+            for (key, label) in enum_def {
+                if label == value_name {
+                    if let Ok(v) = key.parse::<i64>() {
+                        return ExprValue::Int(v);
+                    }
+                }
+            }
+        }
+        ExprValue::Int(0)
     }
 }

@@ -10,6 +10,9 @@ pub enum FieldValue {
     I16(i16),
     I32(i32),
     I64(i64),
+    F32(f32),
+    F64(f64),
+    Bool(bool),
     String(String),
     Bytes(Vec<u8>),
     Struct,
@@ -26,7 +29,35 @@ impl FieldValue {
             FieldValue::I16(v) => *v as i64,
             FieldValue::I32(v) => *v as i64,
             FieldValue::I64(v) => *v,
+            FieldValue::F32(v) => *v as i64,
+            FieldValue::F64(v) => *v as i64,
+            FieldValue::Bool(v) => if *v { 1 } else { 0 },
             _ => 0,
+        }
+    }
+
+    pub fn to_f64(&self) -> f64 {
+        match self {
+            FieldValue::U8(v) => *v as f64,
+            FieldValue::U16(v) => *v as f64,
+            FieldValue::U32(v) => *v as f64,
+            FieldValue::U64(v) => *v as f64,
+            FieldValue::I8(v) => *v as f64,
+            FieldValue::I16(v) => *v as f64,
+            FieldValue::I32(v) => *v as f64,
+            FieldValue::I64(v) => *v as f64,
+            FieldValue::F32(v) => *v as f64,
+            FieldValue::F64(v) => *v,
+            FieldValue::Bool(v) => if *v { 1.0 } else { 0.0 },
+            _ => 0.0,
+        }
+    }
+
+    pub fn to_string_value(&self) -> String {
+        match self {
+            FieldValue::String(s) => s.clone(),
+            FieldValue::Bytes(b) => String::from_utf8_lossy(b).into_owned(),
+            other => format!("{}", other),
         }
     }
 }
@@ -42,6 +73,9 @@ impl std::fmt::Display for FieldValue {
             FieldValue::I16(v) => write!(f, "{}", v),
             FieldValue::I32(v) => write!(f, "{}", v),
             FieldValue::I64(v) => write!(f, "{}", v),
+            FieldValue::F32(v) => write!(f, "{}", v),
+            FieldValue::F64(v) => write!(f, "{}", v),
+            FieldValue::Bool(v) => write!(f, "{}", v),
             FieldValue::String(v) => write!(f, "\"{}\"", v),
             FieldValue::Bytes(v) => write!(f, "[{} bytes]", v.len()),
             FieldValue::Struct => write!(f, "{{...}}"),
