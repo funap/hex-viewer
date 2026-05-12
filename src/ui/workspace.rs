@@ -5,10 +5,9 @@ use gpui_component::ActiveTheme;
 use crate::actions::*;
 
 use crate::ui::panels::editor_panel::EditorPanel;
-use crate::ui::panels::file_tree_panel::FileTreePanel;
-use crate::ui::panels::left_panel::LeftPanel;
-
-
+use crate::ui::components::file_tree_view::{FileTreeView, FileTreeViewEvent};
+use crate::ui::panels::left_panel::{LeftPanel, LeftPanelTab};
+use crate::ui::components::activity_bar::{ActivityBar, Activity, ActivityBarEvent};
 use crate::ui::components::toolbar::AppTitleBar;
 
 use crate::app_state::AppState;
@@ -29,6 +28,7 @@ pub struct Workspace {
     pub status_bar: Entity<StatusBar>,
     pub active_editor: Option<Entity<Editor>>,
     pub left_panel: Entity<LeftPanel>,
+    pub activity_bar: Entity<ActivityBar>,
     pub ksy_definition: Option<crate::core::structure::KsyDefinition>,
     pub is_left_panel_visible: bool,
 }
@@ -62,8 +62,21 @@ impl Workspace {
         })
         .detach();
 
-        let file_tree = cx.new(|cx| FileTreePanel::new("FILES", cx));
+        let file_tree = cx.new(|cx| FileTreeView::new("FILES", cx));
         let left_panel = cx.new(|cx| LeftPanel::new(file_tree.clone(), cx));
+        let activity_bar = cx.new(|cx| ActivityBar::new(cx));
+
+        cx.subscribe(&activity_bar, |this, _, event: &ActivityBarEvent, cx| match event {
+            ActivityBarEvent::Select(activity) => {
+                this.select_activity(*activity, cx);
+            }
+        })
+        .detach();
+
+        cx.observe(&left_panel, |this, _, cx| {
+            this.sync_activity_bar(cx);
+        })
+        .detach();
 
         let status_bar = cx.new(|cx| StatusBar::new(cx));
         cx.subscribe(&status_bar, |this, _, event, cx| match event {
@@ -85,7 +98,7 @@ impl Workspace {
         })
         .detach();
         cx.subscribe(&left_panel, |_, _, event, cx| match event {
-            crate::ui::panels::file_tree_panel::FileTreeEvent::OpenFile(path) => {
+            FileTreeViewEvent::OpenFile(path) => {
                 cx.dispatch_action(&crate::actions::OpenFile {
                     path: path.to_string_lossy().to_string(),
                 });
@@ -100,6 +113,7 @@ impl Workspace {
             status_bar,
             active_editor: None,
             left_panel,
+            activity_bar,
             ksy_definition: None,
             is_left_panel_visible: true,
         }
@@ -391,18 +405,39 @@ impl Workspace {
 
     fn on_action_toggle_left_panel(&mut self, _: &ToggleLeftPanel, _: &mut Window, cx: &mut Context<Self>) {
         self.is_left_panel_visible = !self.is_left_panel_visible;
+        self.sync_activity_bar(cx);
         cx.notify();
     }
 
     fn on_action_show_files_tab(&mut self, _: &ShowFilesTab, _: &mut Window, cx: &mut Context<Self>) {
-        self.left_panel.update(cx, |p, cx| p.set_tab(crate::ui::panels::left_panel::LeftPanelTab::Files, cx));
-        self.is_left_panel_visible = true;
-        cx.notify();
+        self.select_activity(Activity::Files, cx);
     }
 
     fn on_action_show_structure_tab(&mut self, _: &ShowStructureTab, _: &mut Window, cx: &mut Context<Self>) {
-        self.left_panel.update(cx, |p, cx| p.set_tab(crate::ui::panels::left_panel::LeftPanelTab::Structure, cx));
-        self.is_left_panel_visible = true;
+        self.select_activity(Activity::Structure, cx);
+    }
+
+    fn select_activity(&mut self, activity: Activity, cx: &mut Context<Self>) {
+        let tab = match activity {
+            Activity::Files => LeftPanelTab::Files,
+            Activity::Structure => LeftPanelTab::Structure,
+        };
+
+        let current_tab = self.left_panel.read(cx).active_tab;
+        
+        // If the same tab is already active and the panel is visible, hide it.
+        // Otherwise, switch to the tab and ensure it's visible.
+        if self.is_left_panel_visible && current_tab == tab {
+            self.is_left_panel_visible = false;
+        } else {
+            self.is_left_panel_visible = true;
+            self.left_panel.update(cx, |p, cx| {
+                p.set_tab(tab, cx);
+            });
+        }
+        
+        // Ensure the activity bar reflects the new state immediately
+        self.sync_activity_bar(cx);
         cx.notify();
     }
 
@@ -667,6 +702,21 @@ impl Workspace {
         }
         false
     }
+
+    fn sync_activity_bar(&self, cx: &mut Context<Self>) {
+        let is_visible = self.is_left_panel_visible;
+        let active_tab = self.left_panel.read(cx).active_tab;
+        self.activity_bar.update(cx, |activity_bar, cx| {
+            if is_visible {
+                match active_tab {
+                    LeftPanelTab::Files => activity_bar.set_activity(Some(Activity::Files), cx),
+                    LeftPanelTab::Structure => activity_bar.set_activity(Some(Activity::Structure), cx),
+                }
+            } else {
+                activity_bar.set_activity(None, cx);
+            }
+        });
+    }
 }
 
 impl Render for Workspace {
@@ -699,37 +749,44 @@ impl Render for Workspace {
             .flex_col()
             .child(self.title_bar.clone())
             .child(
-                h_resizable("workspace-h-resize")
+                div()
+                    .flex()
+                    .flex_row()
+                    .flex_1()
+                    .child(self.activity_bar.clone())
                     .child(
-                        resizable_panel()
-                            .visible(self.is_left_panel_visible)
-                            .size(px(250.))
-                            .child(self.left_panel.clone()),
-                    )
-                    .child(
-                        resizable_panel()
+                        h_resizable("workspace-h-resize")
                             .child(
-                                div()
-                                .relative()
-                                .size_full()
-                                .flex()
-                                .flex_col()
-                                .child(self.dock_area.clone())
-                                .when(!self.check_has_panels(cx), |this| {
-                                    this.child(
+                                resizable_panel()
+                                    .visible(self.is_left_panel_visible)
+                                    .size(px(250.))
+                                    .child(self.left_panel.clone()),
+                            )
+                            .child(
+                                resizable_panel()
+                                    .child(
                                         div()
-                                            .absolute()
-                                            .top_0()
-                                            .left_0()
+                                            .relative()
                                             .size_full()
                                             .flex()
-                                            .justify_center()
-                                            .items_center()
-                                            .bg(cx.theme().background)
-                                            .child(div().text_xl().text_color(cx.theme().muted_foreground).child("Nothing is open")),
-                                    )
-                                },
-                            )),
+                                            .flex_col()
+                                            .child(self.dock_area.clone())
+                                            .when(!self.check_has_panels(cx), |this| {
+                                                this.child(
+                                                    div()
+                                                        .absolute()
+                                                        .top_0()
+                                                        .left_0()
+                                                        .size_full()
+                                                        .flex()
+                                                        .justify_center()
+                                                        .items_center()
+                                                        .bg(cx.theme().background)
+                                                        .child(div().text_xl().text_color(cx.theme().muted_foreground).child("Nothing is open")),
+                                                )
+                                            }),
+                                    ),
+                            ),
                     ),
             )
             .child(self.status_bar.clone())

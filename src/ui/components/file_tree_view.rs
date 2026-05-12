@@ -19,36 +19,14 @@ use gpui_component::{
 };
 
 const CONTEXT: &str = "TreeStory";
-pub(crate) fn init(cx: &mut App) {
-    cx.bind_keys([
-        KeyBinding::new("enter", Rename, Some(CONTEXT)),
-        KeyBinding::new("space", SelectItem, Some(CONTEXT)),
-    ]);
-
-    gpui_component::dock::register_panel(cx, "FileTreePanel", |_, _, info, _window, cx| {
-        let state = match info {
-            gpui_component::dock::PanelInfo::Panel(value) => FileTreePanelState::from_value(value.clone()),
-            _ => None,
-        };
-
-        let view = cx.new(|cx| {
-            let mut panel = FileTreePanel::new("File Tree", cx);
-            if let Some(state) = state {
-                if let Some(path) = state.root_path {
-                    panel.set_root_path(path, cx);
-                }
-            }
-            panel
-        });
-        Box::new(view)
-    });
+pub(crate) fn init(_cx: &mut App) {
 }
 
-pub enum FileTreeEvent {
+pub enum FileTreeViewEvent {
     OpenFile(PathBuf),
 }
 
-pub struct FileTreePanel {
+pub struct FileTreeView {
     tree_state: Entity<TreeState>,
     selected_item: Option<TreeItem>,
     selected_items: Vec<TreeItem>,
@@ -96,7 +74,7 @@ fn update_item_children_recursive(items: &mut Vec<TreeItem>, target_id: &str, ch
     false
 }
 
-impl FileTreePanel {
+impl FileTreeView {
     pub fn new(title: impl Into<SharedString>, cx: &mut Context<Self>) -> Self {
         let tree_state = cx.new(|cx| TreeState::new(cx));
 
@@ -115,7 +93,7 @@ impl FileTreePanel {
     }
 
     fn load_root(&mut self, path: PathBuf, cx: &mut Context<Self>) {
-        cx.spawn(|view: WeakEntity<FileTreePanel>, cx: &mut AsyncApp| {
+        cx.spawn(|view: WeakEntity<FileTreeView>, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
                 let ignorer = Ignorer::new(&path.to_string_lossy());
@@ -143,7 +121,7 @@ impl FileTreePanel {
             let item_id_clone = item_id.to_string();
             let root_path = self.root_path.clone();
 
-            cx.spawn(|view: WeakEntity<FileTreePanel>, cx: &mut AsyncApp| {
+            cx.spawn(|view: WeakEntity<FileTreeView>, cx: &mut AsyncApp| {
                 let mut cx = cx.clone();
                 async move {
                     if let Some(root_path) = root_path {
@@ -241,13 +219,13 @@ impl FileTreePanel {
     }
 }
 
-impl Render for FileTreePanel {
+impl Render for FileTreeView {
     fn render(&mut self, _: &mut gpui::Window, cx: &mut gpui::Context<Self>) -> impl gpui::IntoElement {
         let view = cx.entity();
 
         if self.root_path.is_none() {
             return v_flex()
-                .id("file-tree-panel")
+                .id("file-tree-view")
                 .key_context(CONTEXT)
                 .size_full()
                 .justify_center()
@@ -273,7 +251,7 @@ impl Render for FileTreePanel {
         }
 
         v_flex()
-            .id("file-tree-panel")
+            .id("file-tree-view")
             .key_context(CONTEXT)
             .on_action(cx.listener(Self::on_action_rename))
             .on_action(cx.listener(Self::on_action_select_item))
@@ -363,10 +341,10 @@ impl Render for FileTreePanel {
                                 }
 
                                 if !item.is_folder() && this.selected_items.len() == 1 {
-                                    println!("Emitting FileTreeEvent::OpenFile for path: {}", item.id);
+                                    println!("Emitting FileTreeViewEvent::OpenFile for path: {}", item.id);
                                     // cx.focus_self(window);
                                     // window.dispatch_action(Box::new(OpenFile { path: item.id.to_string() }), cx);
-                                    cx.emit(FileTreeEvent::OpenFile(PathBuf::from(item.id.to_string())));
+                                    cx.emit(FileTreeViewEvent::OpenFile(PathBuf::from(item.id.to_string())));
                                 }
                                 cx.notify();
                             }
@@ -376,47 +354,20 @@ impl Render for FileTreePanel {
     }
 }
 
-impl EventEmitter<PanelEvent> for FileTreePanel {}
-impl EventEmitter<FileTreeEvent> for FileTreePanel {}
+impl EventEmitter<FileTreeViewEvent> for FileTreeView {}
 
-impl Focusable for FileTreePanel {
+impl Focusable for FileTreeView {
     fn focus_handle(&self, _cx: &App) -> gpui::FocusHandle {
         self.focus_handle.clone()
     }
 }
 
-impl Panel for FileTreePanel {
-    fn panel_name(&self) -> &'static str {
-        "FileTreePanel"
-    }
-
-    fn title(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        self.title.clone().into_any_element()
-    }
-
-    fn closable(&self, _cx: &App) -> bool {
-        true
-    }
-
-    fn zoomable(&self, _cx: &App) -> Option<gpui_component::dock::PanelControl> {
-        Some(gpui_component::dock::PanelControl::Both)
-    }
-
-    fn visible(&self, _cx: &App) -> bool {
-        true
-    }
-
-    fn set_active(&mut self, _active: bool, _window: &mut Window, _cx: &mut Context<Self>) {}
-
-    fn set_zoomed(&mut self, _zoomed: bool, _window: &mut Window, _cx: &mut Context<Self>) {}
-}
-
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
-pub struct FileTreePanelState {
+pub struct FileTreeViewState {
     pub root_path: Option<PathBuf>,
 }
 
-impl FileTreePanelState {
+impl FileTreeViewState {
     #[allow(dead_code)]
     pub fn to_value(&self) -> serde_json::Value {
         serde_json::to_value(self).unwrap()

@@ -29,7 +29,7 @@ fn main() {
         gpui_component::init(cx);
         theme::init(cx);
         ui::workspace::init(cx);
-        ui::panels::file_tree_panel::init(cx);
+        ui::components::file_tree_view::init(cx);
         ui::panels::editor_panel::init(cx);
         ui::panels::diff_panel::init(cx);
 
