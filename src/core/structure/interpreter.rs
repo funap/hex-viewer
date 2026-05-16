@@ -279,31 +279,32 @@ impl<'a> KaitaiInterpreter<'a> {
             }
         });
 
-        let (value, final_size, children) = if let Some(type_str) = &resolved_type {
-            self.parse_typed_value(type_str, is_little, computed_size, attr, start_offset, old_pos, types, enums)?
+        let typed_result = if let Some(type_str) = &resolved_type {
+            self.parse_typed_value(type_str, is_little, computed_size, attr, start_offset, old_pos, types, enums)
         } else if attr.size_eos {
             // Read remaining bytes as raw
             let buf = self.read_remaining();
             let s = buf.len();
-            (FieldValue::Bytes(buf), s, Vec::new())
+            Some((FieldValue::Bytes(buf), s, Vec::new()))
         } else {
             // Raw bytes
             if computed_size > 0 {
-                let buf = self.stream.read_bytes(computed_size)?;
-                (FieldValue::Bytes(buf), computed_size, Vec::new())
+                self.stream.read_bytes(computed_size).map(|buf| (FieldValue::Bytes(buf), computed_size, Vec::new()))
             } else {
-                (FieldValue::Bytes(Vec::new()), 0, Vec::new())
+                Some((FieldValue::Bytes(Vec::new()), 0, Vec::new()))
             }
         };
-
-        // Contents validation (unchanged logic)
-        if let Some(expected) = &attr.contents {
-            self.validate_contents(expected, &value);
-        }
 
         // Restore position if we jumped
         if let Some(p) = old_pos {
             self.stream.set_pos(p);
+        }
+
+        let (value, final_size, children) = typed_result?;
+
+        // Contents validation (unchanged logic)
+        if let Some(expected) = &attr.contents {
+            self.validate_contents(expected, &value);
         }
 
         // Context update
@@ -398,7 +399,7 @@ impl<'a> KaitaiInterpreter<'a> {
         }
     }
 
-    fn parse_custom_type(&mut self, type_name: &str, attr: &KsyAttr, start_offset: usize, old_pos: Option<u64>, types: &HashMap<String, KsyType>, enums: &HashMap<String, HashMap<String, serde_yaml::Value>>) -> Option<(FieldValue, usize, Vec<ParsedField>)> {
+    fn parse_custom_type(&mut self, type_name: &str, attr: &KsyAttr, start_offset: usize, _old_pos: Option<u64>, types: &HashMap<String, KsyType>, enums: &HashMap<String, HashMap<String, serde_yaml::Value>>) -> Option<(FieldValue, usize, Vec<ParsedField>)> {
         let type_def = types.get(type_name)?;
         let field_id = attr.id.clone().unwrap_or_else(|| format!("field_{}", self.field_count));
         self.id_stack.push(field_id);
@@ -418,46 +419,45 @@ impl<'a> KaitaiInterpreter<'a> {
         let size_val = self.resolve_size(&attr.size);
         let use_substream = (size_val.is_some() && size_val != Some(0)) || attr.size_eos;
 
-        let nested_fields = if use_substream {
-            let sub_size = if attr.size_eos { self.remaining_bytes() } else { size_val.unwrap_or(0) };
-            let sub_data = self.stream.read_bytes(sub_size)?;
-            let mut sub_cursor = Cursor::new(sub_data.as_slice());
-            let old_stream_size = self.stream_size;
-            self.stream_size = sub_size;
-            let mut fields = Vec::new();
-            // We need to swap streams temporarily - but we can't easily do that with trait objects
-            // Instead, we'll parse using the data directly
-            // This is a simplified approach: we store pos, parse sub_data, restore
-            let saved_pos = self.stream.pos();
-            // Parse sub_data by creating a new scope
-            let seq = type_def.seq.clone();
-            let instances = type_def.instances.clone();
-            // We'll use a simple recursive approach with offset adjustment
-            for nested_attr in &seq {
-                fields.extend(self.parse_substream_attr(nested_attr, &sub_data, &nested_types, &nested_enums, start_offset));
-            }
-            self.stream_size = old_stream_size;
-            fields
-        } else {
-            let seq = type_def.seq.clone();
-            let mut fields = Vec::new();
-            for nested_attr in &seq {
-                fields.extend(self.parse_attr_repeated(nested_attr, &nested_types, &nested_enums));
-            }
-            // Parse instances
-            let instances = type_def.instances.clone();
-            for (id, mut inst_attr) in instances {
-                if inst_attr.pos.is_some() || inst_attr.value.is_some() {
-                    inst_attr.id = Some(id);
-                    fields.extend(self.parse_attr_repeated(&inst_attr, &nested_types, &nested_enums));
+        let res = (|| {
+            if use_substream {
+                let sub_size = if attr.size_eos { self.remaining_bytes() } else { size_val.unwrap_or(0) };
+                let sub_data = self.stream.read_bytes(sub_size)?;
+                let old_stream_size = self.stream_size;
+                self.stream_size = sub_size;
+                let mut fields = Vec::new();
+                
+                // Parse sub_data by creating a new scope
+                let seq = type_def.seq.clone();
+                for nested_attr in &seq {
+                    fields.extend(self.parse_substream_attr(nested_attr, &sub_data, &nested_types, &nested_enums, start_offset));
                 }
+                self.stream_size = old_stream_size;
+                Some(fields)
+            } else {
+                let seq = type_def.seq.clone();
+                let mut fields = Vec::new();
+                for nested_attr in &seq {
+                    fields.extend(self.parse_attr_repeated(nested_attr, &nested_types, &nested_enums));
+                }
+                // Parse instances
+                let instances = type_def.instances.clone();
+                for (id, mut inst_attr) in instances {
+                    if inst_attr.pos.is_some() || inst_attr.value.is_some() {
+                        inst_attr.id = Some(id);
+                        fields.extend(self.parse_attr_repeated(&inst_attr, &nested_types, &nested_enums));
+                    }
+                }
+                Some(fields)
             }
-            fields
-        };
+        })();
 
         self.recursion_depth -= 1;
         self.id_stack.pop();
-        let total_size = self.stream.pos() as usize - start_offset;
+        
+        let nested_fields = res?;
+        let current_pos = self.stream.pos() as usize;
+        let total_size = current_pos.saturating_sub(start_offset);
 
         Some((FieldValue::Struct, total_size, nested_fields))
     }
