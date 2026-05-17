@@ -283,8 +283,11 @@ impl EditorPanel {
             // Scroll to current result if not preserving
             if !preserve_scroll {
                 self.hex_view.update(cx, |view, cx| {
-                    view.set_scroll_offset(offset / 16, cx);
-                    view.set_cursor_offset(offset, cx);
+                    view.scroll_to_row(offset / 16, cx);
+                });
+                self.editor.update(cx, |editor, cx| {
+                    editor.set_cursor_offset(offset);
+                    cx.notify();
                 });
             }
         }

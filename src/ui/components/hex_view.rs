@@ -209,13 +209,7 @@ impl HexView {
         cx.notify();
     }
 
-    pub fn cursor_offset(&self, cx: &App) -> usize {
-        self.editor.read(cx).cursor_offset
-    }
 
-    pub fn selection_range(&self, cx: &App) -> Option<Range<usize>> {
-        self.editor.read(cx).selection_range()
-    }
 
     pub fn set_highlights(&mut self, highlights: Vec<(Range<usize>, Hsla)>, cx: &mut Context<Self>) {
         self.highlights = highlights;
@@ -229,10 +223,10 @@ impl HexView {
         cx.notify();
     }
 
-    pub fn scroll_to_offset(&mut self, byte_offset: usize, cx: &mut Context<Self>) {
+    pub fn scroll_to_byte(&mut self, byte_offset: usize, cx: &mut Context<Self>) {
         let line_starts = self.editor.read(cx).line_starts();
         let row = Editor::find_line_index(byte_offset, &line_starts);
-        self.set_scroll_offset(row, cx);
+        self.scroll_to_row(row, cx);
     }
 
     /// Returns the byte range of the current viewport (visible area).
@@ -251,11 +245,11 @@ impl HexView {
         (start_byte, end_byte)
     }
 
-    pub fn set_scroll_offset(&mut self, offset: usize, cx: &mut Context<Self>) {
+    pub fn scroll_to_row(&mut self, row: usize, cx: &mut Context<Self>) {
         let row_height = px(ROW_HEIGHT);
         let total_rows = self.editor.read(cx).line_starts().len();
         let max_offset = total_rows.saturating_sub(1);
-        let new_offset = offset.min(max_offset);
+        let new_offset = row.min(max_offset);
 
         if self.scroll_offset == new_offset {
             return;
@@ -265,13 +259,6 @@ impl HexView {
         self.scroll_handle.set_offset(point(px(0.), -(self.scroll_offset as f32 * row_height)));
         cx.notify();
         cx.emit(HexViewEvent::Scrolled(self.scroll_offset));
-    }
-
-    pub fn set_cursor_offset(&mut self, offset: usize, cx: &mut Context<Self>) {
-        self.editor.update(cx, |editor: &mut Editor, cx| {
-            editor.set_cursor_offset(offset);
-            cx.notify();
-        });
     }
 
     fn ensure_cursor_visible(&mut self, cx: &mut Context<Self>) {

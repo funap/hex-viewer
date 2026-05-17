@@ -62,7 +62,7 @@ impl DiffPanel {
                 if let HexViewEvent::Scrolled(offset) = event {
                     this.is_syncing = true;
                     this.right_view.update(cx, |view, cx| {
-                        view.set_scroll_offset(*offset, cx);
+                        view.scroll_to_row(*offset, cx);
                     });
                     this.is_syncing = false;
                 }
@@ -74,7 +74,7 @@ impl DiffPanel {
                 if let HexViewEvent::Scrolled(offset) = event {
                     this.is_syncing = true;
                     this.left_view.update(cx, |view, cx| {
-                        view.set_scroll_offset(*offset, cx);
+                        view.scroll_to_row(*offset, cx);
                     });
                     this.is_syncing = false;
                 }
@@ -175,10 +175,10 @@ impl DiffPanel {
             if let Some(DiffChunk::Modified { offset, .. }) = modified_chunks.get(self.current_diff_index) {
                 let offset = *offset;
                 self.left_view.update(cx, |view, cx| {
-                    view.scroll_to_offset(offset, cx);
+                    view.scroll_to_byte(offset, cx);
                 });
                 self.right_view.update(cx, |view, cx| {
-                    view.scroll_to_offset(offset, cx);
+                    view.scroll_to_byte(offset, cx);
                 });
             }
         }
