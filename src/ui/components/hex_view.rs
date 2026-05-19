@@ -821,11 +821,7 @@ impl Render for HexView {
                     crate::core::editor::LineMap::Custom(vec) => {
                         let mut max_len = BYTES_PER_ROW;
                         for (idx, &start) in vec.iter().enumerate() {
-                            let end = if idx + 1 < vec.len() {
-                                vec[idx + 1]
-                            } else {
-                                total_size
-                            };
+                            let end = if idx + 1 < vec.len() { vec[idx + 1] } else { total_size };
                             max_len = max_len.max(end - start);
                         }
                         max_len
@@ -1020,7 +1016,11 @@ impl Element for HexViewElement {
 
         for i in start_row..end_row {
             let offset = line_starts.get(i).unwrap();
-            let next_offset = if i + 1 < line_starts.len() { line_starts.get(i + 1).unwrap() } else { buffer.len() };
+            let next_offset = if i + 1 < line_starts.len() {
+                line_starts.get(i + 1).unwrap()
+            } else {
+                buffer.len()
+            };
             let chunk_len = next_offset - offset;
             let chunk = buffer.get_range(offset, chunk_len);
             let row_index = i - start_row;
@@ -1053,12 +1053,9 @@ impl Element for HexViewElement {
                         let ascii_x_start = ascii_start_x + ascii_char_width * start_in_line as f32;
                         let ascii_x_end = ascii_start_x + ascii_char_width * end_in_line as f32;
                         let ascii_width = ascii_x_end - ascii_x_start;
-                        
+
                         if ascii_width > px(0.) {
-                            selection_quads.push(fill(
-                                Bounds::new(point(ascii_x_start, y_pos), size(ascii_width, row_height)),
-                                *color,
-                            ));
+                            selection_quads.push(fill(Bounds::new(point(ascii_x_start, y_pos), size(ascii_width, row_height)), *color));
                         }
                     }
                 }
@@ -1087,7 +1084,7 @@ impl Element for HexViewElement {
                     if buffer.is_empty() {
                         ascii_width = ascii_char_width;
                     }
-                    
+
                     if ascii_width > px(0.) {
                         selection_quads.push(fill(
                             Bounds::new(point(ascii_x_start, y_pos), size(ascii_width, row_height)),
@@ -1134,11 +1131,11 @@ impl Element for HexViewElement {
             if self.show_ascii && !chunk.is_empty() {
                 for (byte_idx, _) in chunk.iter().enumerate() {
                     let global_offset = offset + byte_idx;
-                    
+
                     if self.encoding.is_continuation_byte(buffer.data(), global_offset) {
                         continue;
                     }
-                    
+
                     let (char_str, color, len) = if let Some((c, char_len)) = self.encoding.decode_char_at(buffer.data(), global_offset) {
                         (c.to_string(), ascii_printable_color, char_len)
                     } else {
@@ -1153,7 +1150,7 @@ impl Element for HexViewElement {
                         underline: None,
                         strikethrough: None,
                     };
-                    
+
                     let shaped = window.text_system().shape_line(char_str.into(), font_size, &[ascii_run], None);
                     ascii_chars.push((shaped, byte_idx, len));
                 }
@@ -1177,7 +1174,7 @@ impl Element for HexViewElement {
         }
 
         // ascii_start_x and ascii_char_width already computed above
-        
+
         let mut cursor_quads = Vec::new();
         {
             let cursor_offset = self.cursor_offset;
@@ -1197,7 +1194,7 @@ impl Element for HexViewElement {
                         Bounds::new(point(cursor_x, y_pos), size(hex_byte_width, row_height)),
                         theme.accent.opacity(0.3),
                     ));
-                    
+
                     if self.show_ascii {
                         let ascii_cursor_x = ascii_start_x + ascii_char_width * byte_in_row as f32;
                         cursor_quads.push(fill(

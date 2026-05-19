@@ -41,7 +41,8 @@ impl EditorService {
             let file = std::fs::File::open(&path_clone)?;
             let mmap = unsafe { memmap2::MmapOptions::new().map(&file)? };
             Ok(Buffer::from_mmap(mmap))
-        }).await??;
+        })
+        .await??;
         let new_document = Arc::new(RwLock::new(Document::new(path.clone(), buffer)));
 
         // Acquire a write lock to insert the new document into the cache.

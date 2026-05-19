@@ -20,11 +20,7 @@ impl BufferData {
             BufferData::Mmap(mmap) => {
                 let vec = mmap.as_ref().to_vec();
                 *self = BufferData::Memory(Arc::new(vec));
-                if let BufferData::Memory(v) = self {
-                    Arc::make_mut(v)
-                } else {
-                    unreachable!()
-                }
+                if let BufferData::Memory(v) = self { Arc::make_mut(v) } else { unreachable!() }
             }
         }
     }
@@ -41,17 +37,23 @@ pub struct Buffer {
 impl Buffer {
     /// Creates a new Buffer with the given data.
     pub fn new(data: Vec<u8>) -> Self {
-        Self { data: BufferData::Memory(Arc::new(data)) }
+        Self {
+            data: BufferData::Memory(Arc::new(data)),
+        }
     }
 
     /// Creates a new Buffer from a memory-mapped file.
     pub fn from_mmap(mmap: memmap2::Mmap) -> Self {
-        Self { data: BufferData::Mmap(Arc::new(mmap)) }
+        Self {
+            data: BufferData::Mmap(Arc::new(mmap)),
+        }
     }
 
     /// Creates an empty Buffer.
     pub fn empty() -> Self {
-        Self { data: BufferData::Memory(Arc::new(Vec::new())) }
+        Self {
+            data: BufferData::Memory(Arc::new(Vec::new())),
+        }
     }
 
     /// Returns the length of the buffer.

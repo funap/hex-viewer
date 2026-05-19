@@ -2,7 +2,7 @@ use gpui::prelude::*;
 use gpui::{App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, KeyBinding, Subscription, Task, Window, div, px};
 use gpui_component::dock::{Panel, PanelEvent};
 
-use crate::actions::{FocusHexView, SearchNext, SearchPrev, ToggleSearch, SelectAll, GoToBeginning, GoToEnd};
+use crate::actions::{FocusHexView, GoToBeginning, GoToEnd, SearchNext, SearchPrev, SelectAll, ToggleSearch};
 use crate::app_state::AppState;
 use crate::core::appearance::Appearance;
 use crate::core::search::SearchMode;
@@ -226,13 +226,11 @@ impl EditorPanel {
 
     fn update_highlights(&mut self, cx: &mut Context<Self>) {
         let editor = self.editor.read(cx);
-        
+
         // 1. Update structure highlights cache if needed
         let current_parse_id = editor.parse_result.as_ref().map(|r| format!("{}-{}", r.definition_id, r.total_parsed_bytes));
         if current_parse_id != self.last_parse_id {
-            self.cached_structure_highlights = editor.parse_result.as_ref()
-                .map(|res| res.to_highlights())
-                .unwrap_or_default();
+            self.cached_structure_highlights = editor.parse_result.as_ref().map(|res| res.to_highlights()).unwrap_or_default();
             self.last_parse_id = current_parse_id;
         }
 
@@ -279,7 +277,7 @@ impl EditorPanel {
         let editor = self.editor.read(cx);
         if let Some(offset) = editor.current_search_result() {
             self.update_highlights(cx);
-            
+
             // Scroll to current result if not preserving
             if !preserve_scroll {
                 self.hex_view.update(cx, |view, cx| {

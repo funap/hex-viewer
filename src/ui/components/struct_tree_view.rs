@@ -1,7 +1,7 @@
 use crate::core::editor::Editor;
 use crate::core::structure::ParsedField;
 use gpui::*;
-use gpui_component::{ActiveTheme as _, h_flex, v_flex, list::ListItem};
+use gpui_component::{ActiveTheme as _, h_flex, list::ListItem, v_flex};
 
 pub struct StructTreeView {
     pub fields: Vec<crate::core::structure::ParsedField>,
@@ -142,7 +142,7 @@ impl StructTreeView {
                             .border_color(cx.theme().border),
                     )
                     .child(div().text_color(cx.theme().foreground).child(field.id.clone()))
-                    .child(div().ml_auto().text_color(cx.theme().muted_foreground).child(field.value_str.clone()))
+                    .child(div().ml_auto().text_color(cx.theme().muted_foreground).child(field.value_str.clone())),
             )
             .on_click(move |_, _, cx| {
                 this_on_field_click(offset, cx, editor.clone());

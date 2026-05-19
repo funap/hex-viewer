@@ -89,11 +89,7 @@ impl LineMap {
         match self {
             LineMap::Standard { .. } => {
                 let len = self.len();
-                if index < len {
-                    Some(index * BYTES_PER_ROW)
-                } else {
-                    None
-                }
+                if index < len { Some(index * BYTES_PER_ROW) } else { None }
             }
             LineMap::Custom(vec) => vec.get(index).copied(),
         }
@@ -108,11 +104,7 @@ impl LineMap {
                 let row = *offset / BYTES_PER_ROW;
                 let len = self.len();
                 if row < len {
-                    if *offset % BYTES_PER_ROW == 0 {
-                        Ok(row)
-                    } else {
-                        Err(row + 1)
-                    }
+                    if *offset % BYTES_PER_ROW == 0 { Ok(row) } else { Err(row + 1) }
                 } else {
                     Err(len)
                 }
@@ -208,11 +200,7 @@ impl Editor {
         let mut i = idx + 1;
         while i < line_starts.len() {
             let line_start = line_starts.get(i)?;
-            let line_end = if i + 1 < line_starts.len() {
-                line_starts.get(i + 1)?
-            } else {
-                total_size
-            };
+            let line_end = if i + 1 < line_starts.len() { line_starts.get(i + 1)? } else { total_size };
             if line_end > line_start {
                 return Some(i);
             }
@@ -414,7 +402,6 @@ impl Editor {
         self.selection_start = None;
         self.selection_end = None;
     }
-
 
     pub fn page_up(&mut self, visible_rows: usize) {
         let line_starts = self.line_starts();

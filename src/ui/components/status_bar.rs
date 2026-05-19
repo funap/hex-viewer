@@ -31,11 +31,15 @@ impl Render for StatusBar {
 
         let (cursor_offset, total_size, _value_at_cursor, bytes_at_cursor) = if let Some(editor) = &active_editor {
             let editor = editor.read(cx);
-            (editor.cursor_offset, editor.total_size(), editor.value_at_cursor(), editor.read_bytes_at_cursor(8))
+            (
+                editor.cursor_offset,
+                editor.total_size(),
+                editor.value_at_cursor(),
+                editor.read_bytes_at_cursor(8),
+            )
         } else {
             (0, 0, None, Vec::new())
         };
-
 
         let has_custom_layout = if let Some(editor) = &active_editor {
             let editor = editor.read(cx);
@@ -180,40 +184,50 @@ impl Render for StatusBar {
                     .text_color(theme.muted_foreground)
                     .when(!bytes_at_cursor.is_empty(), |el| {
                         el.child(
-                            div().flex().gap_2()
+                            div()
+                                .flex()
+                                .gap_2()
                                 .child(div().child(format!("i8: {}", i8_val)))
                                 .child(div().text_color(theme.border).child("|"))
-                                .child(div().child(format!("u8: {}", u8_val)))
+                                .child(div().child(format!("u8: {}", u8_val))),
                         )
                         .child(
-                            div().flex().gap_2()
+                            div()
+                                .flex()
+                                .gap_2()
                                 .child(div().child(format!("i16: {}", i16_val)))
                                 .child(div().text_color(theme.border).child("|"))
-                                .child(div().child(format!("u16: {}", u16_val)))
+                                .child(div().child(format!("u16: {}", u16_val))),
                         )
                         .child(
-                            div().flex().gap_2()
+                            div()
+                                .flex()
+                                .gap_2()
                                 .child(div().child(format!("i32: {}", i32_val)))
                                 .child(div().text_color(theme.border).child("|"))
                                 .child(div().child(format!("u32: {}", u32_val)))
                                 .child(div().text_color(theme.border).child("|"))
-                                .child(div().child(format!("f32: {}", f32_val)))
+                                .child(div().child(format!("f32: {}", f32_val))),
                         )
                         .child(
-                            div().flex().gap_2()
+                            div()
+                                .flex()
+                                .gap_2()
                                 .child(div().child(format!("i64: {}", i64_val)))
                                 .child(div().text_color(theme.border).child("|"))
                                 .child(div().child(format!("u64: {}", u64_val)))
                                 .child(div().text_color(theme.border).child("|"))
-                                .child(div().child(format!("f64: {}", f64_val)))
+                                .child(div().child(format!("f64: {}", f64_val))),
                         )
                         .child(
-                            div().flex().gap_2()
+                            div()
+                                .flex()
+                                .gap_2()
                                 .child(div().child(format!("ASCII: {}", ascii_val)))
                                 .child(div().text_color(theme.border).child("|"))
                                 .child(div().child(format!("UTF-8: {}", utf8_val)))
                                 .child(div().text_color(theme.border).child("|"))
-                                .child(div().child(format!("UTF-16: {}", utf16_val)))
+                                .child(div().child(format!("UTF-16: {}", utf16_val))),
                         )
                     }),
             )

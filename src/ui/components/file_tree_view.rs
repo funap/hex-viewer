@@ -19,8 +19,7 @@ use gpui_component::{
 };
 
 const CONTEXT: &str = "TreeStory";
-pub(crate) fn init(_cx: &mut App) {
-}
+pub(crate) fn init(_cx: &mut App) {}
 
 pub enum FileTreeViewEvent {
     OpenFile(PathBuf),
@@ -159,8 +158,6 @@ impl FileTreeView {
         }
     }
 
-
-
     pub fn prompt_open_folder(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
         let path = cx.prompt_for_paths(gpui::PathPromptOptions {
             files: false,
@@ -172,11 +169,13 @@ impl FileTreeView {
         let view = cx.entity().clone();
         cx.spawn_in(window, async move |_, window| {
             if let Some(path) = path.await.ok().and_then(|r| r.ok()).flatten().and_then(|mut p| p.pop()) {
-                window.update(|_, cx| {
-                    view.update(cx, |this, cx| {
-                        this.set_root_path(path, cx);
-                    });
-                }).ok();
+                window
+                    .update(|_, cx| {
+                        view.update(cx, |this, cx| {
+                            this.set_root_path(path, cx);
+                        });
+                    })
+                    .ok();
             }
         })
         .detach();

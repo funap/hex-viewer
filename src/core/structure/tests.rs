@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
     use crate::core::structure::types::FieldValue;
-    use crate::core::structure::{KsyDefinition, KaitaiInterpreter};
+    use crate::core::structure::{KaitaiInterpreter, KsyDefinition};
+    use std::io::Cursor;
 
     fn parse_ksy_yaml(yaml: &str) -> KsyDefinition {
         serde_yaml::from_str(yaml).expect("Failed to parse YAML")
@@ -30,12 +30,16 @@ seq:
         assert_eq!(result.fields[0].id, "val1");
         if let FieldValue::U16(v) = result.fields[0].value {
             assert_eq!(v, 0x0201); // little endian
-        } else { panic!("Wrong type"); }
+        } else {
+            panic!("Wrong type");
+        }
 
         assert_eq!(result.fields[1].id, "val2");
         if let FieldValue::U32(v) = result.fields[1].value {
             assert_eq!(v, 5); // big endian
-        } else { panic!("Wrong type"); }
+        } else {
+            panic!("Wrong type");
+        }
     }
 
     #[test]
@@ -62,17 +66,21 @@ seq:
         assert_eq!(result1.fields.len(), 2);
         if let FieldValue::U16(v) = result1.fields[1].value {
             assert_eq!(v, 0xFF);
-        } else { panic!("Expected U16"); }
+        } else {
+            panic!("Expected U16");
+        }
 
         let data2 = vec![0x02, 0x11, 0x22, 0x33, 0x44];
         let mut stream2 = Cursor::new(data2.as_slice());
         let interpreter2 = KaitaiInterpreter::new(ksy, &mut stream2);
         let result2 = interpreter2.parse();
-        
+
         assert_eq!(result2.fields.len(), 2);
         if let FieldValue::U32(v) = result2.fields[1].value {
             assert_eq!(v, 0x44332211);
-        } else { panic!("Expected U32"); }
+        } else {
+            panic!("Expected U32");
+        }
     }
 
     #[test]
@@ -96,16 +104,18 @@ seq:
         assert_eq!(result.fields[1].size, 3);
         if let FieldValue::Bytes(b) = &result.fields[1].value {
             assert_eq!(b, &[0xBB, 0xCC, 0xDD]);
-        } else { panic!("Expected Bytes"); }
+        } else {
+            panic!("Expected Bytes");
+        }
     }
 
     #[test]
     fn test_expression_bitwise() {
-        use crate::core::structure::expression::{ExprEvaluator, EvalContext};
+        use crate::core::structure::expression::{EvalContext, ExprEvaluator};
         use std::collections::HashMap;
         let mut values = HashMap::new();
         values.insert("flags".to_string(), 0b1010_1100);
-        
+
         let string_values = HashMap::new();
         let base_path = vec![];
         let enums = HashMap::new();

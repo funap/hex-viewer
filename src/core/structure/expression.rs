@@ -8,12 +8,33 @@ enum Token {
     Float(f64),
     Identifier(String),
     String(String),
-    Plus, Minus, Star, Slash, Percent,
-    Equal, NotEqual, GreaterEqual, LessEqual, Greater, Less,
-    And, Or, Amp, Pipe, Bang,
-    Shl, Shr, Caret, Tilde,
-    LParen, RParen, Dot, Comma,
-    Question, Colon, ColonColon,
+    Plus,
+    Minus,
+    Star,
+    Slash,
+    Percent,
+    Equal,
+    NotEqual,
+    GreaterEqual,
+    LessEqual,
+    Greater,
+    Less,
+    And,
+    Or,
+    Amp,
+    Pipe,
+    Bang,
+    Shl,
+    Shr,
+    Caret,
+    Tilde,
+    LParen,
+    RParen,
+    Dot,
+    Comma,
+    Question,
+    Colon,
+    ColonColon,
     EOF,
 }
 
@@ -247,7 +268,13 @@ impl ExprValue {
             ExprValue::Int(v) => *v,
             ExprValue::Float(v) => *v as i64,
             ExprValue::Str(_) => 0,
-            ExprValue::Bool(v) => if *v { 1 } else { 0 },
+            ExprValue::Bool(v) => {
+                if *v {
+                    1
+                } else {
+                    0
+                }
+            }
         }
     }
     pub fn to_bool(&self) -> bool {
@@ -274,7 +301,13 @@ impl ExprValue {
             ExprValue::Int(v) => *v as f64,
             ExprValue::Float(v) => *v,
             ExprValue::Str(_) => 0.0,
-            ExprValue::Bool(v) => if *v { 1.0 } else { 0.0 },
+            ExprValue::Bool(v) => {
+                if *v {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
         }
     }
 }
@@ -409,7 +442,10 @@ impl<'a> Parser<'a> {
 
     fn parse_comparison(&mut self) -> ExprValue {
         let mut val = self.parse_shift();
-        while matches!(self.current_token, Token::Equal | Token::NotEqual | Token::Greater | Token::GreaterEqual | Token::Less | Token::LessEqual) {
+        while matches!(
+            self.current_token,
+            Token::Equal | Token::NotEqual | Token::Greater | Token::GreaterEqual | Token::Less | Token::LessEqual
+        ) {
             let op = self.current_token.clone();
             self.advance();
             let right = self.parse_shift();
@@ -621,7 +657,9 @@ impl<'a> Parser<'a> {
             path_parts = Vec::new();
         } else if id == "_parent" {
             let mut p = self.ctx.base_path.to_vec();
-            if !p.is_empty() { p.pop(); }
+            if !p.is_empty() {
+                p.pop();
+            }
             path_parts = p;
         } else if id == "_" {
             // In repeat-until, _ refers to the last element. Check context for "_" prefixed values.
@@ -647,7 +685,9 @@ impl<'a> Parser<'a> {
                 }
 
                 if sub == "_parent" {
-                    if !path_parts.is_empty() { path_parts.pop(); }
+                    if !path_parts.is_empty() {
+                        path_parts.pop();
+                    }
                 } else if sub == "_root" {
                     path_parts = Vec::new();
                 } else if sub == "to_i" {

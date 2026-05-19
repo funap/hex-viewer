@@ -1,9 +1,9 @@
+use crate::core::structure::expression::{EvalContext, ExprEvaluator};
+use crate::core::structure::kaitai::*;
+use crate::core::structure::palette;
+use crate::core::structure::types::{FieldValue, ParseError, ParseResult, ParsedField};
 use std::collections::HashMap;
 use std::io::Cursor;
-use crate::core::structure::types::{ParseResult, ParsedField, FieldValue, ParseError};
-use crate::core::structure::palette;
-use crate::core::structure::expression::{ExprEvaluator, EvalContext};
-use crate::core::structure::kaitai::*;
 
 pub struct KaitaiInterpreter<'a> {
     ksy: KsyDefinition,
@@ -57,7 +57,9 @@ fn normalize_enum(raw: &HashMap<String, serde_yaml::Value>) -> HashMap<String, S
     let mut result = HashMap::new();
     for (key, val) in raw {
         match val {
-            serde_yaml::Value::String(s) => { result.insert(key.clone(), s.clone()); }
+            serde_yaml::Value::String(s) => {
+                result.insert(key.clone(), s.clone());
+            }
             serde_yaml::Value::Mapping(m) => {
                 if let Some(id_val) = m.get(&serde_yaml::Value::String("id".into())) {
                     if let Some(s) = id_val.as_str() {
@@ -93,10 +95,18 @@ impl<'a> KaitaiInterpreter<'a> {
         let global_endian = ksy.meta.endian.clone().unwrap_or_else(|| "le".to_string());
         let all_enums = collect_enums(&ksy);
         Self {
-            ksy, stream, stream_size: 0,
-            context: HashMap::new(), string_context: HashMap::new(),
-            id_stack: Vec::new(), color_index: 0, errors: Vec::new(),
-            global_endian, field_count: 0, recursion_depth: 0, all_enums,
+            ksy,
+            stream,
+            stream_size: 0,
+            context: HashMap::new(),
+            string_context: HashMap::new(),
+            id_stack: Vec::new(),
+            color_index: 0,
+            errors: Vec::new(),
+            global_endian,
+            field_count: 0,
+            recursion_depth: 0,
+            all_enums,
         }
     }
 
@@ -140,8 +150,15 @@ impl<'a> KaitaiInterpreter<'a> {
         }
     }
 
-    fn parse_attr_repeated(&mut self, attr: &KsyAttr, types: &HashMap<String, KsyType>, enums: &HashMap<String, HashMap<String, serde_yaml::Value>>) -> Vec<ParsedField> {
-        if self.recursion_depth > MAX_RECURSION || self.field_count > MAX_FIELDS { return Vec::new(); }
+    fn parse_attr_repeated(
+        &mut self,
+        attr: &KsyAttr,
+        types: &HashMap<String, KsyType>,
+        enums: &HashMap<String, HashMap<String, serde_yaml::Value>>,
+    ) -> Vec<ParsedField> {
+        if self.recursion_depth > MAX_RECURSION || self.field_count > MAX_FIELDS {
+            return Vec::new();
+        }
         let mut results = Vec::new();
 
         // Handle value instances (computed fields, no stream reading)
@@ -149,7 +166,11 @@ impl<'a> KaitaiInterpreter<'a> {
             let ctx = self.make_eval_ctx();
             let val = ExprEvaluator::eval_i64(value_expr, &ctx);
             let field_id = attr.id.clone().unwrap_or_else(|| format!("value_{}", self.field_count));
-            let full_id = if self.id_stack.is_empty() { field_id.clone() } else { format!("{}.{}", self.id_stack.join("."), field_id) };
+            let full_id = if self.id_stack.is_empty() {
+                field_id.clone()
+            } else {
+                format!("{}.{}", self.id_stack.join("."), field_id)
+            };
             self.context.insert(full_id, val);
             // Value instances don't produce visible fields for hex highlighting
             return results;
@@ -163,7 +184,9 @@ impl<'a> KaitaiInterpreter<'a> {
                         for i in 0..count {
                             if let Some(field) = self.parse_attr_once(attr, Some(i), types, enums) {
                                 results.push(field);
-                            } else { break; }
+                            } else {
+                                break;
+                            }
                         }
                     }
                 }
@@ -173,14 +196,18 @@ impl<'a> KaitaiInterpreter<'a> {
                         if let Some(field) = self.parse_attr_once(attr, Some(i), types, enums) {
                             results.push(field);
                             i += 1;
-                        } else { break; }
+                        } else {
+                            break;
+                        }
                     }
                 }
                 "until" => {
                     if let Some(expr) = &attr.repeat_until {
                         let mut i = 0;
                         loop {
-                            if self.stream.is_eof() || i >= MAX_FIELDS { break; }
+                            if self.stream.is_eof() || i >= MAX_FIELDS {
+                                break;
+                            }
                             if let Some(field) = self.parse_attr_once(attr, Some(i), types, enums) {
                                 // Store last element info for _ reference
                                 let last_val = field.value.to_i64();
@@ -195,8 +222,12 @@ impl<'a> KaitaiInterpreter<'a> {
                                 i += 1;
                                 // Evaluate until condition
                                 let ctx = self.make_eval_ctx();
-                                if ExprEvaluator::eval_bool(expr, &ctx) { break; }
-                            } else { break; }
+                                if ExprEvaluator::eval_bool(expr, &ctx) {
+                                    break;
+                                }
+                            } else {
+                                break;
+                            }
                         }
                     }
                 }
@@ -210,13 +241,23 @@ impl<'a> KaitaiInterpreter<'a> {
         results
     }
 
-    fn parse_attr_once(&mut self, attr: &KsyAttr, index: Option<usize>, types: &HashMap<String, KsyType>, enums: &HashMap<String, HashMap<String, serde_yaml::Value>>) -> Option<ParsedField> {
-        if self.recursion_depth > MAX_RECURSION || self.field_count > MAX_FIELDS { return None; }
+    fn parse_attr_once(
+        &mut self,
+        attr: &KsyAttr,
+        index: Option<usize>,
+        types: &HashMap<String, KsyType>,
+        enums: &HashMap<String, HashMap<String, serde_yaml::Value>>,
+    ) -> Option<ParsedField> {
+        if self.recursion_depth > MAX_RECURSION || self.field_count > MAX_FIELDS {
+            return None;
+        }
 
         // Condition check
         if let Some(cond) = &attr.condition {
             let ctx = self.make_eval_ctx();
-            if !ExprEvaluator::eval_bool(cond, &ctx) { return None; }
+            if !ExprEvaluator::eval_bool(cond, &ctx) {
+                return None;
+            }
         }
 
         let start_offset = if attr.pos.is_some() {
@@ -289,7 +330,9 @@ impl<'a> KaitaiInterpreter<'a> {
         } else {
             // Raw bytes
             if computed_size > 0 {
-                self.stream.read_bytes(computed_size).map(|buf| (FieldValue::Bytes(buf), computed_size, Vec::new()))
+                self.stream
+                    .read_bytes(computed_size)
+                    .map(|buf| (FieldValue::Bytes(buf), computed_size, Vec::new()))
             } else {
                 Some((FieldValue::Bytes(Vec::new()), 0, Vec::new()))
             }
@@ -332,22 +375,56 @@ impl<'a> KaitaiInterpreter<'a> {
 
         let type_name = resolved_type.unwrap_or_else(|| "bytes".to_string());
         Some(ParsedField {
-            id: field_id, field_type: type_name,
-            offset: start_offset, size: final_size, value, color,
-            description: attr.doc.clone(), children, enum_label,
+            id: field_id,
+            field_type: type_name,
+            offset: start_offset,
+            size: final_size,
+            value,
+            color,
+            description: attr.doc.clone(),
+            children,
+            enum_label,
         })
     }
 
-    fn parse_typed_value(&mut self, type_str: &str, is_little: bool, size: usize, attr: &KsyAttr, start_offset: usize, old_pos: Option<u64>, types: &HashMap<String, KsyType>, enums: &HashMap<String, HashMap<String, serde_yaml::Value>>) -> Option<(FieldValue, usize, Vec<ParsedField>)> {
+    fn parse_typed_value(
+        &mut self,
+        type_str: &str,
+        is_little: bool,
+        size: usize,
+        attr: &KsyAttr,
+        start_offset: usize,
+        old_pos: Option<u64>,
+        types: &HashMap<String, KsyType>,
+        enums: &HashMap<String, HashMap<String, serde_yaml::Value>>,
+    ) -> Option<(FieldValue, usize, Vec<ParsedField>)> {
         match type_str {
             "u1" => Some((FieldValue::U8(self.stream.read_u1()?), 1, Vec::new())),
-            "u2" => { let v = if is_little { self.stream.read_u2le()? } else { self.stream.read_u2be()? }; Some((FieldValue::U16(v), 2, Vec::new())) }
-            "u4" => { let v = if is_little { self.stream.read_u4le()? } else { self.stream.read_u4be()? }; Some((FieldValue::U32(v), 4, Vec::new())) }
-            "u8" => { let v = if is_little { self.stream.read_u8le()? } else { self.stream.read_u8be()? }; Some((FieldValue::U64(v), 8, Vec::new())) }
+            "u2" => {
+                let v = if is_little { self.stream.read_u2le()? } else { self.stream.read_u2be()? };
+                Some((FieldValue::U16(v), 2, Vec::new()))
+            }
+            "u4" => {
+                let v = if is_little { self.stream.read_u4le()? } else { self.stream.read_u4be()? };
+                Some((FieldValue::U32(v), 4, Vec::new()))
+            }
+            "u8" => {
+                let v = if is_little { self.stream.read_u8le()? } else { self.stream.read_u8be()? };
+                Some((FieldValue::U64(v), 8, Vec::new()))
+            }
             "s1" => Some((FieldValue::I8(self.stream.read_s1()?), 1, Vec::new())),
-            "s2" => { let v = if is_little { self.stream.read_s2le()? } else { self.stream.read_s2be()? }; Some((FieldValue::I16(v), 2, Vec::new())) }
-            "s4" => { let v = if is_little { self.stream.read_s4le()? } else { self.stream.read_s4be()? }; Some((FieldValue::I32(v), 4, Vec::new())) }
-            "s8" => { let v = if is_little { self.stream.read_s8le()? } else { self.stream.read_s8be()? }; Some((FieldValue::I64(v), 8, Vec::new())) }
+            "s2" => {
+                let v = if is_little { self.stream.read_s2le()? } else { self.stream.read_s2be()? };
+                Some((FieldValue::I16(v), 2, Vec::new()))
+            }
+            "s4" => {
+                let v = if is_little { self.stream.read_s4le()? } else { self.stream.read_s4be()? };
+                Some((FieldValue::I32(v), 4, Vec::new()))
+            }
+            "s8" => {
+                let v = if is_little { self.stream.read_s8le()? } else { self.stream.read_s8be()? };
+                Some((FieldValue::I64(v), 8, Vec::new()))
+            }
             // Explicit endian types
             "u2le" => Some((FieldValue::U16(self.stream.read_u2le()?), 2, Vec::new())),
             "u2be" => Some((FieldValue::U16(self.stream.read_u2be()?), 2, Vec::new())),
@@ -362,8 +439,14 @@ impl<'a> KaitaiInterpreter<'a> {
             "s8le" => Some((FieldValue::I64(self.stream.read_s8le()?), 8, Vec::new())),
             "s8be" => Some((FieldValue::I64(self.stream.read_s8be()?), 8, Vec::new())),
             // Float types
-            "f4" => { let v = if is_little { self.read_f4le()? } else { self.read_f4be()? }; Some((FieldValue::F32(v), 4, Vec::new())) }
-            "f8" => { let v = if is_little { self.read_f8le()? } else { self.read_f8be()? }; Some((FieldValue::F64(v), 8, Vec::new())) }
+            "f4" => {
+                let v = if is_little { self.read_f4le()? } else { self.read_f4be()? };
+                Some((FieldValue::F32(v), 4, Vec::new()))
+            }
+            "f8" => {
+                let v = if is_little { self.read_f8le()? } else { self.read_f8be()? };
+                Some((FieldValue::F64(v), 8, Vec::new()))
+            }
             "f4le" => Some((FieldValue::F32(self.read_f4le()?), 4, Vec::new())),
             "f4be" => Some((FieldValue::F32(self.read_f4be()?), 4, Vec::new())),
             "f8le" => Some((FieldValue::F64(self.read_f8le()?), 8, Vec::new())),
@@ -387,19 +470,29 @@ impl<'a> KaitaiInterpreter<'a> {
                 let bytes_needed = (bits + 7) / 8;
                 let buf = self.stream.read_bytes(bytes_needed)?;
                 let mut val: u64 = 0;
-                for &b in &buf { val = (val << 8) | b as u64; }
+                for &b in &buf {
+                    val = (val << 8) | b as u64;
+                }
                 // Mask to exact bits
-                if bits < 64 { val &= (1u64 << bits) - 1; }
+                if bits < 64 {
+                    val &= (1u64 << bits) - 1;
+                }
                 Some((FieldValue::U64(val), bytes_needed, Vec::new()))
             }
             // Custom type
-            custom => {
-                self.parse_custom_type(custom, attr, start_offset, old_pos, types, enums)
-            }
+            custom => self.parse_custom_type(custom, attr, start_offset, old_pos, types, enums),
         }
     }
 
-    fn parse_custom_type(&mut self, type_name: &str, attr: &KsyAttr, start_offset: usize, _old_pos: Option<u64>, types: &HashMap<String, KsyType>, enums: &HashMap<String, HashMap<String, serde_yaml::Value>>) -> Option<(FieldValue, usize, Vec<ParsedField>)> {
+    fn parse_custom_type(
+        &mut self,
+        type_name: &str,
+        attr: &KsyAttr,
+        start_offset: usize,
+        _old_pos: Option<u64>,
+        types: &HashMap<String, KsyType>,
+        enums: &HashMap<String, HashMap<String, serde_yaml::Value>>,
+    ) -> Option<(FieldValue, usize, Vec<ParsedField>)> {
         let type_def = types.get(type_name)?;
         let field_id = attr.id.clone().unwrap_or_else(|| format!("field_{}", self.field_count));
         self.id_stack.push(field_id);
@@ -426,7 +519,7 @@ impl<'a> KaitaiInterpreter<'a> {
                 let old_stream_size = self.stream_size;
                 self.stream_size = sub_size;
                 let mut fields = Vec::new();
-                
+
                 // Parse sub_data by creating a new scope
                 let seq = type_def.seq.clone();
                 for nested_attr in &seq {
@@ -454,7 +547,7 @@ impl<'a> KaitaiInterpreter<'a> {
 
         self.recursion_depth -= 1;
         self.id_stack.pop();
-        
+
         let nested_fields = res?;
         let current_pos = self.stream.pos() as usize;
         let total_size = current_pos.saturating_sub(start_offset);
@@ -462,7 +555,14 @@ impl<'a> KaitaiInterpreter<'a> {
         Some((FieldValue::Struct, total_size, nested_fields))
     }
 
-    fn parse_substream_attr(&mut self, attr: &KsyAttr, data: &[u8], types: &HashMap<String, KsyType>, enums: &HashMap<String, HashMap<String, serde_yaml::Value>>, base_offset: usize) -> Vec<ParsedField> {
+    fn parse_substream_attr(
+        &mut self,
+        attr: &KsyAttr,
+        data: &[u8],
+        types: &HashMap<String, KsyType>,
+        enums: &HashMap<String, HashMap<String, serde_yaml::Value>>,
+        base_offset: usize,
+    ) -> Vec<ParsedField> {
         // Simple substream parsing: read from data slice
         // For now, we use the main stream approach but note the offset
         self.parse_attr_repeated(attr, types, enums)
@@ -471,15 +571,12 @@ impl<'a> KaitaiInterpreter<'a> {
     fn resolve_enum_label(&self, attr: &KsyAttr, value: &FieldValue, enums: &HashMap<String, HashMap<String, serde_yaml::Value>>) -> Option<String> {
         let enum_name = attr.enum_ref.as_ref()?;
         // Try local enums first, then global
-        let enum_def = enums.get(enum_name)
-            .or_else(|| self.ksy.enums.get(enum_name))?;
+        let enum_def = enums.get(enum_name).or_else(|| self.ksy.enums.get(enum_name))?;
         let key = value.to_i64().to_string();
         let val = enum_def.get(&key)?;
         match val {
             serde_yaml::Value::String(s) => Some(s.clone()),
-            serde_yaml::Value::Mapping(m) => {
-                m.get(&serde_yaml::Value::String("id".into()))?.as_str().map(|s| s.to_string())
-            }
+            serde_yaml::Value::Mapping(m) => m.get(&serde_yaml::Value::String("id".into()))?.as_str().map(|s| s.to_string()),
             _ => None,
         }
     }
@@ -488,9 +585,13 @@ impl<'a> KaitaiInterpreter<'a> {
         let mut expected_bytes = Vec::new();
         if let Some(arr) = expected.as_sequence() {
             for v in arr {
-                if let Some(s) = v.as_str() { expected_bytes.extend(s.as_bytes()); }
-                else if let Some(n) = v.as_i64() { expected_bytes.push(n as u8); }
-                else if let Some(u) = v.as_u64() { expected_bytes.push(u as u8); }
+                if let Some(s) = v.as_str() {
+                    expected_bytes.extend(s.as_bytes());
+                } else if let Some(n) = v.as_i64() {
+                    expected_bytes.push(n as u8);
+                } else if let Some(u) = v.as_u64() {
+                    expected_bytes.push(u as u8);
+                }
             }
         } else if let Some(s) = expected.as_str() {
             expected_bytes.extend(s.as_bytes());
@@ -498,7 +599,10 @@ impl<'a> KaitaiInterpreter<'a> {
         if !expected_bytes.is_empty() {
             if let FieldValue::Bytes(actual_bytes) = actual {
                 if actual_bytes != &expected_bytes {
-                    self.errors.push(ParseError { message: "contents mismatch".into(), offset: self.stream.pos() as usize });
+                    self.errors.push(ParseError {
+                        message: "contents mismatch".into(),
+                        offset: self.stream.pos() as usize,
+                    });
                 }
             }
         }

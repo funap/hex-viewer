@@ -1,6 +1,6 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{Cursor, Read};
-use serde::{Deserialize, Serialize};
 
 pub trait KaitaiStream {
     fn pos(&self) -> u64;
@@ -25,9 +25,15 @@ pub trait KaitaiStream {
 }
 
 impl<'a> KaitaiStream for Cursor<&'a [u8]> {
-    fn pos(&self) -> u64 { self.position() }
-    fn set_pos(&mut self, pos: u64) { self.set_position(pos); }
-    fn is_eof(&mut self) -> bool { self.position() as usize >= self.get_ref().len() }
+    fn pos(&self) -> u64 {
+        self.position()
+    }
+    fn set_pos(&mut self, pos: u64) {
+        self.set_position(pos);
+    }
+    fn is_eof(&mut self) -> bool {
+        self.position() as usize >= self.get_ref().len()
+    }
     fn read_u1(&mut self) -> Option<u8> {
         let mut b = [0u8; 1];
         self.read_exact(&mut b).ok()?;
@@ -63,7 +69,9 @@ impl<'a> KaitaiStream for Cursor<&'a [u8]> {
         self.read_exact(&mut b).ok()?;
         Some(u64::from_be_bytes(b))
     }
-    fn read_s1(&mut self) -> Option<i8> { Some(self.read_u1()? as i8) }
+    fn read_s1(&mut self) -> Option<i8> {
+        Some(self.read_u1()? as i8)
+    }
     fn read_s2le(&mut self) -> Option<i16> {
         let mut b = [0u8; 2];
         self.read_exact(&mut b).ok()?;

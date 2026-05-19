@@ -4,11 +4,11 @@ use gpui_component::ActiveTheme;
 
 use crate::actions::*;
 
-use crate::ui::panels::editor_panel::EditorPanel;
+use crate::ui::components::activity_bar::{Activity, ActivityBar, ActivityBarEvent};
 use crate::ui::components::file_tree_view::{FileTreeView, FileTreeViewEvent};
-use crate::ui::panels::left_panel::{LeftPanel, LeftPanelTab};
-use crate::ui::components::activity_bar::{ActivityBar, Activity, ActivityBarEvent};
 use crate::ui::components::toolbar::AppTitleBar;
+use crate::ui::panels::editor_panel::EditorPanel;
+use crate::ui::panels::left_panel::{LeftPanel, LeftPanelTab};
 
 use crate::app_state::AppState;
 use crate::core::editor::Editor;
@@ -19,8 +19,6 @@ use gpui_component::menu::AppMenuBar;
 use gpui_component::resizable::{h_resizable, resizable_panel};
 use std::path::PathBuf;
 use std::sync::Arc;
-
-
 
 pub struct Workspace {
     pub dock_area: Entity<DockArea>,
@@ -89,8 +87,7 @@ impl Workspace {
 
         cx.on_focus_in(&file_tree.read(cx).focus_handle(cx), window, |this, _, cx| {
             this.active_editor = None;
-            this.status_bar
-                .update(cx, |status_bar, _| status_bar.set_active_editor(None));
+            this.status_bar.update(cx, |status_bar, _| status_bar.set_active_editor(None));
             this.left_panel.update(cx, |panel, cx| {
                 panel.set_editor(None, cx);
             });
@@ -235,13 +232,17 @@ impl Workspace {
             println!("OpenFileDialog prompt returned");
             if let Some(path) = path.await.ok().and_then(|r| r.ok()).flatten().and_then(|mut v| v.pop()) {
                 println!("Selected path: {:?}", path);
-                window.update(|window, cx| {
-                    println!("Directly calling OpenFile handler for {:?}", path);
-                    view.update(cx, |this, cx| {
-                        let action = crate::actions::OpenFile { path: path.to_string_lossy().to_string() };
-                        this.on_action_open_file(&action, window, cx);
-                    });
-                }).ok();
+                window
+                    .update(|window, cx| {
+                        println!("Directly calling OpenFile handler for {:?}", path);
+                        view.update(cx, |this, cx| {
+                            let action = crate::actions::OpenFile {
+                                path: path.to_string_lossy().to_string(),
+                            };
+                            this.on_action_open_file(&action, window, cx);
+                        });
+                    })
+                    .ok();
             } else {
                 println!("No path selected or error occurred");
             }
@@ -324,18 +325,20 @@ impl Workspace {
         let view = cx.entity();
         cx.spawn_in(window, async move |_, window| {
             let editor_service_opt = window.update(|_, cx| AppState::global(cx).editor_service.clone()).ok();
-            
+
             if let Some(editor_service) = editor_service_opt {
                 println!("Opening file through editor service...");
                 match editor_service.open_file(std::path::PathBuf::from(&file_path)).await {
                     Ok(document) => {
                         println!("File opened successfully. Adding EditorPanel directly");
-                        window.update(|window, cx| {
-                            view.update(cx, |this, cx| {
-                                let action = AddEditorPanel(document);
-                                this.on_action_add_editor_panel(&action, window, cx);
-                            });
-                        }).ok();
+                        window
+                            .update(|window, cx| {
+                                view.update(cx, |this, cx| {
+                                    let action = AddEditorPanel(document);
+                                    this.on_action_add_editor_panel(&action, window, cx);
+                                });
+                            })
+                            .ok();
                     }
                     Err(e) => {
                         println!("Failed to open file: {:?}", e);
@@ -375,17 +378,11 @@ impl Workspace {
                                     view
                                 });
 
-                                cx.on_focus_in(
-                                    &diff_view.read(cx).focus_handle(cx),
-                                    window,
-                                    |this, _, cx| {
-                                        this.active_editor = None;
-                                        this.status_bar.update(cx, |status_bar, _| {
-                                            status_bar.set_active_editor(None)
-                                        });
-                                        cx.notify();
-                                    },
-                                )
+                                cx.on_focus_in(&diff_view.read(cx).focus_handle(cx), window, |this, _, cx| {
+                                    this.active_editor = None;
+                                    this.status_bar.update(cx, |status_bar, _| status_bar.set_active_editor(None));
+                                    cx.notify();
+                                })
                                 .detach();
 
                                 let panel = Arc::new(diff_view);
@@ -424,7 +421,7 @@ impl Workspace {
         };
 
         let current_tab = self.left_panel.read(cx).active_tab;
-        
+
         // If the same tab is already active and the panel is visible, hide it.
         // Otherwise, switch to the tab and ensure it's visible.
         if self.is_left_panel_visible && current_tab == tab {
@@ -435,7 +432,7 @@ impl Workspace {
                 p.set_tab(tab, cx);
             });
         }
-        
+
         // Ensure the activity bar reflects the new state immediately
         self.sync_activity_bar(cx);
         cx.notify();
@@ -453,13 +450,13 @@ impl Workspace {
             if let Some(handle) = file {
                 let path = handle.path().to_path_buf();
                 match std::fs::read_to_string(&path) {
-                    Ok(contents) => {
-                        match serde_yaml::from_str::<crate::core::structure::KsyDefinition>(&contents) {
-                            Ok(ksy) => {
-                                window.update(|window, cx| {
+                    Ok(contents) => match serde_yaml::from_str::<crate::core::structure::KsyDefinition>(&contents) {
+                        Ok(ksy) => {
+                            window
+                                .update(|window, cx| {
                                     view.update(cx, |this, cx| {
                                         this.ksy_definition = Some(ksy.clone());
-                                        
+
                                         if let Some(editor_entity) = &this.active_editor {
                                             editor_entity.update(cx, |editor, cx| {
                                                 editor.set_kaitai_definition(ksy.clone());
@@ -476,13 +473,13 @@ impl Workspace {
                                         this.is_left_panel_visible = true;
                                         cx.notify();
                                     });
-                                }).ok();
-                            }
-                            Err(e) => {
-                                eprintln!("Failed to parse KSY definition: {}", e);
-                            }
+                                })
+                                .ok();
                         }
-                    }
+                        Err(e) => {
+                            eprintln!("Failed to parse KSY definition: {}", e);
+                        }
+                    },
                     Err(e) => {
                         eprintln!("Failed to read KSY file at {:?}: {}", path, e);
                     }
@@ -517,13 +514,15 @@ impl Workspace {
         let left_panel = self.left_panel.clone();
         cx.spawn_in(window, async move |_, window| {
             if let Some(path) = path.await.ok().and_then(|r| r.ok()).flatten().and_then(|mut p| p.pop()) {
-                window.update(|_, cx| {
-                    left_panel.update(cx, |p, cx| {
-                        p.file_tree.update(cx, |ft, cx| {
-                            ft.set_root_path(path, cx);
+                window
+                    .update(|_, cx| {
+                        left_panel.update(cx, |p, cx| {
+                            p.file_tree.update(cx, |ft, cx| {
+                                ft.set_root_path(path, cx);
+                            });
                         });
-                    });
-                }).ok();
+                    })
+                    .ok();
             }
         })
         .detach();
@@ -554,16 +553,11 @@ impl Workspace {
         }
 
         let settings_panel = cx.new(|cx| SettingsPanel::new(window, cx));
-        cx.on_focus_in(
-            &settings_panel.read(cx).focus_handle(cx),
-            window,
-            |this, _, cx| {
-                this.active_editor = None;
-                this.status_bar
-                    .update(cx, |status_bar, _| status_bar.set_active_editor(None));
-                cx.notify();
-            },
-        )
+        cx.on_focus_in(&settings_panel.read(cx).focus_handle(cx), window, |this, _, cx| {
+            this.active_editor = None;
+            this.status_bar.update(cx, |status_bar, _| status_bar.set_active_editor(None));
+            cx.notify();
+        })
         .detach();
         let panel = Arc::new(settings_panel);
 
@@ -651,10 +645,6 @@ impl Workspace {
             }
         })
     }
-
-
-
-
 
     fn check_has_panels(&self, cx: &App) -> bool {
         let dock_area = self.dock_area.read(cx);
@@ -749,45 +739,34 @@ impl Render for Workspace {
             .flex_col()
             .child(self.title_bar.clone())
             .child(
-                div()
-                    .flex()
-                    .flex_row()
-                    .flex_1()
-                    .child(self.activity_bar.clone())
-                    .child(
-                        h_resizable("workspace-h-resize")
-                            .child(
-                                resizable_panel()
-                                    .visible(self.is_left_panel_visible)
-                                    .size(px(250.))
-                                    .child(self.left_panel.clone()),
-                            )
-                            .child(
-                                resizable_panel()
-                                    .child(
+                div().flex().flex_row().flex_1().child(self.activity_bar.clone()).child(
+                    h_resizable("workspace-h-resize")
+                        .child(
+                            resizable_panel()
+                                .visible(self.is_left_panel_visible)
+                                .size(px(250.))
+                                .child(self.left_panel.clone()),
+                        )
+                        .child(
+                            resizable_panel().child(div().relative().size_full().flex().flex_col().child(self.dock_area.clone()).when(
+                                !self.check_has_panels(cx),
+                                |this| {
+                                    this.child(
                                         div()
-                                            .relative()
+                                            .absolute()
+                                            .top_0()
+                                            .left_0()
                                             .size_full()
                                             .flex()
-                                            .flex_col()
-                                            .child(self.dock_area.clone())
-                                            .when(!self.check_has_panels(cx), |this| {
-                                                this.child(
-                                                    div()
-                                                        .absolute()
-                                                        .top_0()
-                                                        .left_0()
-                                                        .size_full()
-                                                        .flex()
-                                                        .justify_center()
-                                                        .items_center()
-                                                        .bg(cx.theme().background)
-                                                        .child(div().text_xl().text_color(cx.theme().muted_foreground).child("Nothing is open")),
-                                                )
-                                            }),
-                                    ),
-                            ),
-                    ),
+                                            .justify_center()
+                                            .items_center()
+                                            .bg(cx.theme().background)
+                                            .child(div().text_xl().text_color(cx.theme().muted_foreground).child("Nothing is open")),
+                                    )
+                                },
+                            )),
+                        ),
+                ),
             )
             .child(self.status_bar.clone())
             .children(Root::render_dialog_layer(window, cx))

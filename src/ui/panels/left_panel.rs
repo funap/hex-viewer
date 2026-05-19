@@ -2,8 +2,8 @@ use gpui::*;
 use gpui_component::theme::Theme;
 
 use crate::core::editor::Editor;
-use crate::ui::components::struct_tree_view::StructTreeView;
 use crate::ui::components::file_tree_view::{FileTreeView, FileTreeViewEvent};
+use crate::ui::components::struct_tree_view::StructTreeView;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum LeftPanelTab {
@@ -23,11 +23,10 @@ impl LeftPanel {
     pub fn new(file_tree: Entity<FileTreeView>, cx: &mut Context<Self>) -> Self {
         let struct_tree = cx.new(|cx| StructTreeView::new(Vec::new(), None, cx));
 
-        cx.subscribe(&file_tree, |_, _, event: &FileTreeViewEvent, cx| {
-            match event {
-                FileTreeViewEvent::OpenFile(path) => cx.emit(FileTreeViewEvent::OpenFile(path.clone())),
-            }
-        }).detach();
+        cx.subscribe(&file_tree, |_, _, event: &FileTreeViewEvent, cx| match event {
+            FileTreeViewEvent::OpenFile(path) => cx.emit(FileTreeViewEvent::OpenFile(path.clone())),
+        })
+        .detach();
 
         Self {
             file_tree,
@@ -50,15 +49,10 @@ impl LeftPanel {
 
 impl Render for LeftPanel {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .flex()
-            .flex_col()
-            .w_full()
-            .h_full()
-            .child(if self.active_tab == LeftPanelTab::Files {
-                self.file_tree.clone().into_any_element()
-            } else {
-                self.struct_tree.clone().into_any_element()
-            })
+        div().flex().flex_col().w_full().h_full().child(if self.active_tab == LeftPanelTab::Files {
+            self.file_tree.clone().into_any_element()
+        } else {
+            self.struct_tree.clone().into_any_element()
+        })
     }
 }
