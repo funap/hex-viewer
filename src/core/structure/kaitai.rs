@@ -26,7 +26,7 @@ impl<'a> KaitaiStream<'a> {
 
     pub fn set_pos(&mut self, pos: u64) {
         self.align_to_byte();
-        self.pos = (pos as usize).min(self.data.len());
+        self.pos = usize::try_from(pos).unwrap_or(usize::MAX).min(self.data.len());
     }
 
     pub fn is_eof(&self) -> bool {
@@ -127,161 +127,88 @@ impl<'a> KaitaiStream<'a> {
         Some(res)
     }
 
-    pub fn read_u1(&mut self) -> Option<u8> {
+    fn read_fixed<const N: usize>(&mut self) -> Option<[u8; N]> {
         self.align_to_byte();
-        if self.pos < self.data.len() {
-            let val = self.data[self.pos];
-            self.pos += 1;
-            Some(val)
+        if self.pos + N <= self.data.len() {
+            let mut bytes = [0u8; N];
+            bytes.copy_from_slice(&self.data[self.pos..self.pos + N]);
+            self.pos += N;
+            Some(bytes)
         } else {
             None
         }
+    }
+
+    pub fn read_u1(&mut self) -> Option<u8> {
+        self.read_fixed::<1>().map(|b| b[0])
     }
 
     pub fn read_u2le(&mut self) -> Option<u16> {
-        self.align_to_byte();
-        if self.pos + 2 <= self.data.len() {
-            let val = u16::from_le_bytes([self.data[self.pos], self.data[self.pos + 1]]);
-            self.pos += 2;
-            Some(val)
-        } else {
-            None
-        }
+        self.read_fixed::<2>().map(u16::from_le_bytes)
     }
 
     pub fn read_u2be(&mut self) -> Option<u16> {
-        self.align_to_byte();
-        if self.pos + 2 <= self.data.len() {
-            let val = u16::from_be_bytes([self.data[self.pos], self.data[self.pos + 1]]);
-            self.pos += 2;
-            Some(val)
-        } else {
-            None
-        }
+        self.read_fixed::<2>().map(u16::from_be_bytes)
     }
 
     pub fn read_u4le(&mut self) -> Option<u32> {
-        self.align_to_byte();
-        if self.pos + 4 <= self.data.len() {
-            let mut bytes = [0u8; 4];
-            bytes.copy_from_slice(&self.data[self.pos..self.pos + 4]);
-            self.pos += 4;
-            Some(u32::from_le_bytes(bytes))
-        } else {
-            None
-        }
+        self.read_fixed::<4>().map(u32::from_le_bytes)
     }
 
     pub fn read_u4be(&mut self) -> Option<u32> {
-        self.align_to_byte();
-        if self.pos + 4 <= self.data.len() {
-            let mut bytes = [0u8; 4];
-            bytes.copy_from_slice(&self.data[self.pos..self.pos + 4]);
-            self.pos += 4;
-            Some(u32::from_be_bytes(bytes))
-        } else {
-            None
-        }
+        self.read_fixed::<4>().map(u32::from_be_bytes)
     }
 
     pub fn read_u8le(&mut self) -> Option<u64> {
-        self.align_to_byte();
-        if self.pos + 8 <= self.data.len() {
-            let mut bytes = [0u8; 8];
-            bytes.copy_from_slice(&self.data[self.pos..self.pos + 8]);
-            self.pos += 8;
-            Some(u64::from_le_bytes(bytes))
-        } else {
-            None
-        }
+        self.read_fixed::<8>().map(u64::from_le_bytes)
     }
 
     pub fn read_u8be(&mut self) -> Option<u64> {
-        self.align_to_byte();
-        if self.pos + 8 <= self.data.len() {
-            let mut bytes = [0u8; 8];
-            bytes.copy_from_slice(&self.data[self.pos..self.pos + 8]);
-            self.pos += 8;
-            Some(u64::from_be_bytes(bytes))
-        } else {
-            None
-        }
+        self.read_fixed::<8>().map(u64::from_be_bytes)
     }
 
     pub fn read_s1(&mut self) -> Option<i8> {
-        Some(self.read_u1()? as i8)
+        self.read_u1().map(|v| v as i8)
     }
 
     pub fn read_s2le(&mut self) -> Option<i16> {
-        Some(self.read_u2le()? as i16)
+        self.read_u2le().map(|v| v as i16)
     }
 
     pub fn read_s2be(&mut self) -> Option<i16> {
-        Some(self.read_u2be()? as i16)
+        self.read_u2be().map(|v| v as i16)
     }
 
     pub fn read_s4le(&mut self) -> Option<i32> {
-        Some(self.read_u4le()? as i32)
+        self.read_u4le().map(|v| v as i32)
     }
 
     pub fn read_s4be(&mut self) -> Option<i32> {
-        Some(self.read_u4be()? as i32)
+        self.read_u4be().map(|v| v as i32)
     }
 
     pub fn read_s8le(&mut self) -> Option<i64> {
-        Some(self.read_u8le()? as i64)
+        self.read_u8le().map(|v| v as i64)
     }
 
     pub fn read_s8be(&mut self) -> Option<i64> {
-        Some(self.read_u8be()? as i64)
+        self.read_u8be().map(|v| v as i64)
     }
 
     pub fn read_f4le(&mut self) -> Option<f32> {
-        self.align_to_byte();
-        if self.pos + 4 <= self.data.len() {
-            let mut bytes = [0u8; 4];
-            bytes.copy_from_slice(&self.data[self.pos..self.pos + 4]);
-            self.pos += 4;
-            Some(f32::from_le_bytes(bytes))
-        } else {
-            None
-        }
+        self.read_fixed::<4>().map(f32::from_le_bytes)
     }
 
     pub fn read_f4be(&mut self) -> Option<f32> {
-        self.align_to_byte();
-        if self.pos + 4 <= self.data.len() {
-            let mut bytes = [0u8; 4];
-            bytes.copy_from_slice(&self.data[self.pos..self.pos + 4]);
-            self.pos += 4;
-            Some(f32::from_be_bytes(bytes))
-        } else {
-            None
-        }
+        self.read_fixed::<4>().map(f32::from_be_bytes)
     }
 
     pub fn read_f8le(&mut self) -> Option<f64> {
-        self.align_to_byte();
-        if self.pos + 8 <= self.data.len() {
-            let mut bytes = [0u8; 8];
-            bytes.copy_from_slice(&self.data[self.pos..self.pos + 8]);
-            self.pos += 8;
-            Some(f64::from_le_bytes(bytes))
-        } else {
-            None
-        }
+        self.read_fixed::<8>().map(f64::from_le_bytes)
     }
 
     pub fn read_f8be(&mut self) -> Option<f64> {
-        self.align_to_byte();
-        if self.pos + 8 <= self.data.len() {
-            let mut bytes = [0u8; 8];
-            bytes.copy_from_slice(&self.data[self.pos..self.pos + 8]);
-            self.pos += 8;
-            Some(f64::from_be_bytes(bytes))
-        } else {
-            None
-        }
+        self.read_fixed::<8>().map(f64::from_be_bytes)
     }
 
     pub fn read_bytes(&mut self, size: usize) -> Option<Vec<u8>> {
@@ -301,34 +228,40 @@ impl<'a> KaitaiStream<'a> {
         self.read_bytes(size)
     }
 
-    pub fn read_bytes_full(&mut self) -> Option<Vec<u8>> {
-        self.read_bytes_remaining()
-    }
-
-    pub fn read_bytes_term(&mut self, term: u8, include: bool, consume: bool, _eos_error: bool) -> Option<Vec<u8>> {
+    /// Reads bytes until the terminator byte is found.
+    ///
+    /// - `include`: if true, the terminator byte is included in the result.
+    /// - `consume`: if true, the stream position advances past the terminator.
+    /// - `eos_error`: if true, returns None when EOF is reached without finding the terminator.
+    pub fn read_bytes_term(&mut self, term: u8, include: bool, consume: bool, eos_error: bool) -> Option<Vec<u8>> {
         self.align_to_byte();
         let mut buf = Vec::new();
         let mut idx = self.pos;
+        let mut found = false;
         while idx < self.data.len() {
             let b = self.data[idx];
             if b == term {
+                found = true;
                 if include {
                     buf.push(b);
                 }
                 if consume {
                     idx += 1;
                 }
-                self.pos = idx;
-                return Some(buf);
+                break;
             }
             buf.push(b);
             idx += 1;
         }
-        self.pos = idx;
-        Some(buf)
+        if eos_error && !found {
+            None
+        } else {
+            self.pos = idx;
+            Some(buf)
+        }
     }
 
-    pub fn read_bytes_term_multi(&mut self, terminator: &[u8], include: bool, consume: bool, _eos_error: bool) -> Option<Vec<u8>> {
+    pub fn read_bytes_term_multi(&mut self, terminator: &[u8], include: bool, consume: bool, eos_error: bool) -> Option<Vec<u8>> {
         self.align_to_byte();
         let unit_size = terminator.len();
         if unit_size == 0 {
@@ -343,7 +276,7 @@ impl<'a> KaitaiStream<'a> {
         
         while i_data < len {
             if data[i_data] != terminator[i_term] {
-                i_data += unit_size - i_term;
+                i_data = i_data - i_term + 1;
                 i_term = 0;
                 continue;
             }
@@ -361,6 +294,8 @@ impl<'a> KaitaiStream<'a> {
             let result = data[..result_len].to_vec();
             self.pos += if consume { match_len } else { match_len - unit_size };
             Some(result)
+        } else if eos_error {
+            None
         } else {
             let result = data.to_vec();
             self.pos = self.data.len();
@@ -395,14 +330,9 @@ pub mod process {
         if group_size != 1 {
             return Err(format!("unable to rotate group of {} bytes yet", group_size));
         }
-        let mask = group_size * 8 - 1;
-        let amount = amount & (mask as u32);
-        let anti_amount = (8 - amount) & 7;
-        
+        let amount = amount % 8;
         let result = data.iter()
-            .map(|&b| {
-                ((b << amount) & 0xff) | (b >> anti_amount)
-            })
+            .map(|&b| b.rotate_left(amount))
             .collect();
         Ok(result)
     }
@@ -417,34 +347,25 @@ pub mod process {
 }
 
 pub fn bytes_strip_right(data: &[u8], pad_byte: u8) -> Vec<u8> {
-    let mut new_len = data.len();
-    while new_len > 0 && data[new_len - 1] == pad_byte {
-        new_len -= 1;
-    }
-    data[..new_len].to_vec()
+    let end = data.iter().rposition(|&b| b != pad_byte).map_or(0, |i| i + 1);
+    data[..end].to_vec()
 }
 
 pub fn bytes_terminate(data: &[u8], term: u8, include: bool) -> Vec<u8> {
-    let mut new_len = 0;
-    let max_len = data.len();
-    while new_len < max_len && data[new_len] != term {
-        new_len += 1;
+    let pos = data.iter().position(|&b| b == term);
+    match pos {
+        Some(i) if include => data[..=i].to_vec(),
+        Some(i) => data[..i].to_vec(),
+        None => data.to_vec(),
     }
-    if include && new_len < max_len {
-        new_len += 1;
-    }
-    data[..new_len].to_vec()
 }
 
 pub fn byte_array_compare(a: &[u8], b: &[u8]) -> i32 {
-    let min_len = a.len().min(b.len());
-    for i in 0..min_len {
-        let cmp = a[i] as i32 - b[i] as i32;
-        if cmp != 0 {
-            return cmp;
-        }
+    match a.cmp(b) {
+        std::cmp::Ordering::Less => -1,
+        std::cmp::Ordering::Equal => 0,
+        std::cmp::Ordering::Greater => 1,
     }
-    a.len() as i32 - b.len() as i32
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

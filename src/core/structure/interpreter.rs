@@ -696,10 +696,6 @@ impl KaitaiInterpreter {
     }
 
     fn read_remaining(&self, stream: &mut KaitaiStream) -> Vec<u8> {
-        let mut buf = Vec::new();
-        while let Some(b) = stream.read_u1() {
-            buf.push(b);
-        }
-        buf
+        stream.read_bytes_remaining().unwrap_or_default()
     }
 }

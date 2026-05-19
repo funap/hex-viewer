@@ -264,4 +264,22 @@ seq:
         assert_eq!(ExprEvaluator::eval_i64("flags | 0x03", &ctx), 0b1010_1111);
         assert_eq!(ExprEvaluator::eval_i64("1 << 3", &ctx), 8);
     }
+
+    #[test]
+    fn test_term_multi_backtrack() {
+        let data = vec![0xAA, 0xAA, 0xBB, 0xCC];
+        let mut stream = KaitaiStream::new(&data);
+        let terminator = vec![0xAA, 0xBB];
+        let res = stream.read_bytes_term_multi(&terminator, false, true, true);
+        assert_eq!(res, Some(vec![0xAA])); // should consume AA, AA, BB and return AA
+        assert_eq!(stream.pos(), 3);
+    }
+
+    #[test]
+    fn test_term_eos_error() {
+        let data = vec![0x11, 0x22, 0x33];
+        let mut stream = KaitaiStream::new(&data);
+        let res = stream.read_bytes_term(0x00, false, true, true);
+        assert_eq!(res, None); // terminator not found, and eos_error is true
+    }
 }
