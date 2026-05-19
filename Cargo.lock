@@ -7426,6 +7426,7 @@ dependencies = [
  "anyhow",
  "autocorrect",
  "bstr",
+ "flate2",
  "gpui",
  "gpui-component",
  "gpui-component-assets",

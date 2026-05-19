@@ -2,8 +2,7 @@
 mod tests {
     use super::*;
     use crate::core::structure::types::FieldValue;
-    use crate::core::structure::{KaitaiInterpreter, KsyDefinition};
-    use std::io::Cursor;
+    use crate::core::structure::{KaitaiInterpreter, KsyDefinition, KaitaiStream};
 
     fn parse_ksy_yaml(yaml: &str) -> KsyDefinition {
         serde_yaml::from_str(yaml).expect("Failed to parse YAML")
@@ -22,9 +21,9 @@ seq:
 "#;
         let ksy = parse_ksy_yaml(yaml);
         let data = vec![0x01, 0x02, 0x00, 0x00, 0x00, 0x05];
-        let mut stream = Cursor::new(data.as_slice());
-        let interpreter = KaitaiInterpreter::new(ksy, &mut stream);
-        let result = interpreter.parse();
+        let mut stream = KaitaiStream::new(&data);
+        let interpreter = KaitaiInterpreter::new(ksy);
+        let result = interpreter.parse(&mut stream);
 
         assert_eq!(result.fields.len(), 2);
         assert_eq!(result.fields[0].id, "val1");
@@ -59,9 +58,9 @@ seq:
 "#;
         let ksy = parse_ksy_yaml(yaml);
         let data = vec![0x01, 0xFF, 0x00];
-        let mut stream = Cursor::new(data.as_slice());
-        let interpreter = KaitaiInterpreter::new(ksy.clone(), &mut stream);
-        let result1 = interpreter.parse();
+        let mut stream = KaitaiStream::new(&data);
+        let interpreter = KaitaiInterpreter::new(ksy.clone());
+        let result1 = interpreter.parse(&mut stream);
 
         assert_eq!(result1.fields.len(), 2);
         if let FieldValue::U16(v) = result1.fields[1].value {
@@ -71,9 +70,9 @@ seq:
         }
 
         let data2 = vec![0x02, 0x11, 0x22, 0x33, 0x44];
-        let mut stream2 = Cursor::new(data2.as_slice());
-        let interpreter2 = KaitaiInterpreter::new(ksy, &mut stream2);
-        let result2 = interpreter2.parse();
+        let mut stream2 = KaitaiStream::new(&data2);
+        let interpreter2 = KaitaiInterpreter::new(ksy);
+        let result2 = interpreter2.parse(&mut stream2);
 
         assert_eq!(result2.fields.len(), 2);
         if let FieldValue::U32(v) = result2.fields[1].value {
@@ -96,9 +95,9 @@ seq:
 "#;
         let ksy = parse_ksy_yaml(yaml);
         let data = vec![0xAA, 0xBB, 0xCC, 0xDD];
-        let mut stream = Cursor::new(data.as_slice());
-        let interpreter = KaitaiInterpreter::new(ksy, &mut stream);
-        let result = interpreter.parse();
+        let mut stream = KaitaiStream::new(&data);
+        let interpreter = KaitaiInterpreter::new(ksy);
+        let result = interpreter.parse(&mut stream);
 
         assert_eq!(result.fields.len(), 2);
         assert_eq!(result.fields[1].size, 3);
@@ -107,6 +106,137 @@ seq:
         } else {
             panic!("Expected Bytes");
         }
+    }
+
+    #[test]
+    fn test_bit_fields_parsing() {
+        let yaml = r#"
+meta:
+  id: test_bits
+seq:
+  - id: part1
+    type: b4
+  - id: part2
+    type: b4
+  - id: part3
+    type: b8
+"#;
+        let ksy = parse_ksy_yaml(yaml);
+        // 0b1011_0011 (0xB3), 0b0101_1010 (0x5A)
+        // part1: 4 bits -> 0b1011 (11)
+        // part2: 4 bits -> 0b0011 (3)
+        // part3: 8 bits -> 0x5A (90)
+        let data = vec![0xB3, 0x5A];
+        let mut stream = KaitaiStream::new(&data);
+        let interpreter = KaitaiInterpreter::new(ksy);
+        let result = interpreter.parse(&mut stream);
+
+        assert_eq!(result.fields.len(), 3);
+        
+        assert_eq!(result.fields[0].id, "part1");
+        if let FieldValue::U64(v) = result.fields[0].value {
+            assert_eq!(v, 11);
+        } else {
+            panic!("Expected U64");
+        }
+
+        assert_eq!(result.fields[1].id, "part2");
+        if let FieldValue::U64(v) = result.fields[1].value {
+            assert_eq!(v, 3);
+        } else {
+            panic!("Expected U64");
+        }
+
+        assert_eq!(result.fields[2].id, "part3");
+        if let FieldValue::U64(v) = result.fields[2].value {
+            assert_eq!(v, 90);
+        } else {
+            panic!("Expected U64");
+        }
+    }
+
+    #[test]
+    fn test_process_xor() {
+        let yaml = r#"
+meta:
+  id: test_xor
+seq:
+  - id: key
+    type: u1
+  - id: body
+    size: 4
+    process: xor(key)
+"#;
+        let ksy = parse_ksy_yaml(yaml);
+        let data = vec![0x55, 0x11 ^ 0x55, 0x22 ^ 0x55, 0x33 ^ 0x55, 0x44 ^ 0x55];
+        let mut stream = KaitaiStream::new(&data);
+        let interpreter = KaitaiInterpreter::new(ksy);
+        let result = interpreter.parse(&mut stream);
+
+        assert_eq!(result.fields.len(), 2);
+        assert_eq!(result.fields[1].id, "body");
+        if let FieldValue::Bytes(ref b) = result.fields[1].value {
+            assert_eq!(b, &[0x11, 0x22, 0x33, 0x44]);
+        } else {
+            panic!("Expected Bytes");
+        }
+    }
+
+    #[test]
+    fn test_process_zlib() {
+        // Zlib compressed "Hello"
+        let compressed = vec![
+            120, 156, 243, 72, 205, 201, 201, 7, 0, 5, 140, 1, 245
+        ];
+        
+        let yaml = r#"
+meta:
+  id: test_zlib
+seq:
+  - id: body
+    size: 13
+    process: zlib
+"#;
+        let ksy = parse_ksy_yaml(yaml);
+        let mut stream = KaitaiStream::new(&compressed);
+        let interpreter = KaitaiInterpreter::new(ksy);
+        let result = interpreter.parse(&mut stream);
+
+        assert_eq!(result.fields.len(), 1);
+        if let FieldValue::Bytes(ref b) = result.fields[0].value {
+            assert_eq!(std::str::from_utf8(b).unwrap(), "Hello");
+        } else {
+            panic!("Expected Bytes");
+        }
+    }
+
+    #[test]
+    fn test_ensure_fixed_contents() {
+        let yaml = r#"
+meta:
+  id: test_fixed
+seq:
+  - id: magic
+    contents: [0x89, "PNG"]
+  - id: rest
+    size: 1
+"#;
+        let ksy = parse_ksy_yaml(yaml);
+        let data = vec![0x89, b'P', b'N', b'G', 0xFF];
+        let mut stream = KaitaiStream::new(&data);
+        let interpreter = KaitaiInterpreter::new(ksy);
+        let result = interpreter.parse(&mut stream);
+
+        assert_eq!(result.errors.len(), 0);
+        assert_eq!(result.fields.len(), 2);
+
+        // Test invalid magic
+        let invalid_data = vec![0x89, b'P', b'D', b'G', 0xFF];
+        let mut stream2 = KaitaiStream::new(&invalid_data);
+        let interpreter2 = KaitaiInterpreter::new(parse_ksy_yaml(yaml));
+        let result2 = interpreter2.parse(&mut stream2);
+        assert_eq!(result2.errors.len(), 1);
+        assert_eq!(result2.errors[0].message, "contents mismatch");
     }
 
     #[test]

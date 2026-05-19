@@ -1049,10 +1049,10 @@ impl Editor {
 
         let buffer_lock = self.document.read().unwrap();
         let bytes = buffer_lock.buffer.data();
-        let mut stream = std::io::Cursor::new(bytes);
+        let mut stream = crate::core::structure::KaitaiStream::new(bytes);
 
-        let interpreter = crate::core::structure::KaitaiInterpreter::new(ksy.clone(), &mut stream);
-        let result = interpreter.parse();
+        let interpreter = crate::core::structure::KaitaiInterpreter::new(ksy.clone());
+        let result = interpreter.parse(&mut stream);
 
         self.ksy_definition = Some(ksy);
         self.parse_result = Some(result);

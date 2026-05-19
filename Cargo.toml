@@ -19,3 +19,5 @@ bstr = "1.9"
 rfd = "0.17.2"
 serde_yaml = "0.9"
 memmap2 = "0.9.3"
+flate2 = "1.0"
+
