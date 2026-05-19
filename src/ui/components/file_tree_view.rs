@@ -221,33 +221,7 @@ impl FileTreeView {
 impl Render for FileTreeView {
     fn render(&mut self, _: &mut gpui::Window, cx: &mut gpui::Context<Self>) -> impl gpui::IntoElement {
         let view = cx.entity();
-
-        if self.root_path.is_none() {
-            return v_flex()
-                .id("file-tree-view")
-                .key_context(CONTEXT)
-                .size_full()
-                .justify_center()
-                .items_center()
-                .child(
-                    div().child(
-                        div()
-                            .on_mouse_down(
-                                gpui::MouseButton::Left,
-                                cx.listener(|this, _, window, cx| {
-                                    this.prompt_open_folder(window, cx);
-                                }),
-                            )
-                            .id("open-folder-btn")
-                            .p_2()
-                            .bg(cx.theme().accent)
-                            .text_color(cx.theme().accent_foreground)
-                            .rounded_md()
-                            .cursor_pointer()
-                            .child("Open Folder"),
-                    ),
-                );
-        }
+        let is_empty = self.root_path.is_none();
 
         v_flex()
             .id("file-tree-view")
@@ -263,93 +237,128 @@ impl Render for FileTreeView {
             .border_r(px(1.0))
             .border_color(cx.theme().accent)
             .child(div().p_2().text_sm().text_color(cx.theme().muted_foreground).child("FILES"))
-            .child(tree(&self.tree_state, {
-                let selected_ids: HashSet<_> = self.selected_items.iter().map(|i| i.id.clone()).collect();
-                move |ix, entry, _selected, window, cx| {
-                    let item = entry.item();
-                    let icon = if !entry.is_folder() {
-                        IconName::File
-                    } else if entry.is_expanded() {
-                        IconName::FolderOpen
-                    } else {
-                        IconName::Folder
-                    };
+            .child(if is_empty {
+                v_flex()
+                    .size_full()
+                    .justify_center()
+                    .items_center()
+                    .px_4()
+                    .gap_4()
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(cx.theme().muted_foreground)
+                            .child("You have not yet opened a folder."),
+                    )
+                    .child(
+                        div()
+                            .on_mouse_down(
+                                gpui::MouseButton::Left,
+                                cx.listener(|this, _, window, cx| {
+                                    this.prompt_open_folder(window, cx);
+                                }),
+                            )
+                            .id("open-folder-btn")
+                            .px_4()
+                            .py_2()
+                            .bg(cx.theme().accent)
+                            .text_color(cx.theme().accent_foreground)
+                            .text_sm()
+                            .rounded_md()
+                            .cursor_pointer()
+                            .child("Open Folder"),
+                    )
+                    .into_any_element()
+            } else {
+                tree(&self.tree_state, {
+                    let selected_ids: HashSet<_> = self.selected_items.iter().map(|i| i.id.clone()).collect();
+                    move |ix, entry, _selected, window, cx| {
+                        let item = entry.item();
+                        let icon = if !entry.is_folder() {
+                            IconName::File
+                        } else if entry.is_expanded() {
+                            IconName::FolderOpen
+                        } else {
+                            IconName::Folder
+                        };
 
-                    let is_multi_selected = selected_ids.contains(&item.id);
+                        let is_multi_selected = selected_ids.contains(&item.id);
 
-                    if entry.is_expanded() && entry.is_folder() {
-                        let item_id = item.id.to_string();
-                        window.dispatch_action(Box::new(crate::actions::LoadChildren { path: item_id }), cx);
-                    }
+                        if entry.is_expanded() && entry.is_folder() {
+                            let item_id = item.id.to_string();
+                            window.dispatch_action(Box::new(crate::actions::LoadChildren { path: item_id }), cx);
+                        }
 
-                    ListItem::new(ix)
-                        .when(is_multi_selected, |this| this.bg(cx.theme().selection))
-                        .w_full()
-                        .rounded(cx.theme().radius)
-                        .px_3()
-                        .pl(px(16.) * entry.depth() + px(12.))
-                        .child(h_flex().gap_2().child(icon).child(item.label.clone()).size_full().context_menu({
-                            let view = view.clone();
-                            let item_id = item.id.clone();
-                            move |menu, _window, cx| {
-                                let (can_compare, left_path, right_path) = view.update(cx, |this, _cx| {
-                                    let can_compare = this.selected_items.len() == 2 && this.selected_items.iter().all(|item| !item.is_folder());
+                        ListItem::new(ix)
+                            .when(is_multi_selected, |this| this.bg(cx.theme().selection))
+                            .w_full()
+                            .rounded(cx.theme().radius)
+                            .px_3()
+                            .pl(px(16.) * entry.depth() + px(12.))
+                            .child(h_flex().gap_2().child(icon).child(item.label.clone()).size_full().context_menu({
+                                let view = view.clone();
+                                let item_id = item.id.clone();
+                                move |menu, _window, cx| {
+                                    let (can_compare, left_path, right_path) = view.update(cx, |this, _cx| {
+                                        let can_compare = this.selected_items.len() == 2 && this.selected_items.iter().all(|item| !item.is_folder());
+                                        if can_compare {
+                                            (true, Some(this.selected_items[0].id.to_string()), Some(this.selected_items[1].id.to_string()))
+                                        } else {
+                                            (false, None, None)
+                                        }
+                                    });
+
+                                    let mut menu = menu
+                                        .menu_with_icon("Open", IconName::FolderOpen, Box::new(OpenFile { path: item_id.to_string() }))
+                                        .separator();
+
                                     if can_compare {
-                                        (true, Some(this.selected_items[0].id.to_string()), Some(this.selected_items[1].id.to_string()))
+                                        menu = menu.menu_with_icon(
+                                            "Compare Files",
+                                            IconName::Search,
+                                            Box::new(OpenDiff {
+                                                left_path: left_path.unwrap_or_default(),
+                                                right_path: right_path.unwrap_or_default(),
+                                            }),
+                                        );
                                     } else {
-                                        (false, None, None)
+                                        menu = menu.menu_with_icon_and_disabled(
+                                            "Compare Files",
+                                            IconName::Search,
+                                            Box::new(OpenDiff {
+                                                left_path: String::new(),
+                                                right_path: String::new(),
+                                            }),
+                                            true,
+                                        );
                                     }
-                                });
 
-                                let mut menu = menu
-                                    .menu_with_icon("Open", IconName::FolderOpen, Box::new(OpenFile { path: item_id.to_string() }))
-                                    .separator();
-
-                                if can_compare {
-                                    menu = menu.menu_with_icon(
-                                        "Compare Files",
-                                        IconName::Search,
-                                        Box::new(OpenDiff {
-                                            left_path: left_path.unwrap_or_default(),
-                                            right_path: right_path.unwrap_or_default(),
-                                        }),
-                                    );
-                                } else {
-                                    menu = menu.menu_with_icon_and_disabled(
-                                        "Compare Files",
-                                        IconName::Search,
-                                        Box::new(OpenDiff {
-                                            left_path: String::new(),
-                                            right_path: String::new(),
-                                        }),
-                                        true,
-                                    );
+                                    menu.separator().menu("Rename", Box::new(Rename))
                                 }
+                            }))
+                            .on_click(window.listener_for(&view, {
+                                let item = item.clone();
+                                move |this, event: &gpui::ClickEvent, _window, cx| {
+                                    if event.modifiers().control || event.modifiers().platform {
+                                        this.toggle_selection(item.clone(), cx);
+                                    } else {
+                                        this.selected_items = vec![item.clone()];
+                                        this.selected_item = Some(item.clone());
+                                    }
 
-                                menu.separator().menu("Rename", Box::new(Rename))
-                            }
-                        }))
-                        .on_click(window.listener_for(&view, {
-                            let item = item.clone();
-                            move |this, event: &gpui::ClickEvent, _window, cx| {
-                                if event.modifiers().control || event.modifiers().platform {
-                                    this.toggle_selection(item.clone(), cx);
-                                } else {
-                                    this.selected_items = vec![item.clone()];
-                                    this.selected_item = Some(item.clone());
+                                    if !item.is_folder() && this.selected_items.len() == 1 {
+                                        println!("Emitting FileTreeViewEvent::OpenFile for path: {}", item.id);
+                                        // cx.focus_self(window);
+                                        // window.dispatch_action(Box::new(OpenFile { path: item.id.to_string() }), cx);
+                                        cx.emit(FileTreeViewEvent::OpenFile(PathBuf::from(item.id.to_string())));
+                                    }
+                                    cx.notify();
                                 }
-
-                                if !item.is_folder() && this.selected_items.len() == 1 {
-                                    println!("Emitting FileTreeViewEvent::OpenFile for path: {}", item.id);
-                                    // cx.focus_self(window);
-                                    // window.dispatch_action(Box::new(OpenFile { path: item.id.to_string() }), cx);
-                                    cx.emit(FileTreeViewEvent::OpenFile(PathBuf::from(item.id.to_string())));
-                                }
-                                cx.notify();
-                            }
-                        }))
-                }
-            }))
+                            }))
+                    }
+                })
+                .into_any_element()
+            })
     }
 }
 
