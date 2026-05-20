@@ -14,11 +14,12 @@ jobs:
     - name: Check out repository
       uses: actions/checkout@v3
 
-    - name: Set up Rust toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: stable
+    - name: Install Rust toolchain
+      run: |
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        source $HOME/.cargo/env
+        rustup install stable
+        rustup default stable
 
     - name: Cache cargo registry
       uses: actions/cache@v3
