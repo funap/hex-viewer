@@ -22,14 +22,20 @@ pub struct SearchState {
 #[derive(Clone, Debug)]
 pub enum LineMap {
     Standard { total_size: usize },
-    Custom(Vec<usize>),
+    Custom {
+        starts: Arc<Vec<usize>>,
+        max_bytes_per_row: usize,
+    },
 }
 
 impl PartialEq for LineMap {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (LineMap::Standard { total_size: s1 }, LineMap::Standard { total_size: s2 }) => s1 == s2,
-            (LineMap::Custom(v1), LineMap::Custom(v2)) => v1 == v2,
+            (
+                LineMap::Custom { starts: v1, max_bytes_per_row: m1 },
+                LineMap::Custom { starts: v2, max_bytes_per_row: m2 },
+            ) => m1 == m2 && (Arc::ptr_eq(v1, v2) || v1 == v2),
             _ => {
                 if self.len() != other.len() {
                     return false;
@@ -77,7 +83,7 @@ impl LineMap {
                     (*total_size + BYTES_PER_ROW - 1) / BYTES_PER_ROW
                 }
             }
-            LineMap::Custom(vec) => vec.len(),
+            LineMap::Custom { starts, .. } => starts.len(),
         }
     }
 
@@ -91,7 +97,7 @@ impl LineMap {
                 let len = self.len();
                 if index < len { Some(index * BYTES_PER_ROW) } else { None }
             }
-            LineMap::Custom(vec) => vec.get(index).copied(),
+            LineMap::Custom { starts, .. } => starts.get(index).copied(),
         }
     }
 
@@ -109,7 +115,14 @@ impl LineMap {
                     Err(len)
                 }
             }
-            LineMap::Custom(vec) => vec.binary_search(offset),
+            LineMap::Custom { starts, .. } => starts.binary_search(offset),
+        }
+    }
+
+    pub fn max_bytes_per_row(&self) -> usize {
+        match self {
+            LineMap::Standard { .. } => BYTES_PER_ROW,
+            LineMap::Custom { max_bytes_per_row, .. } => *max_bytes_per_row,
         }
     }
 }
@@ -630,7 +643,16 @@ impl Editor {
                 starts.push(0);
             }
 
-            LineMap::Custom(starts)
+            let mut max_len = BYTES_PER_ROW;
+            for (idx, &start) in starts.iter().enumerate() {
+                let end = if idx + 1 < starts.len() { starts[idx + 1] } else { total_size };
+                max_len = max_len.max(end.saturating_sub(start));
+            }
+
+            LineMap::Custom {
+                starts: Arc::new(starts),
+                max_bytes_per_row: max_len,
+            }
         };
 
         *self.cached_line_map.borrow_mut() = Some(map.clone());

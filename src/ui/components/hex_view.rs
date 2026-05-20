@@ -815,18 +815,7 @@ impl Render for HexView {
                 let custom_breaks = editor.custom_breaks.clone();
 
                 // 最大行長を計算（ヘッダーとASCI位置の動的調整に使用）
-                let total_size = editor.total_size();
-                let max_bytes_per_row = match &line_starts {
-                    crate::core::editor::LineMap::Standard { .. } => BYTES_PER_ROW,
-                    crate::core::editor::LineMap::Custom(vec) => {
-                        let mut max_len = BYTES_PER_ROW;
-                        for (idx, &start) in vec.iter().enumerate() {
-                            let end = if idx + 1 < vec.len() { vec[idx + 1] } else { total_size };
-                            max_len = max_len.max(end - start);
-                        }
-                        max_len
-                    }
-                };
+                let max_bytes_per_row = line_starts.max_bytes_per_row();
 
                 HexViewElement {
                     view: cx.entity().downgrade(),
