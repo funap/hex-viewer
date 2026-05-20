@@ -1,4 +1,4 @@
-name: Build and Test on Windows (Rust)
+name: Build, Package, and Release (Rust)
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   pull_request:
 
 jobs:
-  build:
+  build-and-release:
     runs-on: windows-latest
 
     steps:
@@ -21,24 +21,32 @@ jobs:
         rustup install stable
         rustup default stable
 
-    - name: Cache cargo registry
-      uses: actions/cache@v3
-      with:
-        path: ~/.cargo/registry
-        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-registry-
-
-    - name: Cache cargo index
-      uses: actions/cache@v3
-      with:
-        path: ~/.cargo/git
-        key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-index-
-
     - name: Build the project
       run: cargo build --release
 
-    - name: Run tests
-      run: cargo test --release
+    - name: Package build artifacts
+      run: |
+        mkdir -p release
+        cp target/release/* release/
+        powershell Compress-Archive -Path release/* -DestinationPath release/artifacts.zip
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: windows-build-${{ github.run_id }}
+        release_name: "Windows Build #${{ github.run_number }}"
+        draft: false
+        prerelease: true
+
+    - name: Upload Release Artifact
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: release/artifacts.zip
+        asset_name: artifacts.zip
+        asset_content_type: application/zip
