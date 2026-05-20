@@ -1,4 +1,4 @@
-name: Build and Test on Windows
+name: Build and Test on Windows (Rust)
 
 on:
   push:
@@ -14,16 +14,30 @@ jobs:
     - name: Check out repository
       uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
+    - name: Set up Rust
+      uses: actions/setup-rust@v2
       with:
-        python-version: 3.x
+        profile: minimal
+        toolchain: stable
 
-    - name: Install dependencies
-      run: pip install -r requirements.txt
+    - name: Cache cargo registry
+      uses: actions/cache@v3
+      with:
+        path: ~/.cargo/registry
+        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-registry-
 
-    - name: Run build script
-      run: python build.py
+    - name: Cache cargo index
+      uses: actions/cache@v3
+      with:
+        path: ~/.cargo/git
+        key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-index-
+
+    - name: Build the project
+      run: cargo build --release
 
     - name: Run tests
-      run: python -m unittest discover
+      run: cargo test --release
