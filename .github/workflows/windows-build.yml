@@ -17,7 +17,7 @@ jobs:
     - name: Install Rust toolchain
       run: |
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        source $HOME/.cargo/env
+        $env:Path += ";$HOME\.cargo\bin"
         rustup install stable
         rustup default stable
 
@@ -26,9 +26,9 @@ jobs:
 
     - name: Package build artifacts
       run: |
-        mkdir -p release
-        cp target/release/* release/
-        powershell Compress-Archive -Path release/* -DestinationPath release/artifacts.zip
+        mkdir release
+        Copy-Item target\release\* release\
+        Compress-Archive -Path release\* -DestinationPath release\artifacts.zip
 
     - name: Create Release
       id: create_release
