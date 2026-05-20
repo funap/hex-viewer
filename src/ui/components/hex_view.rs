@@ -209,8 +209,6 @@ impl HexView {
         cx.notify();
     }
 
-
-
     pub fn set_highlights(&mut self, highlights: Vec<(Range<usize>, Hsla)>, cx: &mut Context<Self>) {
         self.highlights = highlights;
         cx.notify();

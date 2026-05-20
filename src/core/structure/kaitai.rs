@@ -106,11 +106,7 @@ impl<'a> KaitaiStream<'a> {
                 res |= (buf[i] as u64) << (i * 8);
             }
 
-            let new_bits = if bits_needed < 64 {
-                res >> bits_needed as usize
-            } else {
-                0
-            };
+            let new_bits = if bits_needed < 64 { res >> bits_needed as usize } else { 0 };
             res = (res << self.bits_left) | self.bits;
             self.bits = new_bits;
         } else {
@@ -267,13 +263,13 @@ impl<'a> KaitaiStream<'a> {
         if unit_size == 0 {
             return Some(Vec::new());
         }
-        
+
         let data = &self.data[self.pos..];
         let len = data.len();
         let mut i_data = 0;
         let mut i_term = 0;
         let mut term_found = false;
-        
+
         while i_data < len {
             if data[i_data] != terminator[i_term] {
                 i_data = i_data - i_term + 1;
@@ -287,7 +283,7 @@ impl<'a> KaitaiStream<'a> {
                 break;
             }
         }
-        
+
         if term_found {
             let match_len = i_data;
             let result_len = if include { match_len } else { match_len - unit_size };
@@ -305,11 +301,7 @@ impl<'a> KaitaiStream<'a> {
 
     pub fn ensure_fixed_contents(&mut self, expected: &[u8]) -> Option<Vec<u8>> {
         let actual = self.read_bytes(expected.len())?;
-        if actual == expected {
-            Some(actual)
-        } else {
-            None
-        }
+        if actual == expected { Some(actual) } else { None }
     }
 }
 
@@ -331,9 +323,7 @@ pub mod process {
             return Err(format!("unable to rotate group of {} bytes yet", group_size));
         }
         let amount = amount % 8;
-        let result = data.iter()
-            .map(|&b| b.rotate_left(amount))
-            .collect();
+        let result = data.iter().map(|&b| b.rotate_left(amount)).collect();
         Ok(result)
     }
 

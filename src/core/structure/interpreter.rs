@@ -319,9 +319,7 @@ impl KaitaiInterpreter {
             Some((FieldValue::Bytes(buf), s, Vec::new()))
         } else {
             if computed_size > 0 {
-                stream
-                    .read_bytes(computed_size)
-                    .map(|buf| (FieldValue::Bytes(buf), computed_size, Vec::new()))
+                stream.read_bytes(computed_size).map(|buf| (FieldValue::Bytes(buf), computed_size, Vec::new()))
             } else {
                 Some((FieldValue::Bytes(Vec::new()), 0, Vec::new()))
             }
@@ -498,7 +496,7 @@ impl KaitaiInterpreter {
                 "utf-16be" | "utf16be" | "utf_16be" | "ucs-2be" | "ucs2be" => crate::core::encoding::Encoding::Utf16Be,
                 _ => crate::core::encoding::Encoding::Utf8,
             };
-            
+
             let mut result = String::new();
             let mut offset = 0;
             while offset < buf.len() {
@@ -521,7 +519,7 @@ impl KaitaiInterpreter {
             if s == "zlib" {
                 return process::zlib_decompress(data);
             }
-            
+
             if s.starts_with("xor(") && s.ends_with(')') {
                 let expr = &s[4..s.len() - 1];
                 let ctx = self.make_eval_ctx(stream);
@@ -584,10 +582,10 @@ impl KaitaiInterpreter {
             if use_substream {
                 let sub_size = if attr.size_eos { self.remaining_bytes(stream) } else { size_val.unwrap_or(0) };
                 let sub_data = stream.read_bytes(sub_size)?;
-                
+
                 // Construct nested stream using the sub_data slice
                 let mut sub_stream = KaitaiStream::new(&sub_data);
-                
+
                 let old_stream_size = self.stream_size;
                 self.stream_size = sub_size;
                 let mut fields = Vec::new();
@@ -596,7 +594,7 @@ impl KaitaiInterpreter {
                 for nested_attr in &seq {
                     fields.extend(self.parse_attr_repeated(nested_attr, &mut sub_stream, &nested_types, &nested_enums));
                 }
-                
+
                 let instances = type_def.instances.clone();
                 for (id, mut inst_attr) in instances {
                     if inst_attr.pos.is_some() || inst_attr.value.is_some() {

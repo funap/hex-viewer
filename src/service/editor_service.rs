@@ -99,6 +99,7 @@ impl EditorService {
         editor: gpui::Entity<crate::core::editor::Editor>,
         query: String,
         options: crate::core::search::SearchOptions,
+        generation: usize,
         is_full: bool,
         cx: &gpui::App,
     ) -> gpui::Task<()> {
@@ -132,7 +133,6 @@ impl EditorService {
             Arc::new(document.buffer.clone())
         };
 
-        let query_clone = query.clone();
         let search_task = self.search(buffer_data, query, options, cx);
         let editor_weak = editor.downgrade();
 
@@ -143,8 +143,7 @@ impl EditorService {
                 if let Some(editor) = editor_weak.upgrade() {
                     editor
                         .update(&mut cx, |editor, cx| {
-                            editor.set_search_query(query_clone);
-                            editor.set_search_results(results, is_full);
+                            editor.set_search_results(results, generation, is_full);
                             cx.notify();
                         })
                         .ok();
@@ -162,13 +161,16 @@ impl EditorService {
         viewport_range: Range<usize>,
         cx: &App,
     ) -> (Task<()>, Task<()>) {
+        // Read the generation ID on the main thread from editor
+        let generation = editor.read(cx).search_state.generation;
+
         // 1. Immediate viewport search
         let viewport_options = SearchOptions {
             mode,
             limit: crate::core::search::SearchLimit::Unlimited,
             range: Some(viewport_range),
         };
-        let viewport_task = self.perform_search(editor.clone(), query.clone(), viewport_options, false, cx);
+        let viewport_task = self.perform_search(editor.clone(), query.clone(), viewport_options, generation, false, cx);
 
         // 2. Background full search
         let full_options = SearchOptions {
@@ -176,7 +178,7 @@ impl EditorService {
             limit: crate::core::search::SearchLimit::Unlimited,
             range: None,
         };
-        let full_task = self.perform_search(editor, query, full_options, true, cx);
+        let full_task = self.perform_search(editor, query, full_options, generation, true, cx);
 
         (viewport_task, full_task)
     }

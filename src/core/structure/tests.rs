@@ -2,7 +2,7 @@
 mod tests {
     use super::*;
     use crate::core::structure::types::FieldValue;
-    use crate::core::structure::{KaitaiInterpreter, KsyDefinition, KaitaiStream};
+    use crate::core::structure::{KaitaiInterpreter, KaitaiStream, KsyDefinition};
 
     fn parse_ksy_yaml(yaml: &str) -> KsyDefinition {
         serde_yaml::from_str(yaml).expect("Failed to parse YAML")
@@ -132,7 +132,7 @@ seq:
         let result = interpreter.parse(&mut stream);
 
         assert_eq!(result.fields.len(), 3);
-        
+
         assert_eq!(result.fields[0].id, "part1");
         if let FieldValue::U64(v) = result.fields[0].value {
             assert_eq!(v, 11);
@@ -185,10 +185,8 @@ seq:
     #[test]
     fn test_process_zlib() {
         // Zlib compressed "Hello"
-        let compressed = vec![
-            120, 156, 243, 72, 205, 201, 201, 7, 0, 5, 140, 1, 245
-        ];
-        
+        let compressed = vec![120, 156, 243, 72, 205, 201, 201, 7, 0, 5, 140, 1, 245];
+
         let yaml = r#"
 meta:
   id: test_zlib

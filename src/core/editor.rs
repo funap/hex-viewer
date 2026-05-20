@@ -17,15 +17,13 @@ pub struct SearchState {
     pub results: Vec<usize>,
     pub current_result_index: Option<usize>,
     pub is_full_search_complete: bool,
+    pub generation: usize,
 }
 
 #[derive(Clone, Debug)]
 pub enum LineMap {
     Standard { total_size: usize },
-    Custom {
-        starts: Arc<Vec<usize>>,
-        max_bytes_per_row: usize,
-    },
+    Custom { starts: Arc<Vec<usize>>, max_bytes_per_row: usize },
 }
 
 impl PartialEq for LineMap {
@@ -33,8 +31,14 @@ impl PartialEq for LineMap {
         match (self, other) {
             (LineMap::Standard { total_size: s1 }, LineMap::Standard { total_size: s2 }) => s1 == s2,
             (
-                LineMap::Custom { starts: v1, max_bytes_per_row: m1 },
-                LineMap::Custom { starts: v2, max_bytes_per_row: m2 },
+                LineMap::Custom {
+                    starts: v1,
+                    max_bytes_per_row: m1,
+                },
+                LineMap::Custom {
+                    starts: v2,
+                    max_bytes_per_row: m2,
+                },
             ) => m1 == m2 && (Arc::ptr_eq(v1, v2) || v1 == v2),
             _ => {
                 if self.len() != other.len() {
@@ -562,10 +566,20 @@ impl Editor {
             self.search_state.results.clear();
             self.search_state.current_result_index = None;
             self.search_state.is_full_search_complete = false;
+            self.search_state.generation += 1;
         }
     }
 
-    pub fn set_search_results(&mut self, results: Vec<usize>, is_full: bool) {
+    pub fn set_search_results(&mut self, results: Vec<usize>, generation: usize, is_full: bool) {
+        if generation < self.search_state.generation {
+            return;
+        }
+        if generation > self.search_state.generation {
+            self.search_state.generation = generation;
+        }
+        if self.search_state.is_full_search_complete && !is_full {
+            return;
+        }
         self.search_state.results = results;
         if is_full {
             self.search_state.is_full_search_complete = true;
@@ -580,6 +594,7 @@ impl Editor {
         self.search_state.results.clear();
         self.search_state.current_result_index = None;
         self.search_state.is_full_search_complete = false;
+        self.search_state.generation += 1;
     }
 
     pub fn next_search_result(&mut self) -> Option<usize> {
@@ -892,6 +907,50 @@ mod tests {
         // Prev
         editor.prev_search_result();
         assert_eq!(editor.current_search_result(), Some(11));
+    }
+
+    #[test]
+    fn test_search_generation_and_race_condition() {
+        let mut editor = create_editor_with_content(b"test match test");
+        assert_eq!(editor.search_state.generation, 0);
+
+        // 1. Verification of query changes incrementing generation
+        editor.set_search_query("foo".to_string());
+        assert_eq!(editor.search_state.generation, 1);
+
+        editor.set_search_query("foo".to_string());
+        assert_eq!(editor.search_state.generation, 1); // No change
+
+        editor.set_search_query("bar".to_string());
+        assert_eq!(editor.search_state.generation, 2);
+
+        // 2. Discarding older queries (generation < current_generation)
+        editor.set_search_results(vec![0], 1, true);
+        assert!(editor.search_state.results.is_empty());
+
+        // 3. Allowing same generation results
+        editor.set_search_results(vec![1, 2], 2, true);
+        assert_eq!(editor.search_state.results, vec![1, 2]);
+
+        // 4. Overwriting or syncing generation if generation > current
+        editor.set_search_results(vec![3, 4], 3, true);
+        assert_eq!(editor.search_state.results, vec![3, 4]);
+        assert_eq!(editor.search_state.generation, 3);
+        assert!(editor.search_state.is_full_search_complete);
+
+        // 5. Preventing partial viewport search results from overwriting full search results within the same generation
+        editor.set_search_results(vec![3], 3, false); // partial results for same generation
+        assert_eq!(editor.search_state.results, vec![3, 4]); // results remain full-search results
+
+        // 6. Discarding all results and incrementing generation upon clear_search
+        editor.clear_search();
+        assert_eq!(editor.search_state.generation, 4);
+        assert!(editor.search_state.results.is_empty());
+        assert!(!editor.search_state.is_full_search_complete);
+
+        // Try setting results with an older generation (3)
+        editor.set_search_results(vec![5], 3, true);
+        assert!(editor.search_state.results.is_empty());
     }
 
     #[test]
