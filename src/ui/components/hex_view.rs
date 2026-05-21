@@ -106,8 +106,8 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("ctrl-shift-g", SearchPrev, Some(CONTEXT)),
         KeyBinding::new("cmd-shift-g", SearchPrev, Some(CONTEXT)),
         KeyBinding::new("enter", AddCustomBreak, Some(CONTEXT)),
-        KeyBinding::new("delete", RemoveCustomBreakForward, Some(CONTEXT)),
-        KeyBinding::new("backspace", RemoveCustomBreakBackward, Some(CONTEXT)),
+        KeyBinding::new("delete", JoinLine, Some(CONTEXT)),
+        KeyBinding::new("backspace", JoinLine, Some(CONTEXT)),
         KeyBinding::new("shift-enter", JoinLine, Some(CONTEXT)),
         KeyBinding::new("cmd-shift-backspace", ClearAllCustomBreaks, Some(CONTEXT)),
     ]);

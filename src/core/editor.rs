@@ -881,9 +881,54 @@ impl Editor {
 
     pub fn add_custom_break(&mut self, offset: usize) {
         if offset < self.total_size() {
+            // カスタム改行を追加する前に、現在の行レイアウトを取得する。
+            // 追加後は同じオフセットを含む「結合済みメガ行」が分割されるため、
+            // その行に属していた custom_joins は到達不能になり無効化される。
+            let line_starts = self.line_starts();
+            let current_line_idx = Self::find_line_index(offset, &line_starts);
+            let line_start = line_starts.get(current_line_idx).unwrap_or(0);
+            let line_end = if current_line_idx + 1 < line_starts.len() {
+                line_starts.get(current_line_idx + 1).unwrap_or(self.total_size())
+            } else {
+                self.total_size()
+            };
+            let line_length = line_end.saturating_sub(line_start);
+
+            // offset より後ろの custom_joins を削除する。
+            // offset より前の join（例: オフセット18で分割する際の join@16）は
+            // 第1部分 [line_start..offset] を1行に保つために必要なので残す。
+            if offset < line_end {
+                let joins_to_remove: Vec<usize> = self.custom_joins.range((offset + 1)..line_end).copied().collect();
+                for j in joins_to_remove {
+                    self.custom_joins.remove(&j);
+                }
+            }
+
             self.custom_breaks.insert(offset);
             // Custom break と custom join が同じ位置にある場合、join を解除
             self.custom_joins.remove(&offset);
+
+            // メガ行（1行が BYTES_PER_ROW を超える）を分割した場合、
+            // 第2部分 [offset..line_end] が1行として維持されるよう再結合する。
+            // offset から BYTES_PER_ROW ずつ進むステップを custom_joins に追加し、
+            // line_end が offset+k*BYTES_PER_ROW と一致しない場合は line_end にも
+            // custom_break を追加して行末を明示する。
+            if line_length > BYTES_PER_ROW && offset != line_start {
+                let mut step = offset + BYTES_PER_ROW;
+                while step < line_end {
+                    self.custom_joins.insert(step);
+                    step += BYTES_PER_ROW;
+                }
+                // line_end が offset から BYTES_PER_ROW の倍数で到達できない場合、
+                // アルゴリズムが line_end をまたいでしまうため、明示的に break を追加する
+                if line_end < self.total_size()
+                    && (line_end - offset) % BYTES_PER_ROW != 0
+                    && !self.custom_breaks.contains(&line_end)
+                {
+                    self.custom_breaks.insert(line_end);
+                }
+            }
+
             self.cached_line_map.replace(None);
         }
     }
@@ -941,8 +986,9 @@ impl Editor {
             // Custom Break による改行なら、その break を削除
             self.custom_breaks.remove(&next_line_start);
             self.cached_line_map.replace(None);
-        } else if next_line_start % BYTES_PER_ROW == 0 {
-            // 16バイト自然境界による改行なら、join として記録
+        } else if next_line_start != line_starts.get(current_line_idx).unwrap_or(0) {
+            // 自然境界（16バイト境界 or カスタム改行後の次行など）を join として記録
+            // next_line_start が現在行と同オフセット（空行の重複）でない場合のみ
             self.custom_joins.insert(next_line_start);
             self.cached_line_map.replace(None);
         }
@@ -1380,6 +1426,81 @@ mod tests {
         // [空1@0], [空2@0], [0..16], [空1@16], [空2@16], [16..32] の6行
         assert_eq!(editor.line_starts(), vec![0, 0, 0, 16, 16, 16]);
         assert_eq!(editor.line_starts().len(), 6);
+    }
+
+    #[test]
+    fn test_split_mega_line_preserves_end() {
+        // delete×3 で 64バイトのメガ行を作り、オフセット5で改行したとき
+        // [0..5] と [5..64] の2行になることを確認するリグレッションテスト
+        let mut editor = create_editor_with_content(&[0; 64]);
+        assert_eq!(editor.line_starts(), vec![0, 16, 32, 48]);
+
+        // delete×3 → 64バイトのメガ行
+        editor.set_cursor_offset(0);
+        editor.join_line();
+        editor.join_line();
+        editor.join_line();
+        assert_eq!(editor.line_starts(), vec![0]);
+
+        // オフセット5で改行 → [0..5] と [5..64]
+        editor.add_custom_break(5);
+        assert_eq!(editor.line_starts(), vec![0, 5]);
+        assert_eq!(editor.line_starts().len(), 2);
+
+        // 48バイト行のケース（user報告のシナリオ）:
+        // 別バッファ: 48バイト, delete×2 → 48バイト行, オフセット5で改行
+        let mut editor2 = create_editor_with_content(&[0; 48]);
+        assert_eq!(editor2.line_starts(), vec![0, 16, 32]);
+        editor2.set_cursor_offset(0);
+        editor2.join_line();
+        editor2.join_line();
+        assert_eq!(editor2.line_starts(), vec![0]); // 48バイト行
+
+        editor2.add_custom_break(5);
+        // [0..5] (5バイト) と [5..48] (43バイト)
+        assert_eq!(editor2.line_starts(), vec![0, 5]);
+        assert_eq!(editor2.line_starts().len(), 2);
+
+        // 追加ケース: 32バイトのメガ行をオフセット7で分割
+        let mut editor3 = create_editor_with_content(&[0; 32]);
+        editor3.set_cursor_offset(0);
+        editor3.join_line();
+        assert_eq!(editor3.line_starts(), vec![0]); // 32バイト行
+        editor3.add_custom_break(7);
+        // [0..7] と [7..32]
+        assert_eq!(editor3.line_starts(), vec![0, 7]);
+    }
+
+    #[test]
+    fn test_split_mega_line_mid_join() {
+        // delete で 32バイトのメガ行を作り、オフセット18（結合境界16の後）で改行したとき
+        // [0..18] と [18..32] の2行になることを確認するリグレッションテスト
+        // 修正前は join@16 が削除されて [0..16], [16..18], [18..32] の3行になっていた
+        let mut editor = create_editor_with_content(&[0; 32]);
+        assert_eq!(editor.line_starts(), vec![0, 16]);
+
+        // delete → 32バイトのメガ行
+        editor.set_cursor_offset(0);
+        editor.join_line();
+        assert_eq!(editor.line_starts(), vec![0]);
+
+        // オフセット18で改行 → [0..18] と [18..32]
+        editor.add_custom_break(18);
+        assert_eq!(editor.line_starts(), vec![0, 18]);
+        assert_eq!(editor.line_starts().len(), 2);
+
+        // 64バイトのメガ行をオフセット18で分割
+        let mut editor2 = create_editor_with_content(&[0; 64]);
+        editor2.set_cursor_offset(0);
+        editor2.join_line();
+        editor2.join_line();
+        editor2.join_line();
+        assert_eq!(editor2.line_starts(), vec![0]); // 64バイトのメガ行
+
+        editor2.add_custom_break(18);
+        // [0..18] と [18..64]
+        assert_eq!(editor2.line_starts(), vec![0, 18]);
+        assert_eq!(editor2.line_starts().len(), 2);
     }
 }
 
