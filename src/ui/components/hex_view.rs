@@ -123,6 +123,7 @@ pub struct HexView {
     scroll_offset: usize,
     scroll_handle: ScrollHandle,
     highlights: Vec<(Range<usize>, Hsla)>,
+    max_highlight_len: usize,
     show_offset: bool,
     show_header: bool,
     show_ascii: bool,
@@ -150,6 +151,7 @@ impl HexView {
             scroll_offset: 0,
             scroll_handle: ScrollHandle::new(),
             highlights: Vec::new(),
+            max_highlight_len: 0,
             show_offset: true,
             show_header: true,
             show_ascii: true,
@@ -209,7 +211,9 @@ impl HexView {
         cx.notify();
     }
 
-    pub fn set_highlights(&mut self, highlights: Vec<(Range<usize>, Hsla)>, cx: &mut Context<Self>) {
+    pub fn set_highlights(&mut self, mut highlights: Vec<(Range<usize>, Hsla)>, cx: &mut Context<Self>) {
+        highlights.sort_by_key(|(range, _)| range.start);
+        self.max_highlight_len = highlights.iter().map(|(r, _)| r.end.saturating_sub(r.start)).max().unwrap_or(0);
         self.highlights = highlights;
         cx.notify();
     }
@@ -217,7 +221,10 @@ impl HexView {
     pub fn set_highlight_ranges(&mut self, ranges: Vec<Range<usize>>, cx: &mut Context<Self>) {
         let theme = cx.theme();
         let highlight_color = theme.accent;
-        self.highlights = ranges.into_iter().map(|range| (range, highlight_color)).collect();
+        let mut highlights: Vec<_> = ranges.into_iter().map(|range| (range, highlight_color)).collect();
+        highlights.sort_by_key(|(range, _)| range.start);
+        self.max_highlight_len = highlights.iter().map(|(r, _)| r.end.saturating_sub(r.start)).max().unwrap_or(0);
+        self.highlights = highlights;
         cx.notify();
     }
 
@@ -825,6 +832,7 @@ impl Render for HexView {
                     scroll_offset: self.scroll_offset,
                     focus_handle: self.focus_handle.clone(),
                     highlights: self.highlights.clone(),
+                    max_highlight_len: self.max_highlight_len,
                     show_offset: self.show_offset,
                     show_header: self.show_header,
                     show_ascii: self.show_ascii,
@@ -855,6 +863,7 @@ struct HexViewElement {
     scroll_offset: usize,
     focus_handle: FocusHandle,
     highlights: Vec<(Range<usize>, Hsla)>,
+    max_highlight_len: usize,
     show_offset: bool,
     show_header: bool,
     show_ascii: bool,
@@ -1001,6 +1010,29 @@ impl Element for HexViewElement {
             (usize::MAX, usize::MIN)
         };
 
+        // Binary search to find overlapping highlights for the visible viewport
+        let viewport_start = line_starts.get(start_row).unwrap_or(0);
+        let viewport_end = if end_row < line_starts.len() {
+            line_starts.get(end_row).unwrap_or(buffer.len())
+        } else {
+            buffer.len()
+        };
+
+        // 1. Find upper bound using binary search (highlights starting after viewport_end can't overlap)
+        let upper_bound = match highlights.binary_search_by_key(&viewport_end, |(r, _)| r.start) {
+            Ok(idx) => idx,
+            Err(idx) => idx,
+        };
+
+        // 2. Find lower bound using binary search (highlights ending before viewport_start can't overlap)
+        let search_start = viewport_start.saturating_sub(self.max_highlight_len);
+        let lower_bound = match highlights.binary_search_by_key(&search_start, |(r, _)| r.start) {
+            Ok(idx) => idx,
+            Err(idx) => idx,
+        };
+
+        let visible_highlights = &highlights[lower_bound..upper_bound];
+
         for i in start_row..end_row {
             let offset = line_starts.get(i).unwrap();
             let next_offset = if i + 1 < line_starts.len() {
@@ -1014,7 +1046,7 @@ impl Element for HexViewElement {
             let y_pos = bounds.top() + header_height + row_height * row_index as f32;
 
             // Draw highlights
-            for (range, color) in highlights {
+            for (range, color) in visible_highlights {
                 let range_start = range.start;
                 let range_end = range.end;
 

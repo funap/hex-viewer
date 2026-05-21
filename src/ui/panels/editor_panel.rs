@@ -91,8 +91,6 @@ impl EditorPanel {
                     let editor = this.editor.read(cx);
                     if !editor.search_state.is_full_search_complete {
                         this.perform_viewport_search(cx);
-                    } else if !editor.search_state.results.is_empty() {
-                        this.update_viewport_highlights(cx);
                     }
                 }
             }
@@ -181,7 +179,7 @@ impl EditorPanel {
         });
 
         // Immediately update highlights to clear old ones (since editor results were just cleared)
-        self.update_viewport_highlights(cx);
+        self.update_highlights(cx);
 
         // 1. Start viewport search for immediate feedback
         self.perform_viewport_search(cx);
@@ -235,16 +233,11 @@ impl EditorPanel {
         }
 
         let mut highlights = Vec::new();
-        let (viewport_start, viewport_end) = self.hex_view.read(cx).viewport_byte_range(cx);
 
-        // 2. Add visible structure highlights from cache
-        for (range, color) in &self.cached_structure_highlights {
-            if range.start < viewport_end && range.end > viewport_start {
-                highlights.push((range.clone(), *color));
-            }
-        }
+        // 2. Add all structure highlights from cache
+        highlights.extend(self.cached_structure_highlights.iter().cloned());
 
-        // 3. Add visible search highlights
+        // 3. Add all search highlights
         if self.is_search_visible {
             let bar = self.search_bar.read(cx);
             let query = bar.query(cx);
@@ -261,9 +254,7 @@ impl EditorPanel {
                 let theme = cx.theme();
                 for &pos in &editor.search_state.results {
                     let end = pos + pattern_len;
-                    if pos < viewport_end && end > viewport_start {
-                        highlights.push((pos..end, theme.yellow.opacity(0.4)));
-                    }
+                    highlights.push((pos..end, theme.yellow.opacity(0.4)));
                 }
             }
         }
@@ -289,10 +280,6 @@ impl EditorPanel {
                 });
             }
         }
-    }
-
-    fn update_viewport_highlights(&mut self, cx: &mut Context<Self>) {
-        self.update_highlights(cx);
     }
 
     fn search_next(&mut self, _: &SearchNext, _window: &mut Window, cx: &mut Context<Self>) {
