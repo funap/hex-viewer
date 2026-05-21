@@ -1,6 +1,6 @@
-# xvi
+# xvw
 
-`xvi` is a high-performance hex editor built with Rust and the [GPUI](https://www.gpui.rs/) framework (the same framework used by the Zed editor). It provides a modern, fast, and extensible interface for inspecting and editing binary data.
+`xvw` is a high-performance hex editor built with Rust and the [GPUI](https://www.gpui.rs/) framework (the same framework used by the Zed editor). It provides a modern, fast, and extensible interface for inspecting and editing binary data.
 
 ## Project Overview
 

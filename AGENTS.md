@@ -1,4 +1,4 @@
-# xvi - Agent Guidelines
+# xvw - Agent Guidelines
 
 ## Project Overview
 - **Purpose**: High-performance hex editor built with Rust + GPUI framework

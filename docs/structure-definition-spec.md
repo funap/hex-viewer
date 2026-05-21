@@ -1,10 +1,10 @@
 # Binary Structure Definition Specification (Kaitai Struct)
 
-XVI utilizes **Kaitai Struct** (.ksy) as its primary format for defining and parsing binary data structures.
+XVW utilizes **Kaitai Struct** (.ksy) as its primary format for defining and parsing binary data structures.
 
 ## Overview
 
-Kaitai Struct is a declarative language used to describe various binary data structures. XVI implements a dynamic interpreter that allows you to load `.ksy` files at runtime and visualize the structure of the binary file you are editing.
+Kaitai Struct is a declarative language used to describe various binary data structures. XVW implements a dynamic interpreter that allows you to load `.ksy` files at runtime and visualize the structure of the binary file you are editing.
 
 ## Supported Features
 
@@ -49,9 +49,9 @@ types:
         size: ext_length
 ```
 
-## How to use in XVI
+## How to use in XVW
 
 1. Create a `.ksy` file using YAML syntax.
-2. Open the file in XVI via **Action: Load Structure Definition**.
+2. Open the file in XVW via **Action: Load Structure Definition**.
 3. The structure will be displayed in the left panel and highlighted in the HexView.
 4. Clicking a field in the tree will jump the cursor to that offset.

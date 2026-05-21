@@ -160,7 +160,7 @@ impl Workspace {
             window
                 .update(cx, |_, window, cx| {
                     window.activate_window();
-                    window.set_window_title("XVI");
+                    window.set_window_title("XVW");
                     cx.on_release(|_, cx| {
                         cx.quit();
                     })
