@@ -6,7 +6,7 @@ use crate::actions::*;
 
 use crate::ui::components::activity_bar::{Activity, ActivityBar, ActivityBarEvent};
 use crate::ui::components::file_tree_view::{FileTreeView, FileTreeViewEvent};
-use crate::ui::components::toolbar::AppTitleBar;
+use crate::ui::components::title_bar::AppTitleBar;
 use crate::ui::panels::editor_panel::EditorPanel;
 use crate::ui::panels::left_panel::{LeftPanel, LeftPanelTab};
 
@@ -54,7 +54,7 @@ impl Workspace {
         let title_bar = cx.new(|_cx| AppTitleBar { app_menu_bar });
 
         cx.subscribe_in(&title_bar, window, |this, _, event, window, cx| match event {
-            crate::ui::components::toolbar::AppTitleBarEvent::OpenSettings => {
+            crate::ui::components::title_bar::AppTitleBarEvent::OpenSettings => {
                 this.open_settings_panel(window, cx);
             }
         })

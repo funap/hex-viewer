@@ -1,6 +1,7 @@
+use crate::core::structure::definition::*;
 use crate::core::structure::expression::{EvalContext, ExprEvaluator};
-use crate::core::structure::kaitai::*;
 use crate::core::structure::palette;
+use crate::core::structure::stream::*;
 use crate::core::structure::types::{FieldValue, ParseError, ParseResult, ParsedField};
 use std::collections::HashMap;
 
