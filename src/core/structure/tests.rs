@@ -256,6 +256,7 @@ seq:
             stream_size: 0,
             stream_pos: 0,
             enums: &enums,
+            errors: None,
         };
 
         assert_eq!(ExprEvaluator::eval_i64("flags & 0b1000_0000", &ctx), 128);

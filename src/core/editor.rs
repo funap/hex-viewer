@@ -35,7 +35,7 @@ pub struct Editor {
     /// 特定のオフセットに挿入された空行の数を記録する。
     pub empty_lines: std::collections::BTreeMap<usize, usize>,
     pub encoding: Encoding,
-    pub ksy_definition: Option<crate::core::structure::KsyDefinition>,
+    pub ksy_definition: Option<Arc<crate::core::structure::KsyDefinition>>,
     pub parse_result: Option<ParseResult>,
     cached_line_map: RefCell<Option<LineMap>>,
 }
@@ -1302,7 +1302,7 @@ mod tests {
 }
 
 impl Editor {
-    pub fn set_kaitai_definition(&mut self, ksy: crate::core::structure::KsyDefinition) {
+    pub fn set_kaitai_definition(&mut self, ksy: Arc<crate::core::structure::KsyDefinition>) {
         // If the definition is already the same, skip re-parsing unless necessary.
         // We compare by ID for now.
         if let Some(existing) = &self.ksy_definition {
@@ -1315,7 +1315,7 @@ impl Editor {
         let bytes = buffer_lock.buffer.data();
         let mut stream = crate::core::structure::KaitaiStream::new(bytes);
 
-        let interpreter = crate::core::structure::KaitaiInterpreter::new(ksy.clone());
+        let interpreter = crate::core::structure::KaitaiInterpreter::new((*ksy).clone());
         let result = interpreter.parse(&mut stream);
 
         self.ksy_definition = Some(ksy);

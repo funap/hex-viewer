@@ -27,7 +27,7 @@ pub struct Workspace {
     pub active_editor: Option<Entity<Editor>>,
     pub left_panel: Entity<LeftPanel>,
     pub activity_bar: Entity<ActivityBar>,
-    pub ksy_definition: Option<crate::core::structure::KsyDefinition>,
+    pub ksy_definition: Option<Arc<crate::core::structure::KsyDefinition>>,
     pub is_left_panel_visible: bool,
 }
 
@@ -455,11 +455,12 @@ impl Workspace {
                             window
                                 .update(|window, cx| {
                                     view.update(cx, |this, cx| {
-                                        this.ksy_definition = Some(ksy.clone());
+                                        let ksy_arc = Arc::new(ksy);
+                                        this.ksy_definition = Some(ksy_arc.clone());
 
                                         if let Some(editor_entity) = &this.active_editor {
                                             editor_entity.update(cx, |editor, cx| {
-                                                editor.set_kaitai_definition(ksy.clone());
+                                                editor.set_kaitai_definition(ksy_arc.clone());
                                                 cx.notify();
                                             });
                                         }

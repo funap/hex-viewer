@@ -12,7 +12,7 @@ pub struct KaitaiInterpreter {
     string_context: HashMap<String, String>,
     id_stack: Vec<String>,
     color_index: usize,
-    errors: Vec<ParseError>,
+    errors: std::cell::RefCell<Vec<ParseError>>,
     global_endian: String,
     field_count: usize,
     recursion_depth: usize,
@@ -100,7 +100,7 @@ impl KaitaiInterpreter {
             string_context: HashMap::new(),
             id_stack: Vec::new(),
             color_index: 0,
-            errors: Vec::new(),
+            errors: std::cell::RefCell::new(Vec::new()),
             global_endian,
             field_count: 0,
             recursion_depth: 0,
@@ -130,7 +130,7 @@ impl KaitaiInterpreter {
             definition_id: self.ksy.meta.id.clone(),
             fields,
             total_parsed_bytes: stream.pos() as usize,
-            errors: self.errors,
+            errors: self.errors.into_inner(),
         }
     }
 
@@ -143,6 +143,7 @@ impl KaitaiInterpreter {
             stream_size: self.stream_size,
             stream_pos: stream.pos() as usize,
             enums: &self.all_enums,
+            errors: Some(&self.errors),
         }
     }
 
@@ -663,7 +664,7 @@ impl KaitaiInterpreter {
         if !expected_bytes.is_empty() {
             if let FieldValue::Bytes(actual_bytes) = actual {
                 if actual_bytes != &expected_bytes {
-                    self.errors.push(ParseError {
+                    self.errors.borrow_mut().push(ParseError {
                         message: "contents mismatch".into(),
                         offset: stream.pos() as usize,
                     });

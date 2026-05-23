@@ -232,6 +232,7 @@ pub struct EvalContext<'a> {
     pub stream_size: usize,
     pub stream_pos: usize,
     pub enums: &'a HashMap<String, HashMap<String, String>>,
+    pub errors: Option<&'a std::cell::RefCell<Vec<crate::core::structure::types::ParseError>>>,
 }
 
 impl<'a> EvalContext<'a> {
@@ -246,6 +247,7 @@ impl<'a> EvalContext<'a> {
             stream_size: 0,
             stream_pos: 0,
             enums: empty_enums,
+            errors: None,
         }
     }
 }
@@ -358,6 +360,16 @@ impl<'a> Parser<'a> {
         let mut lexer = Lexer::new(input);
         let current_token = lexer.next_token();
         Self { lexer, current_token, ctx }
+    }
+
+    fn record_error(&self, message: String) {
+        if let Some(err_cell) = self.ctx.errors {
+            let offset = self.ctx.stream_pos;
+            err_cell.borrow_mut().push(crate::core::structure::types::ParseError {
+                message,
+                offset,
+            });
+        }
     }
 
     fn advance(&mut self) {
@@ -536,11 +548,21 @@ impl<'a> Parser<'a> {
                     Token::Star => val = ExprValue::Float(val.to_f64() * right.to_f64()),
                     Token::Slash => {
                         let r = right.to_f64();
-                        val = ExprValue::Float(if r != 0.0 { val.to_f64() / r } else { 0.0 });
+                        if r == 0.0 {
+                            self.record_error("Division by zero in float expression".to_string());
+                            val = ExprValue::Float(0.0);
+                        } else {
+                            val = ExprValue::Float(val.to_f64() / r);
+                        }
                     }
                     Token::Percent => {
                         let r = right.to_i64();
-                        val = ExprValue::Int(if r != 0 { val.to_i64() % r } else { 0 });
+                        if r == 0 {
+                            self.record_error("Modulo by zero in expression".to_string());
+                            val = ExprValue::Int(0);
+                        } else {
+                            val = ExprValue::Int(val.to_i64() % r);
+                        }
                     }
                     _ => {}
                 }
@@ -549,11 +571,21 @@ impl<'a> Parser<'a> {
                     Token::Star => val = ExprValue::Int(val.to_i64() * right.to_i64()),
                     Token::Slash => {
                         let r = right.to_i64();
-                        val = ExprValue::Int(if r != 0 { val.to_i64() / r } else { 0 });
+                        if r == 0 {
+                            self.record_error("Division by zero in integer expression".to_string());
+                            val = ExprValue::Int(0);
+                        } else {
+                            val = ExprValue::Int(val.to_i64() / r);
+                        }
                     }
                     Token::Percent => {
                         let r = right.to_i64();
-                        val = ExprValue::Int(if r != 0 { val.to_i64() % r } else { 0 });
+                        if r == 0 {
+                            self.record_error("Modulo by zero in expression".to_string());
+                            val = ExprValue::Int(0);
+                        } else {
+                            val = ExprValue::Int(val.to_i64() % r);
+                        }
                     }
                     _ => {}
                 }
@@ -615,10 +647,14 @@ impl<'a> Parser<'a> {
                 let val = self.parse_ternary();
                 if self.current_token == Token::RParen {
                     self.advance();
+                } else {
+                    self.record_error("Unclosed parenthesis in expression".to_string());
                 }
                 val
             }
             _ => {
+                let tok = self.current_token.clone();
+                self.record_error(format!("Unexpected token in expression: {:?}", tok));
                 self.advance();
                 ExprValue::Int(0)
             }
@@ -733,6 +769,10 @@ impl<'a> Parser<'a> {
             if let Some(val) = self.ctx.string_values.get(last) {
                 return ExprValue::Str(val.clone());
             }
+        }
+
+        if !id.starts_with('_') && id != "true" && id != "false" {
+            self.record_error(format!("Unresolved identifier: {}", full_id));
         }
 
         ExprValue::Int(0)

@@ -106,30 +106,9 @@ impl EditorService {
         let buffer_data = {
             let editor_read = editor.read(cx);
             let document = editor_read.document.read().unwrap();
-            // We need a way to pass the buffer data to the background task.
-            // Buffer is not thread-safe refcounted by itself unless we clone the data or put it in Arc.
-            // But Editor has Arc<RwLock<Document>>.
-            // The search function takes Arc<Buffer>.
-            // We need to change the search function signature or create a temporary Arc<Buffer> (which triggers clone if Buffer is not Arc internally).
-            // Now Document holds `buffer: Buffer` directly.
-            // So we can't just clone the Arc.
-            // We should clone the data or change Buffer to be cheap to clone (Arc inside).
-            // Given the context, I will clone the buffer data for now to get it working, or wrap it in Arc derived from Document? No.
-            // Let's modify `search` to take `Arc<Buffer>` is annoying if Buffer is not in Arc.
-            // Actually `EditorService::search` takes `Arc<Buffer>`.
-            // I should probably change `search` to take `Buffer` (clone) or `Vec<u8>`.
-            // Taking a closer look at `search` implementation: it spawns a task.
-            // `cx.background_executor().spawn(async move { ... buffer.data() ... })`
-            // If I clone Buffer, it copies all data. That's bad for large files.
-            // The previous architecture had `Arc<RwLock<Buffer>>`.
-            // Now `Document` owns `Buffer`.
-            // If I want to search in background, I need a snapshot of data.
-            // So cloning `Buffer` (allocating new Vec) is actually correct for a consistent snapshot if we want to avoid locking for the duration of search.
-            // BUT, `Buffer` was previously shared via Arc.
-            // Let's assume for this refactor, `Buffer` is small enough or we simply clone it.
-            // Note: `Buffer` struct: `path: PathBuf, data: Vec<u8>`. Cloning it clones the vector.
-            // Optimization: Use `Arc<Vec<u8>>` in `Buffer` later.
-            // For now, I will create a new Arc<Buffer> from the clone.
+            // Since `Buffer` cloning is O(1) (internally uses Arc<Vec<u8>> or Arc<Mmap>),
+            // cloning the buffer here is extremely cheap and creates a consistent snapshot
+            // for the background search thread.
             Arc::new(document.buffer.clone())
         };
 
