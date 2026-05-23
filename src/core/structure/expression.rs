@@ -365,10 +365,7 @@ impl<'a> Parser<'a> {
     fn record_error(&self, message: String) {
         if let Some(err_cell) = self.ctx.errors {
             let offset = self.ctx.stream_pos;
-            err_cell.borrow_mut().push(crate::core::structure::types::ParseError {
-                message,
-                offset,
-            });
+            err_cell.borrow_mut().push(crate::core::structure::types::ParseError { message, offset });
         }
     }
 
