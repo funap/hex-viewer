@@ -1,5 +1,4 @@
 use gpui::*;
-use gpui_component::theme::Theme;
 
 use crate::core::editor::Editor;
 use crate::ui::components::file_tree_view::{FileTreeView, FileTreeViewEvent};
@@ -54,5 +53,14 @@ impl Render for LeftPanel {
         } else {
             self.struct_tree.clone().into_any_element()
         })
+    }
+}
+
+impl Focusable for LeftPanel {
+    fn focus_handle(&self, cx: &App) -> FocusHandle {
+        match self.active_tab {
+            LeftPanelTab::Files => self.file_tree.read(cx).focus_handle(cx),
+            LeftPanelTab::Structure => self.struct_tree.read(cx).focus_handle(cx),
+        }
     }
 }

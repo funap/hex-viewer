@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::core::buffer::Buffer;
 use crate::core::history::History;
 use std::path::{Path, PathBuf};

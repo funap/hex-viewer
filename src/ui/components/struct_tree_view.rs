@@ -8,6 +8,7 @@ pub struct StructTreeView {
     pub flattened_fields: Vec<FlattenedField>,
     pub editor: Option<Entity<Editor>>,
     pub list_state: ListState,
+    pub focus_handle: FocusHandle,
     last_parse_id: Option<String>,
     _editor_subscription: Option<Subscription>,
 }
@@ -15,7 +16,7 @@ pub struct StructTreeView {
 #[derive(Clone)]
 pub struct FlattenedField {
     pub id: String,
-    pub field_type: String,
+    pub _field_type: String,
     pub offset: usize,
     pub value_str: String,
     pub color: Hsla,
@@ -27,12 +28,14 @@ impl StructTreeView {
         let mut flattened = Vec::new();
         Self::flatten_fields(&fields, 0, &mut flattened);
         let list_state = ListState::new(flattened.len(), ListAlignment::Top, px(24.0));
+        let focus_handle = cx.focus_handle();
 
         let mut this = Self {
             fields,
             flattened_fields: flattened,
             editor: editor.clone(),
             list_state,
+            focus_handle,
             last_parse_id: None,
             _editor_subscription: None,
         };
@@ -98,7 +101,7 @@ impl StructTreeView {
 
             results.push(FlattenedField {
                 id: field.id.clone(),
-                field_type: field.field_type.clone(),
+                _field_type: field.field_type.clone(),
                 offset: field.offset,
                 value_str: val_str,
                 color: field.color,
@@ -108,15 +111,6 @@ impl StructTreeView {
             if !field.children.is_empty() {
                 Self::flatten_fields(&field.children, depth + 1, results);
             }
-        }
-    }
-
-    fn on_field_click(&self, offset: usize, cx: &mut App) {
-        if let Some(editor) = &self.editor {
-            editor.update(cx, |editor, cx| {
-                editor.set_cursor_offset(offset);
-                cx.notify();
-            });
         }
     }
 
@@ -161,24 +155,35 @@ fn this_on_field_click(offset: usize, cx: &mut App, editor: Option<Entity<Editor
 }
 
 impl Render for StructTreeView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let view = cx.entity().clone();
         let is_empty = self.fields.is_empty();
+        let is_focused = self.focus_handle.is_focused(window);
+        let theme = cx.theme();
 
-        v_flex()
+        let container = crate::ui::style::apply_focus_indicator(v_flex(), is_focused, theme)
             .id("struct-tree-view")
+            .track_focus(&self.focus_handle)
             .size_full()
             .flex_shrink_0()
-            .bg(cx.theme().sidebar)
+            .bg(theme.sidebar)
             .border_r(px(1.0))
-            .border_color(cx.theme().accent)
-            .child(div().p_2().text_sm().text_color(cx.theme().muted_foreground).child("STRUCTURE"))
+            .border_color(theme.border);
+
+        container
+            .child(
+                div()
+                    .p_2()
+                    .text_sm()
+                    .text_color(crate::ui::style::header_text_color(is_focused, theme))
+                    .child("STRUCTURE"),
+            )
             .child(if is_empty {
                 v_flex()
                     .size_full()
                     .justify_center()
                     .items_center()
-                    .child(div().text_color(cx.theme().muted_foreground).child("No structure loaded"))
+                    .child(div().text_color(theme.muted_foreground).child("No structure loaded"))
                     .into_any_element()
             } else {
                 list(self.list_state.clone(), move |ix, _window, cx| {
@@ -201,5 +206,11 @@ impl Render for StructTreeView {
                 .size_full()
                 .into_any_element()
             })
+    }
+}
+
+impl Focusable for StructTreeView {
+    fn focus_handle(&self, _cx: &App) -> gpui::FocusHandle {
+        self.focus_handle.clone()
     }
 }

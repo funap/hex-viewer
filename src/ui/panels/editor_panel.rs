@@ -45,6 +45,7 @@ pub struct EditorPanel {
 
 impl EditorPanel {
     pub fn new(editor: Entity<Editor>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let focus_handle = cx.focus_handle();
         let appearance = cx.global::<Appearance>().clone();
         let hex_view = cx.new(|cx| {
             HexView::new(editor.clone(), cx)
@@ -78,8 +79,16 @@ impl EditorPanel {
         .detach();
 
         let hex_focus_handle = hex_view.read(cx).focus_handle(cx);
-        cx.on_focus_in(&hex_focus_handle, window, |_this: &mut Self, _window: &mut Window, _cx: &mut Context<Self>| {
-            // Focus event - could be used for future functionality
+        cx.on_focus_in(&focus_handle, window, {
+            let hex_focus_handle = hex_focus_handle.clone();
+            move |_, window, _| {
+                hex_focus_handle.focus(window);
+            }
+        })
+        .detach();
+
+        cx.on_focus_in(&hex_focus_handle, window, |_, _, cx| {
+            cx.notify();
         })
         .detach();
 
@@ -127,7 +136,7 @@ impl EditorPanel {
 
         Self {
             editor,
-            focus_handle: cx.focus_handle(),
+            focus_handle,
             hex_view,
             is_search_visible: false,
             search_bar,
@@ -387,7 +396,7 @@ impl Panel for EditorPanel {
         true
     }
 
-    fn set_active(&mut self, active: bool, window: &mut Window, cx: &mut Context<Self>) {
+    fn set_active(&mut self, active: bool, window: &mut Window, _cx: &mut Context<Self>) {
         if active {
             self.focus_handle.focus(window);
         }
@@ -406,13 +415,18 @@ impl Panel for EditorPanel {
 }
 
 impl Render for EditorPanel {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let is_focused = self.focus_handle.is_focused(window);
+        let theme = cx.theme();
+
+        let container = crate::ui::style::apply_focus_indicator(div(), is_focused, theme)
             .size_full()
             .flex()
             .flex_col()
             .key_context(CONTEXT)
-            .track_focus(&self.focus_handle(cx))
+            .track_focus(&self.focus_handle);
+
+        container
             .on_action(cx.listener(Self::toggle_search))
             .on_action(cx.listener(Self::search_next))
             .on_action(cx.listener(Self::search_prev))

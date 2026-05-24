@@ -1,4 +1,3 @@
-use crate::actions::{ShowFilesTab, ShowStructureTab};
 use gpui::prelude::FluentBuilder;
 use gpui::*;
 use gpui_component::{ActiveTheme, Icon, IconName};

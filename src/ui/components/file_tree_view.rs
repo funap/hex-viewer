@@ -1,17 +1,15 @@
-use crate::actions::{CloseFolder, LoadChildren, OpenDiff, OpenFile, OpenFolder, Rename, SelectItem};
+use crate::actions::{LoadChildren, OpenDiff, OpenFile, Rename, SelectItem};
 use std::collections::HashSet;
 use std::path::PathBuf;
 
 use autocorrect::ignorer::Ignorer;
 use gpui::{
-    App, AppContext, AsyncApp, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement, Render,
-    SharedString, Styled, WeakEntity, Window, div, prelude::FluentBuilder as _, px,
+    App, AppContext, AsyncApp, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Render, SharedString,
+    Styled, WeakEntity, Window, div, prelude::FluentBuilder as _, px,
 };
 
 use gpui_component::{
-    ActiveTheme as _, IconName,
-    dock::{Panel, PanelEvent},
-    h_flex,
+    ActiveTheme as _, IconName, h_flex,
     list::ListItem,
     menu::ContextMenuExt,
     tree::{TreeItem, TreeState, tree},
@@ -19,7 +17,9 @@ use gpui_component::{
 };
 
 const CONTEXT: &str = "TreeStory";
-pub(crate) fn init(_cx: &mut App) {}
+pub(crate) fn init(cx: &mut App) {
+    cx.bind_keys([gpui::KeyBinding::new("enter", SelectItem, Some(CONTEXT))]);
+}
 
 pub enum FileTreeViewEvent {
     OpenFile(PathBuf),
@@ -29,7 +29,7 @@ pub struct FileTreeView {
     tree_state: Entity<TreeState>,
     selected_item: Option<TreeItem>,
     selected_items: Vec<TreeItem>,
-    title: SharedString,
+    _title: SharedString,
     focus_handle: FocusHandle,
     root_path: Option<PathBuf>,
     loaded_paths: HashSet<String>,
@@ -81,7 +81,7 @@ impl FileTreeView {
             tree_state: tree_state.clone(),
             selected_item: None,
             selected_items: Vec::new(),
-            title: title.into(),
+            _title: title.into(),
             focus_handle: cx.focus_handle(),
             root_path: None,
             loaded_paths: HashSet::new(),
@@ -146,7 +146,13 @@ impl FileTreeView {
 
     fn on_action_select_item(&mut self, _: &SelectItem, _: &mut Window, cx: &mut gpui::Context<Self>) {
         if let Some(entry) = self.tree_state.read(cx).selected_entry() {
-            self.selected_item = Some(entry.item().clone());
+            let item = entry.item();
+            self.selected_item = Some(item.clone());
+            self.selected_items = vec![item.clone()];
+
+            if !item.is_folder() {
+                cx.emit(FileTreeViewEvent::OpenFile(PathBuf::from(item.id.to_string())));
+            }
             cx.notify();
         }
     }
@@ -219,13 +225,16 @@ impl FileTreeView {
 }
 
 impl Render for FileTreeView {
-    fn render(&mut self, _: &mut gpui::Window, cx: &mut gpui::Context<Self>) -> impl gpui::IntoElement {
+    fn render(&mut self, window: &mut gpui::Window, cx: &mut gpui::Context<Self>) -> impl gpui::IntoElement {
         let view = cx.entity();
         let is_empty = self.root_path.is_none();
+        let is_focused = self.focus_handle.is_focused(window);
+        let theme = cx.theme();
 
-        v_flex()
+        let container = crate::ui::style::apply_focus_indicator(v_flex(), is_focused, theme)
             .id("file-tree-view")
             .key_context(CONTEXT)
+            .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::on_action_rename))
             .on_action(cx.listener(Self::on_action_select_item))
             .on_action(cx.listener(Self::on_action_set_file_tree_folder))
@@ -233,10 +242,18 @@ impl Render for FileTreeView {
             .size_full()
             .flex_shrink_0()
             .h_full()
-            .bg(cx.theme().sidebar)
+            .bg(theme.sidebar)
             .border_r(px(1.0))
-            .border_color(cx.theme().accent)
-            .child(div().p_2().text_sm().text_color(cx.theme().muted_foreground).child("FILES"))
+            .border_color(theme.border);
+
+        container
+            .child(
+                div()
+                    .p_2()
+                    .text_sm()
+                    .text_color(crate::ui::style::header_text_color(is_focused, theme))
+                    .child("FILES"),
+            )
             .child(if is_empty {
                 v_flex()
                     .size_full()
@@ -272,6 +289,7 @@ impl Render for FileTreeView {
             } else {
                 tree(&self.tree_state, {
                     let selected_ids: HashSet<_> = self.selected_items.iter().map(|i| i.id.clone()).collect();
+                    let focus_handle = self.focus_handle.clone();
                     move |ix, entry, _selected, window, cx| {
                         let item = entry.item();
                         let icon = if !entry.is_folder() {
@@ -283,14 +301,19 @@ impl Render for FileTreeView {
                         };
 
                         let is_multi_selected = selected_ids.contains(&item.id);
+                        let is_focused = focus_handle.is_focused(window);
 
                         if entry.is_expanded() && entry.is_folder() {
                             let item_id = item.id.to_string();
                             window.dispatch_action(Box::new(crate::actions::LoadChildren { path: item_id }), cx);
                         }
 
+                        let selection_bg = if is_focused { cx.theme().selection } else { cx.theme().accent };
+
                         ListItem::new(ix)
-                            .when(is_multi_selected, |this| this.bg(cx.theme().selection))
+                            .selected(is_focused && is_multi_selected)
+                            .when(is_multi_selected, |this| this.bg(selection_bg))
+                            .when(!is_focused, |this| this.border_color(cx.theme().selection.opacity(0.0)))
                             .w_full()
                             .rounded(cx.theme().radius)
                             .px_3()
@@ -381,6 +404,7 @@ impl FileTreeViewState {
         serde_json::to_value(self).unwrap()
     }
 
+    #[allow(dead_code)]
     pub fn from_value(value: serde_json::Value) -> Option<Self> {
         serde_json::from_value(value).ok()
     }

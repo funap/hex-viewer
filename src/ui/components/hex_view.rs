@@ -62,7 +62,6 @@ pub const HEX_GAP: f32 = 4.0;
 pub const SECTION_GAP: f32 = 16.0;
 pub const OFFSET_X_START: f32 = 4.0;
 pub const SELECTION_PADDING: f32 = 2.0;
-pub use crate::core::editor::BYTES_PER_ROW;
 // pub const FONT_FAMILY: &str = "Menlo"; // Removed in favor of global Appearance
 
 pub fn init(cx: &mut App) {
@@ -964,7 +963,8 @@ impl Element for HexViewElement {
         let hex_null_color = theme.muted_foreground;
         let ascii_printable_color = theme.foreground;
         let ascii_non_printable_color = theme.muted_foreground;
-        let selection_bg_color = theme.secondary;
+        let is_focused = self.focus_handle.is_focused(window);
+        let selection_bg_color = if is_focused { theme.selection } else { theme.accent.opacity(0.5) };
 
         // Ensure at least one line is shown, even for empty buffer
         let line_starts = &self.line_starts;
@@ -1199,28 +1199,32 @@ impl Element for HexViewElement {
             let cursor_offset = self.cursor_offset;
             let focus_handle = self.focus_handle.clone();
 
-            // Show cursor if focused, even for empty buffer
-            if focus_handle.is_focused(window) {
-                let cursor_row = Editor::find_line_index(cursor_offset, &line_starts);
-                let byte_in_row = cursor_offset - line_starts.get(cursor_row).unwrap();
+            // Show cursor (colored when focused, muted when not focused)
+            let is_focused = focus_handle.is_focused(window);
+            let cursor_row = Editor::find_line_index(cursor_offset, &line_starts);
+            let byte_in_row = cursor_offset - line_starts.get(cursor_row).unwrap();
 
-                if cursor_row >= start_row && cursor_row < end_row {
-                    let visible_cursor_row = cursor_row - start_row;
-                    let y_pos = bounds.top() + header_height + row_height * visible_cursor_row as f32;
-                    let cursor_x = hex_start_x + (hex_byte_width + hex_gap) * byte_in_row as f32;
+            if cursor_row >= start_row && cursor_row < end_row {
+                let visible_cursor_row = cursor_row - start_row;
+                let y_pos = bounds.top() + header_height + row_height * visible_cursor_row as f32;
+                let cursor_x = hex_start_x + (hex_byte_width + hex_gap) * byte_in_row as f32;
 
+                let cursor_color = if is_focused { theme.selection } else { theme.accent.opacity(0.5) };
+
+                cursor_quads.push(fill(
+                    Bounds::new(
+                        point(cursor_x - px(SELECTION_PADDING), y_pos),
+                        size(hex_byte_width + px(SELECTION_PADDING), row_height),
+                    ),
+                    cursor_color,
+                ));
+
+                if self.show_ascii {
+                    let ascii_cursor_x = ascii_start_x + ascii_char_width * byte_in_row as f32;
                     cursor_quads.push(fill(
-                        Bounds::new(point(cursor_x, y_pos), size(hex_byte_width, row_height)),
-                        theme.accent.opacity(0.3),
+                        Bounds::new(point(ascii_cursor_x, y_pos), size(ascii_char_width, row_height)),
+                        cursor_color,
                     ));
-
-                    if self.show_ascii {
-                        let ascii_cursor_x = ascii_start_x + ascii_char_width * byte_in_row as f32;
-                        cursor_quads.push(fill(
-                            Bounds::new(point(ascii_cursor_x, y_pos), size(ascii_char_width, row_height)),
-                            theme.accent.opacity(0.3),
-                        ));
-                    }
                 }
             }
         }
@@ -1314,7 +1318,6 @@ impl Element for HexViewElement {
         let theme = cx.theme();
         let bg_color = theme.background;
         let border_color = theme.border;
-        let accent_color = theme.accent;
 
         window.paint_quad(fill(bounds, bg_color));
 
@@ -1356,6 +1359,11 @@ impl Element for HexViewElement {
             window.paint_quad(indicator_quad);
         }
 
+        // Draw cursor block behind the text
+        for cursor_quad in prepaint.cursor_quads.drain(..) {
+            window.paint_quad(cursor_quad);
+        }
+
         for (i, data_line) in prepaint.data_lines.iter().enumerate() {
             let y_pos = bounds.top() + header_height + row_height * i as f32;
 
@@ -1378,38 +1386,6 @@ impl Element for HexViewElement {
                     shaped.paint(point(x_start, y_pos), row_height, window, cx).ok();
                 }
             }
-        }
-
-        // Draw cursor last so it's always visible on top of highlights and selection
-        for cursor_quad in prepaint.cursor_quads.drain(..) {
-            let cursor_bounds = cursor_quad.bounds;
-
-            // Draw cursor background
-            window.paint_quad(cursor_quad);
-
-            // Draw cursor border for better visibility
-            window.paint_quad(fill(Bounds::new(cursor_bounds.origin, size(cursor_bounds.size.width, px(2.))), accent_color));
-            window.paint_quad(fill(
-                Bounds::new(
-                    point(cursor_bounds.origin.x, cursor_bounds.origin.y + cursor_bounds.size.height - px(2.)),
-                    size(cursor_bounds.size.width, px(2.)),
-                ),
-                accent_color,
-            ));
-            window.paint_quad(fill(
-                Bounds::new(
-                    point(cursor_bounds.origin.x - px(SELECTION_PADDING), cursor_bounds.origin.y),
-                    size(px(2.), cursor_bounds.size.height),
-                ),
-                accent_color,
-            ));
-            window.paint_quad(fill(
-                Bounds::new(
-                    point(cursor_bounds.origin.x + cursor_bounds.size.width - px(2.), cursor_bounds.origin.y),
-                    size(px(2.), cursor_bounds.size.height),
-                ),
-                accent_color,
-            ));
         }
 
         let ascii_char_width = prepaint.ascii_char_width;

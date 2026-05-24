@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::core::editor::Editor;
 
 /// A trait representing an executable and undoable command.

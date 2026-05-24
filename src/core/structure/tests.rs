@@ -1,6 +1,5 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::core::structure::types::FieldValue;
     use crate::core::structure::{KaitaiInterpreter, KaitaiStream, KsyDefinition};
 

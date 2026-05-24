@@ -91,6 +91,19 @@ impl Workspace {
             this.left_panel.update(cx, |panel, cx| {
                 panel.set_editor(None, cx);
             });
+            this.on_focus_changed(cx);
+            cx.notify();
+        })
+        .detach();
+
+        let struct_tree = left_panel.read(cx).struct_tree.clone();
+        cx.on_focus_in(&struct_tree.read(cx).focus_handle(cx), window, |this, _, cx| {
+            this.active_editor = None;
+            this.status_bar.update(cx, |status_bar, _| status_bar.set_active_editor(None));
+            this.left_panel.update(cx, |panel, cx| {
+                panel.set_editor(None, cx);
+            });
+            this.on_focus_changed(cx);
             cx.notify();
         })
         .detach();
@@ -207,6 +220,7 @@ impl Workspace {
                 this.left_panel.update(cx, |panel, cx| {
                     panel.set_editor(Some(editor.clone()), cx);
                 });
+                this.on_focus_changed(cx);
                 cx.notify();
             }
         })
@@ -381,6 +395,7 @@ impl Workspace {
                                 cx.on_focus_in(&diff_view.read(cx).focus_handle(cx), window, |this, _, cx| {
                                     this.active_editor = None;
                                     this.status_bar.update(cx, |status_bar, _| status_bar.set_active_editor(None));
+                                    this.on_focus_changed(cx);
                                     cx.notify();
                                 })
                                 .detach();
@@ -453,7 +468,7 @@ impl Workspace {
                     Ok(contents) => match serde_yaml::from_str::<crate::core::structure::KsyDefinition>(&contents) {
                         Ok(ksy) => {
                             window
-                                .update(|window, cx| {
+                                .update(|_window, cx| {
                                     view.update(cx, |this, cx| {
                                         let ksy_arc = Arc::new(ksy);
                                         this.ksy_definition = Some(ksy_arc.clone());
@@ -557,6 +572,7 @@ impl Workspace {
         cx.on_focus_in(&settings_panel.read(cx).focus_handle(cx), window, |this, _, cx| {
             this.active_editor = None;
             this.status_bar.update(cx, |status_bar, _| status_bar.set_active_editor(None));
+            this.on_focus_changed(cx);
             cx.notify();
         })
         .detach();
@@ -692,6 +708,48 @@ impl Workspace {
             }
         }
         false
+    }
+
+    fn on_focus_changed(&self, cx: &mut Context<Self>) {
+        self.left_panel.update(cx, |panel, cx| {
+            panel.file_tree.update(cx, |_, cx| cx.notify());
+            panel.struct_tree.update(cx, |_, cx| cx.notify());
+        });
+
+        // Clone the item to release the immutable borrow on cx
+        let item = self.dock_area.read(cx).items().clone();
+        Self::notify_panels_recursive(&item, cx);
+    }
+
+    fn notify_panels_recursive(item: &gpui_component::dock::DockItem, cx: &mut Context<Self>) {
+        match item {
+            gpui_component::dock::DockItem::Tabs { items, .. } => {
+                for panel in items {
+                    if let Ok(p) = panel.view().downcast::<EditorPanel>() {
+                        let _ = p.update(cx, |_, cx| cx.notify());
+                    } else if let Ok(p) = panel.view().downcast::<crate::ui::panels::diff_panel::DiffPanel>() {
+                        let _ = p.update(cx, |_, cx| cx.notify());
+                    } else if let Ok(p) = panel.view().downcast::<crate::ui::panels::settings_panel::SettingsPanel>() {
+                        let _ = p.update(cx, |_, cx| cx.notify());
+                    }
+                }
+            }
+            gpui_component::dock::DockItem::Split { items, .. } => {
+                for sub_item in items {
+                    Self::notify_panels_recursive(sub_item, cx);
+                }
+            }
+            gpui_component::dock::DockItem::Panel { view, .. } => {
+                if let Ok(p) = view.view().downcast::<EditorPanel>() {
+                    let _ = p.update(cx, |_, cx| cx.notify());
+                } else if let Ok(p) = view.view().downcast::<crate::ui::panels::diff_panel::DiffPanel>() {
+                    let _ = p.update(cx, |_, cx| cx.notify());
+                } else if let Ok(p) = view.view().downcast::<crate::ui::panels::settings_panel::SettingsPanel>() {
+                    let _ = p.update(cx, |_, cx| cx.notify());
+                }
+            }
+            _ => {}
+        }
     }
 
     fn sync_activity_bar(&self, cx: &mut Context<Self>) {

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use gpui::Hsla;
 
 #[derive(Debug, Clone)]

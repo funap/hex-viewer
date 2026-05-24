@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 /// KaitaiStream represents the binary stream reader for Kaitai Struct formats,
 /// supporting bit-level reading, endian-specific integer/float reads, and substreams.
 pub struct KaitaiStream<'a> {

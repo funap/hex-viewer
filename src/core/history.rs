@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::core::command::Command;
 
 /// Manages the history of commands for undo/redo functionality.

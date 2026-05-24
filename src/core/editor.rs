@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::core::command::Command;
 use crate::core::document::Document;
 use crate::core::encoding::Encoding;

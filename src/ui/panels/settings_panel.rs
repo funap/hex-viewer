@@ -99,6 +99,7 @@ impl Render for SettingsPanel {
             .flex()
             .flex_col()
             .gap_4()
+            .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::on_action_update_setting_input))
             .child(div().child("Editor").font_weight(gpui::FontWeight::BOLD).mb_2())
             .child(
