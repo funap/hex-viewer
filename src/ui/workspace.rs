@@ -64,9 +64,9 @@ impl Workspace {
         let left_panel = cx.new(|cx| LeftPanel::new(file_tree.clone(), cx));
         let activity_bar = cx.new(|cx| ActivityBar::new(cx));
 
-        cx.subscribe(&activity_bar, |this, _, event: &ActivityBarEvent, cx| match event {
+        cx.subscribe_in(&activity_bar, window, |this, _, event: &ActivityBarEvent, window, cx| match event {
             ActivityBarEvent::Select(activity) => {
-                this.select_activity(*activity, cx);
+                this.select_activity(*activity, window, cx);
             }
         })
         .detach();
@@ -421,15 +421,15 @@ impl Workspace {
         cx.notify();
     }
 
-    fn on_action_show_files_tab(&mut self, _: &ShowFilesTab, _: &mut Window, cx: &mut Context<Self>) {
-        self.select_activity(Activity::Files, cx);
+    fn on_action_show_files_tab(&mut self, _: &ShowFilesTab, window: &mut Window, cx: &mut Context<Self>) {
+        self.select_activity(Activity::Files, window, cx);
     }
 
-    fn on_action_show_structure_tab(&mut self, _: &ShowStructureTab, _: &mut Window, cx: &mut Context<Self>) {
-        self.select_activity(Activity::Structure, cx);
+    fn on_action_show_structure_tab(&mut self, _: &ShowStructureTab, window: &mut Window, cx: &mut Context<Self>) {
+        self.select_activity(Activity::Structure, window, cx);
     }
 
-    fn select_activity(&mut self, activity: Activity, cx: &mut Context<Self>) {
+    fn select_activity(&mut self, activity: Activity, window: &mut Window, cx: &mut Context<Self>) {
         let tab = match activity {
             Activity::Files => LeftPanelTab::Files,
             Activity::Structure => LeftPanelTab::Structure,
@@ -446,6 +446,8 @@ impl Workspace {
             self.left_panel.update(cx, |p, cx| {
                 p.set_tab(tab, cx);
             });
+            let focus_handle = self.left_panel.read(cx).focus_handle(cx);
+            focus_handle.focus(window);
         }
 
         // Ensure the activity bar reflects the new state immediately

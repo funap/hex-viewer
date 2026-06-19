@@ -53,7 +53,17 @@ impl DiffPanel {
 
         let focus_handle = cx.focus_handle();
 
-        cx.on_focus_in(&focus_handle, window, |_this, _window, _cx| {}).detach();
+        let left_focus_handle = left_view.read(cx).focus_handle(cx);
+        cx.on_focus_in(&focus_handle, window, {
+            let left_focus_handle = left_focus_handle.clone();
+            let focus_handle = focus_handle.clone();
+            move |_, window, cx| {
+                if window.focused(cx).as_ref() == Some(&focus_handle) {
+                    left_focus_handle.focus(window);
+                }
+            }
+        })
+        .detach();
 
         let mut subscriptions = Vec::new();
 

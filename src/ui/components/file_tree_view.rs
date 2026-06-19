@@ -235,6 +235,9 @@ impl Render for FileTreeView {
             .id("file-tree-view")
             .key_context(CONTEXT)
             .track_focus(&self.focus_handle)
+            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, _| {
+                this.focus_handle.focus(window);
+            }))
             .on_action(cx.listener(Self::on_action_rename))
             .on_action(cx.listener(Self::on_action_select_item))
             .on_action(cx.listener(Self::on_action_set_file_tree_folder))
@@ -361,7 +364,9 @@ impl Render for FileTreeView {
                             }))
                             .on_click(window.listener_for(&view, {
                                 let item = item.clone();
-                                move |this, event: &gpui::ClickEvent, _window, cx| {
+                                let focus_handle = focus_handle.clone();
+                                move |this, event: &gpui::ClickEvent, window, cx| {
+                                    focus_handle.focus(window);
                                     if event.modifiers().control || event.modifiers().platform {
                                         this.toggle_selection(item.clone(), cx);
                                     } else {

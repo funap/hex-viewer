@@ -114,7 +114,7 @@ impl StructTreeView {
         }
     }
 
-    fn render_list_item(ix: usize, field: &FlattenedField, editor: Option<Entity<Editor>>, cx: &mut App) -> AnyElement {
+    fn render_list_item(ix: usize, field: &FlattenedField, editor: Option<Entity<Editor>>, focus_handle: FocusHandle, cx: &mut App) -> AnyElement {
         let padding_left = px(16.0 * field.depth as f32 + 12.0);
         let offset = field.offset;
 
@@ -138,7 +138,8 @@ impl StructTreeView {
                     .child(div().text_color(cx.theme().foreground).child(field.id.clone()))
                     .child(div().ml_auto().text_color(cx.theme().muted_foreground).child(field.value_str.clone())),
             )
-            .on_click(move |_, _, cx| {
+            .on_click(move |_, window, cx| {
+                focus_handle.focus(window);
                 this_on_field_click(offset, cx, editor.clone());
             })
             .into_any_element()
@@ -164,6 +165,9 @@ impl Render for StructTreeView {
         let container = crate::ui::style::apply_focus_indicator(v_flex(), is_focused, theme)
             .id("struct-tree-view")
             .track_focus(&self.focus_handle)
+            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, _| {
+                this.focus_handle.focus(window);
+            }))
             .size_full()
             .flex_shrink_0()
             .bg(theme.sidebar)
@@ -187,18 +191,19 @@ impl Render for StructTreeView {
                     .into_any_element()
             } else {
                 list(self.list_state.clone(), move |ix, _window, cx| {
-                    let item = {
+                    let (item, focus_handle) = {
                         let this = view.read(cx);
-                        if ix < this.flattened_fields.len() {
+                        let item = if ix < this.flattened_fields.len() {
                             Some(this.flattened_fields[ix].clone())
                         } else {
                             None
-                        }
+                        };
+                        (item, this.focus_handle.clone())
                     };
                     let editor = view.read(cx).editor.clone();
 
                     if let Some(field) = item {
-                        Self::render_list_item(ix, &field, editor, cx)
+                        Self::render_list_item(ix, &field, editor, focus_handle, cx)
                     } else {
                         div().into_any_element()
                     }

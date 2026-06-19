@@ -81,8 +81,11 @@ impl EditorPanel {
         let hex_focus_handle = hex_view.read(cx).focus_handle(cx);
         cx.on_focus_in(&focus_handle, window, {
             let hex_focus_handle = hex_focus_handle.clone();
-            move |_, window, _| {
-                hex_focus_handle.focus(window);
+            let focus_handle = focus_handle.clone();
+            move |_, window, cx| {
+                if window.focused(cx).as_ref() == Some(&focus_handle) {
+                    hex_focus_handle.focus(window);
+                }
             }
         })
         .detach();
