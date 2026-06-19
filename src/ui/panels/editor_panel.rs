@@ -258,15 +258,18 @@ impl EditorPanel {
                 let pattern_len = match mode {
                     crate::core::search::SearchMode::Text => query.len(),
                     crate::core::search::SearchMode::Hex => {
-                        let hex_str: String = query.chars().filter(|c| c.is_ascii_hexdigit()).collect();
-                        hex_str.len() / 2
+                        crate::core::search::parse_hex_pattern(&query)
+                            .map(|pat| pat.len())
+                            .unwrap_or(0)
                     }
                 };
 
-                let theme = cx.theme();
-                for &pos in &editor.search_state.results {
-                    let end = pos + pattern_len;
-                    highlights.push((pos..end, theme.yellow.opacity(0.4)));
+                if pattern_len > 0 {
+                    let theme = cx.theme();
+                    for &pos in &editor.search_state.results {
+                        let end = pos + pattern_len;
+                        highlights.push((pos..end, theme.yellow.opacity(0.4)));
+                    }
                 }
             }
         }

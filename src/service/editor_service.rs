@@ -66,27 +66,19 @@ impl EditorService {
             }
 
             match options.mode {
-                crate::core::search::SearchMode::Text => search::find_occurrences(buffer.data(), query.as_bytes(), options.limit, options.range.clone()),
+                crate::core::search::SearchMode::Text => {
+                    let pattern: Vec<crate::core::search::PatternByte> = query
+                        .as_bytes()
+                        .iter()
+                        .map(|&b| crate::core::search::PatternByte::new_exact(b))
+                        .collect();
+                    search::find_occurrences(buffer.data(), &pattern, options.limit, options.range.clone())
+                }
                 crate::core::search::SearchMode::Hex => {
-                    // Parse hex string (remove spaces and keep only valid hex characters)
-                    let hex_str: String = query.chars().filter(|c| c.is_ascii_hexdigit()).collect();
-
-                    if hex_str.is_empty() || hex_str.len() % 2 != 0 {
-                        // Invalid or empty hex string
-                        Vec::new()
+                    if let Some(pattern) = crate::core::search::parse_hex_pattern(&query) {
+                        search::find_occurrences(buffer.data(), &pattern, options.limit, options.range.clone())
                     } else {
-                        let bytes: Result<Vec<u8>, _> = (0..hex_str.len())
-                            .step_by(2)
-                            .map(|i| {
-                                // Safe to use byte indexing since we filtered to ASCII only
-                                u8::from_str_radix(&hex_str[i..i + 2], 16)
-                            })
-                            .collect();
-
-                        match bytes {
-                            Ok(pattern) => search::find_occurrences(buffer.data(), &pattern, options.limit, options.range.clone()),
-                            Err(_) => Vec::new(),
-                        }
+                        Vec::new()
                     }
                 }
             }
