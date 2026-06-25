@@ -117,8 +117,8 @@ pub struct HexView {
     editor: Entity<Editor>,
     focus_handle: FocusHandle,
     is_dragging: bool,
-    last_bounds: Option<Bounds<Pixels>>,
-    last_ascii_layout: Option<(Pixels, Pixels)>, // (ascii_start_x, ascii_char_width)
+    last_bounds: std::cell::Cell<Option<Bounds<Pixels>>>,
+    last_ascii_layout: std::cell::Cell<Option<(Pixels, Pixels)>>, // (ascii_start_x, ascii_char_width)
     scroll_offset: usize,
     scroll_handle: ScrollHandle,
     highlights: Vec<(Range<usize>, Hsla)>,
@@ -145,8 +145,8 @@ impl HexView {
             editor,
             focus_handle: cx.focus_handle(),
             is_dragging: false,
-            last_bounds: None,
-            last_ascii_layout: None,
+            last_bounds: std::cell::Cell::new(None),
+            last_ascii_layout: std::cell::Cell::new(None),
             scroll_offset: 0,
             scroll_handle: ScrollHandle::new(),
             highlights: Vec::new(),
@@ -266,7 +266,7 @@ impl HexView {
     }
 
     fn ensure_cursor_visible(&mut self, cx: &mut Context<Self>) {
-        let bounds = match self.last_bounds {
+        let bounds = match self.last_bounds.get() {
             Some(b) => b,
             None => return,
         };
@@ -291,7 +291,7 @@ impl HexView {
     }
 
     fn byte_pos_from_point(&self, point: Point<Pixels>, cx: &App) -> Option<usize> {
-        let bounds = self.last_bounds?;
+        let bounds = self.last_bounds.get()?;
         let header_height = if self.show_header { px(HEADER_HEIGHT) } else { px(0.) };
         let row_height = px(ROW_HEIGHT);
         let offset_width = if self.show_offset { px(OFFSET_WIDTH) } else { px(0.) };
@@ -335,7 +335,7 @@ impl HexView {
             }
         }
 
-        if let Some((ascii_start_x, ascii_char_width)) = self.last_ascii_layout {
+        if let Some((ascii_start_x, ascii_char_width)) = self.last_ascii_layout.get() {
             let ascii_x_offset = point.x - ascii_start_x;
             if ascii_x_offset >= px(0.) && ascii_char_width > px(0.) {
                 let byte_in_row = (ascii_x_offset / ascii_char_width).floor() as usize;
@@ -367,7 +367,7 @@ impl HexView {
     }
 
     fn byte_pos_from_point_clamped(&self, point: Point<Pixels>, cx: &App) -> Option<usize> {
-        let bounds = self.last_bounds?;
+        let bounds = self.last_bounds.get()?;
         let header_height = if self.show_header { px(HEADER_HEIGHT) } else { px(0.) };
         let row_height = px(ROW_HEIGHT);
         let offset_width = if self.show_offset { px(OFFSET_WIDTH) } else { px(0.) };
@@ -398,7 +398,7 @@ impl HexView {
         let row_len = row_end - row_start;
 
         let x_offset = point.x - hex_start_x;
-        let byte_in_row = if let Some((ascii_start_x, ascii_char_width)) = self.last_ascii_layout {
+        let byte_in_row = if let Some((ascii_start_x, ascii_char_width)) = self.last_ascii_layout.get() {
             if point.x > ascii_start_x - px(SECTION_GAP) / 2.0 && ascii_char_width > px(0.) {
                 let ascii_x_offset = point.x - ascii_start_x;
                 (ascii_x_offset / ascii_char_width).floor() as i32
@@ -434,7 +434,7 @@ impl HexView {
         }
 
         if self.is_dragging {
-            if let Some(bounds) = self.last_bounds {
+            if let Some(bounds) = self.last_bounds.get() {
                 let header_height = if self.show_header { px(HEADER_HEIGHT) } else { px(0.) };
                 let top_edge = bounds.top() + header_height;
 
@@ -576,7 +576,7 @@ impl HexView {
     }
 
     fn get_visible_rows(&self) -> usize {
-        if let Some(bounds) = self.last_bounds {
+        if let Some(bounds) = self.last_bounds.get() {
             let header_height = px(HEADER_HEIGHT);
             let row_height = px(ROW_HEIGHT);
             let visible_height = bounds.size.height - header_height;
@@ -1389,11 +1389,10 @@ impl Element for HexViewElement {
         }
 
         let ascii_char_width = prepaint.ascii_char_width;
-        self.view
-            .update(cx, |view, _cx| {
-                view.last_bounds = Some(bounds);
-                view.last_ascii_layout = Some((ascii_start_x, ascii_char_width));
-            })
-            .ok();
+        if let Some(view) = self.view.upgrade() {
+            let view = view.read(cx);
+            view.last_bounds.set(Some(bounds));
+            view.last_ascii_layout.set(Some((ascii_start_x, ascii_char_width)));
+        }
     }
 }

@@ -20,4 +20,5 @@ rfd = "0.17.2"
 serde_yaml = "0.9"
 memmap2 = "0.9.10"
 flate2 = "1.1.9"
+image = "0.25.9"
 

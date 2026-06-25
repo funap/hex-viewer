@@ -165,9 +165,12 @@ impl Render for StructTreeView {
         let container = crate::ui::style::apply_focus_indicator(v_flex(), is_focused, theme)
             .id("struct-tree-view")
             .track_focus(&self.focus_handle)
-            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, _| {
-                this.focus_handle.focus(window);
-            }))
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(|this, _, window, _| {
+                    this.focus_handle.focus(window);
+                }),
+            )
             .size_full()
             .flex_shrink_0()
             .bg(theme.sidebar)

@@ -235,9 +235,12 @@ impl Render for FileTreeView {
             .id("file-tree-view")
             .key_context(CONTEXT)
             .track_focus(&self.focus_handle)
-            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, _| {
-                this.focus_handle.focus(window);
-            }))
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(|this, _, window, _| {
+                    this.focus_handle.focus(window);
+                }),
+            )
             .on_action(cx.listener(Self::on_action_rename))
             .on_action(cx.listener(Self::on_action_select_item))
             .on_action(cx.listener(Self::on_action_set_file_tree_folder))

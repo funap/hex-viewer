@@ -7431,6 +7431,7 @@ dependencies = [
  "gpui-component",
  "gpui-component-assets",
  "gpui_util",
+ "image",
  "memmap2",
  "rfd",
  "schemars",

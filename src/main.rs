@@ -71,6 +71,8 @@ fn main() {
                         ],
                     }),
                     gpui::MenuItem::separator(),
+                    gpui::MenuItem::action("2D Visual Map", crate::actions::OpenVisualMap),
+                    gpui::MenuItem::separator(),
                     gpui::MenuItem::action("Settings", crate::actions::OpenSettings),
                 ],
             },
@@ -98,6 +100,7 @@ fn main() {
             gpui::KeyBinding::new("cmd-end", crate::actions::GoToEnd, None),
             gpui::KeyBinding::new("cmd-,", crate::actions::OpenSettings, None),
             gpui::KeyBinding::new("cmd-shift-s", crate::actions::LoadStructureDefinition, None),
+            gpui::KeyBinding::new("cmd-shift-v", crate::actions::OpenVisualMap, None),
         ]);
 
         // Parse command line arguments (skip the first one which is the program name)

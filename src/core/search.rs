@@ -118,10 +118,7 @@ pub fn parse_hex_pattern(query: &str) -> Option<Vec<PatternByte>> {
                     });
                 } else if is_c1_wild && is_c2_hex {
                     let val_low = c2.to_digit(16).unwrap() as u8;
-                    pattern.push(PatternByte {
-                        value: val_low,
-                        mask: 0x0F,
-                    });
+                    pattern.push(PatternByte { value: val_low, mask: 0x0F });
                 } else {
                     return None;
                 }
@@ -140,20 +137,11 @@ pub fn parse_hex_pattern(query: &str) -> Option<Vec<PatternByte>> {
         }
     }
 
-    if pattern.is_empty() {
-        None
-    } else {
-        Some(pattern)
-    }
+    if pattern.is_empty() { None } else { Some(pattern) }
 }
 
 /// A stateless function to find occurrences of a pattern in a byte slice.
-pub fn find_occurrences(
-    data: &[u8],
-    pattern: &[PatternByte],
-    limit: SearchLimit,
-    range: Option<std::ops::Range<usize>>,
-) -> Vec<usize> {
+pub fn find_occurrences(data: &[u8], pattern: &[PatternByte], limit: SearchLimit, range: Option<std::ops::Range<usize>>) -> Vec<usize> {
     if pattern.is_empty() || pattern.len() > data.len() {
         return Vec::new();
     }

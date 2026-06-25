@@ -143,3 +143,6 @@ pub struct LoadStructureDefinition;
 #[derive(Clone, PartialEq, Deserialize, JsonSchema, Action)]
 #[action(namespace = app)]
 pub struct ClearStructureDefinition;
+
+#[derive(Clone, PartialEq, Action)]
+pub struct OpenVisualMap;

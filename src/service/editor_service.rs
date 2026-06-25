@@ -67,11 +67,8 @@ impl EditorService {
 
             match options.mode {
                 crate::core::search::SearchMode::Text => {
-                    let pattern: Vec<crate::core::search::PatternByte> = query
-                        .as_bytes()
-                        .iter()
-                        .map(|&b| crate::core::search::PatternByte::new_exact(b))
-                        .collect();
+                    let pattern: Vec<crate::core::search::PatternByte> =
+                        query.as_bytes().iter().map(|&b| crate::core::search::PatternByte::new_exact(b)).collect();
                     search::find_occurrences(buffer.data(), &pattern, options.limit, options.range.clone())
                 }
                 crate::core::search::SearchMode::Hex => {

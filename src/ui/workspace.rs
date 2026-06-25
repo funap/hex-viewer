@@ -606,6 +606,67 @@ impl Workspace {
         None
     }
 
+    fn on_action_open_visual_map(&mut self, _: &OpenVisualMap, window: &mut Window, cx: &mut Context<Self>) {
+        use crate::ui::panels::visual_map_panel::VisualMapPanel;
+
+        if let Some(editor) = &self.active_editor {
+            let dock_area = self.dock_area.read(cx);
+            let existing_panel = Self::check_has_visual_map_panel(dock_area.items(), editor, cx);
+
+            if let Some(panel) = existing_panel {
+                let focus_handle = panel.read(cx).focus_handle(cx);
+                focus_handle.focus(window);
+                return;
+            }
+
+            let visual_map_panel = cx.new(|cx| VisualMapPanel::new(editor.clone(), cx));
+            cx.on_focus_in(&visual_map_panel.read(cx).focus_handle(cx), window, |this, _, cx| {
+                this.on_focus_changed(cx);
+                cx.notify();
+            })
+            .detach();
+            let panel = Arc::new(visual_map_panel);
+
+            self.dock_area.update(cx, |dock_area, cx| {
+                dock_area.add_panel(panel, DockPlacement::Right, None, window, cx);
+            });
+        }
+    }
+
+    fn check_has_visual_map_panel(
+        dock_item: &DockItem,
+        editor: &Entity<Editor>,
+        cx: &App,
+    ) -> Option<Entity<crate::ui::panels::visual_map_panel::VisualMapPanel>> {
+        match dock_item {
+            DockItem::Tabs { items, .. } => {
+                for item in items {
+                    if let Ok(panel) = item.view().downcast::<crate::ui::panels::visual_map_panel::VisualMapPanel>() {
+                        if &panel.read(cx).editor == editor {
+                            return Some(panel);
+                        }
+                    }
+                }
+            }
+            DockItem::Split { items, .. } => {
+                for item in items {
+                    if let Some(panel) = Self::check_has_visual_map_panel(item, editor, cx) {
+                        return Some(panel);
+                    }
+                }
+            }
+            DockItem::Panel { view, .. } => {
+                if let Ok(panel) = view.view().downcast::<crate::ui::panels::visual_map_panel::VisualMapPanel>() {
+                    if &panel.read(cx).editor == editor {
+                        return Some(panel);
+                    }
+                }
+            }
+            _ => {}
+        }
+        None
+    }
+
     fn find_existing_panel(&self, path: &std::path::Path, cx: &App) -> Option<FocusHandle> {
         let dock_area = self.dock_area.read(cx);
         Self::find_panel_in_items(dock_area.items(), path, cx)
@@ -707,6 +768,9 @@ impl Workspace {
                 if view.view().downcast::<crate::ui::panels::settings_panel::SettingsPanel>().is_ok() {
                     return true;
                 }
+                if view.view().downcast::<crate::ui::panels::visual_map_panel::VisualMapPanel>().is_ok() {
+                    return true;
+                }
             }
         }
         false
@@ -733,6 +797,8 @@ impl Workspace {
                         let _ = p.update(cx, |_, cx| cx.notify());
                     } else if let Ok(p) = panel.view().downcast::<crate::ui::panels::settings_panel::SettingsPanel>() {
                         let _ = p.update(cx, |_, cx| cx.notify());
+                    } else if let Ok(p) = panel.view().downcast::<crate::ui::panels::visual_map_panel::VisualMapPanel>() {
+                        let _ = p.update(cx, |_, cx| cx.notify());
                     }
                 }
             }
@@ -747,6 +813,8 @@ impl Workspace {
                 } else if let Ok(p) = view.view().downcast::<crate::ui::panels::diff_panel::DiffPanel>() {
                     let _ = p.update(cx, |_, cx| cx.notify());
                 } else if let Ok(p) = view.view().downcast::<crate::ui::panels::settings_panel::SettingsPanel>() {
+                    let _ = p.update(cx, |_, cx| cx.notify());
+                } else if let Ok(p) = view.view().downcast::<crate::ui::panels::visual_map_panel::VisualMapPanel>() {
                     let _ = p.update(cx, |_, cx| cx.notify());
                 }
             }
@@ -788,6 +856,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_action_open_diff))
             .on_action(cx.listener(Self::on_action_toggle_left_panel))
             .on_action(cx.listener(Self::on_action_open_settings))
+            .on_action(cx.listener(Self::on_action_open_visual_map))
             .on_action(cx.listener(Self::on_action_show_files_tab))
             .on_action(cx.listener(Self::on_action_show_structure_tab))
             .on_action(cx.listener(Self::on_action_load_structure_definition))

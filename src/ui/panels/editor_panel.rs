@@ -257,11 +257,7 @@ impl EditorPanel {
                 let mode = bar.mode();
                 let pattern_len = match mode {
                     crate::core::search::SearchMode::Text => query.len(),
-                    crate::core::search::SearchMode::Hex => {
-                        crate::core::search::parse_hex_pattern(&query)
-                            .map(|pat| pat.len())
-                            .unwrap_or(0)
-                    }
+                    crate::core::search::SearchMode::Hex => crate::core::search::parse_hex_pattern(&query).map(|pat| pat.len()).unwrap_or(0),
                 };
 
                 if pattern_len > 0 {
