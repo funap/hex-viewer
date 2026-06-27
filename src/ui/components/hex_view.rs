@@ -1064,7 +1064,7 @@ impl Element for HexViewElement {
                     let width = x_end - x_start;
 
                     selection_quads.push(fill(
-                        Bounds::new(point(x_start - px(SELECTION_PADDING), y_pos), size(width + px(SELECTION_PADDING), row_height)),
+                        Bounds::new(point(x_start - px(SELECTION_PADDING), y_pos), size(width + 2.0 * px(SELECTION_PADDING), row_height)),
                         *color,
                     ));
 
@@ -1092,7 +1092,7 @@ impl Element for HexViewElement {
                 let width = x_end - x_start;
 
                 selection_quads.push(fill(
-                    Bounds::new(point(x_start - px(SELECTION_PADDING), y_pos), size(width + px(SELECTION_PADDING), row_height)),
+                    Bounds::new(point(x_start - px(SELECTION_PADDING), y_pos), size(width + 2.0 * px(SELECTION_PADDING), row_height)),
                     selection_bg_color,
                 ));
 
@@ -1214,7 +1214,7 @@ impl Element for HexViewElement {
                 cursor_quads.push(fill(
                     Bounds::new(
                         point(cursor_x - px(SELECTION_PADDING), y_pos),
-                        size(hex_byte_width + px(SELECTION_PADDING), row_height),
+                        size(hex_byte_width + 2.0 * px(SELECTION_PADDING), row_height),
                     ),
                     cursor_color,
                 ));
