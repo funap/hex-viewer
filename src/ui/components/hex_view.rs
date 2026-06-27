@@ -117,6 +117,7 @@ pub struct HexView {
     last_bounds: std::cell::Cell<Option<Bounds<Pixels>>>,
     last_ascii_layout: std::cell::Cell<Option<(Pixels, Pixels)>>, // (ascii_start_x, ascii_char_width)
     scroll_offset: usize,
+    scroll_remainder: f32,
     scroll_handle: ScrollHandle,
     highlights: Vec<(Range<usize>, Hsla)>,
     max_highlight_len: usize,
@@ -145,6 +146,7 @@ impl HexView {
             last_bounds: std::cell::Cell::new(None),
             last_ascii_layout: std::cell::Cell::new(None),
             scroll_offset: 0,
+            scroll_remainder: 0.0,
             scroll_handle: ScrollHandle::new(),
             highlights: Vec::new(),
             max_highlight_len: 0,
@@ -494,8 +496,12 @@ impl HexView {
         let total_rows = self.editor.read(cx).line_starts().len();
         let max_offset = total_rows.saturating_sub(1).max(0) as i32;
 
-        let delta_y = event.delta.pixel_delta(row_height).y.as_f32() as i32;
-        let new_scroll_offset = self.scroll_offset as i32 - delta_y;
+        let delta_y_pixels = event.delta.pixel_delta(row_height).y.as_f32();
+        let total_delta = delta_y_pixels + self.scroll_remainder;
+        let delta_rows = (total_delta / row_height.as_f32()) as i32;
+        self.scroll_remainder = total_delta - (delta_rows as f32 * row_height.as_f32());
+
+        let new_scroll_offset = self.scroll_offset as i32 - delta_rows;
 
         self.scroll_offset = cmp::max(0, cmp::min(new_scroll_offset, max_offset)) as usize;
         self.scroll_handle.set_offset(point(px(0.), -(self.scroll_offset as f32 * row_height)));

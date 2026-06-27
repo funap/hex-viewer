@@ -21,6 +21,7 @@ pub struct VisualMapPanel {
     cols: usize,
     pixel_size: usize,
     scroll_offset: usize,
+    scroll_remainder: f32,
     scroll_handle: ScrollHandle,
     color_mode: ColorMode,
     hovered_info: Option<(usize, u8)>,
@@ -46,6 +47,7 @@ impl VisualMapPanel {
             cols: 256,
             pixel_size: 4,
             scroll_offset: 0,
+            scroll_remainder: 0.0,
             scroll_handle: ScrollHandle::new(),
             color_mode: ColorMode::DataCategory,
             hovered_info: None,
@@ -93,8 +95,12 @@ impl VisualMapPanel {
         let total_rows = (buffer_len + self.cols - 1) / self.cols;
 
         let max_offset = total_rows.saturating_sub(1).max(0) as i32;
-        let delta_y = event.delta.pixel_delta(pixel_size_px).y.as_f32() as i32;
-        let new_scroll_offset = self.scroll_offset as i32 - delta_y;
+        let delta_y_pixels = event.delta.pixel_delta(pixel_size_px).y.as_f32();
+        let total_delta = delta_y_pixels + self.scroll_remainder;
+        let delta_rows = (total_delta / pixel_size_px.as_f32()) as i32;
+        self.scroll_remainder = total_delta - (delta_rows as f32 * pixel_size_px.as_f32());
+
+        let new_scroll_offset = self.scroll_offset as i32 - delta_rows;
 
         self.scroll_offset = cmp::max(0, cmp::min(new_scroll_offset, max_offset)) as usize;
         self.scroll_handle.set_offset(point(px(0.), -(self.scroll_offset as f32 * pixel_size_px)));
