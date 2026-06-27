@@ -890,6 +890,26 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_action_clear_structure_definition))
             .on_action(cx.listener(Self::on_action_open_folder))
             .on_action(cx.listener(Self::on_action_close_folder))
+            .on_drop(cx.listener(move |this, external_paths: &gpui::ExternalPaths, window, cx| {
+                for path in external_paths.paths() {
+                    if path.is_file() {
+                        let action = crate::actions::OpenFile {
+                            path: path.to_string_lossy().to_string(),
+                        };
+                        this.on_action_open_file(&action, window, cx);
+                    } else if path.is_dir() {
+                        this.is_left_panel_visible = true;
+                        this.left_panel.update(cx, |p, cx| {
+                            p.set_tab(crate::ui::panels::left_panel::LeftPanelTab::Files, cx);
+                            p.file_tree.update(cx, |ft, cx| {
+                                ft.set_root_path(path.clone(), cx);
+                            });
+                        });
+                        this.sync_activity_bar(cx);
+                    }
+                }
+                cx.notify();
+            }))
             .relative()
             .size_full()
             .flex()
