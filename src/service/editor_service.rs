@@ -30,6 +30,7 @@ impl EditorService {
     /// Otherwise, it reads the file from disk, adds it to the cache, and returns it.
     /// This operation is thread-safe.
     pub async fn open_file(&self, path: PathBuf) -> anyhow::Result<Arc<RwLock<Document>>> {
+        let path = path.canonicalize().unwrap_or(path);
         // First, check if the document is already in the cache with a read lock.
         if let Some(document) = self.documents.read().unwrap().get(&path) {
             return Ok(document.clone());

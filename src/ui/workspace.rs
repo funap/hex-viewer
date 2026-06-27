@@ -15,7 +15,7 @@ use crate::app_state::AppState;
 use crate::core::editor::Editor;
 use crate::ui::components::status_bar::StatusBar;
 use gpui_component::Root;
-use gpui_component::dock::{DockArea, DockItem, DockPlacement, Panel, PanelView};
+use gpui_component::dock::{DockArea, DockItem, DockPlacement, Panel, PanelView, TabPanel};
 use gpui_component::menu::AppMenuBar;
 use gpui_component::resizable::{h_resizable, resizable_panel};
 use std::path::PathBuf;
@@ -241,10 +241,7 @@ impl Workspace {
         })
         .detach();
         let panel = Arc::new(editor_panel);
-
-        self.dock_area.update(cx, |dock_area, cx| {
-            dock_area.add_panel(panel, DockPlacement::Center, None, window, cx);
-        });
+        self.add_panel_to_center_dock(panel, window, cx);
     }
 
     fn on_action_open_file_dialog(&mut self, _: &OpenFileDialog, window: &mut Window, cx: &mut Context<Self>) {
@@ -344,9 +341,18 @@ impl Workspace {
         let file_path = action.path.clone();
         let path = std::path::PathBuf::from(&file_path);
 
-        if let Some(focus_handle) = self.find_existing_panel(&path, cx) {
+        if let Some((tab_panel, panel)) = self.find_existing_panel_and_tab_panel(&path, cx) {
             println!("Found existing panel for {:?}", path);
-            focus_handle.focus(window);
+            let index_opt = {
+                let mirror = unsafe { &*(tab_panel.read(cx) as *const TabPanel as *const TabPanelMirror) };
+                mirror.panels.iter().position(|p| p.view().entity_id() == panel.view().entity_id())
+            };
+
+            if let Some(ix) = index_opt {
+                Self::activate_tab_via_mirror(&tab_panel, ix, window, cx);
+            } else {
+                panel.focus_handle(cx).focus(window);
+            }
             return;
         }
 
@@ -418,10 +424,7 @@ impl Workspace {
                                 .detach();
 
                                 let panel = Arc::new(diff_view);
-
-                                workspace_view.dock_area.update(cx, |dock_area, cx| {
-                                    dock_area.add_panel(panel, DockPlacement::Center, None, window, cx);
-                                });
+                                workspace_view.add_panel_to_center_dock(panel, window, cx);
                             });
                         })
                         .detach();
@@ -620,10 +623,7 @@ impl Workspace {
         })
         .detach();
         let panel = Arc::new(settings_panel);
-
-        self.dock_area.update(cx, |dock_area, cx| {
-            dock_area.add_panel(panel, DockPlacement::Center, None, window, cx);
-        });
+        self.add_panel_to_center_dock(panel, window, cx);
     }
 
     fn check_has_settings_panel(dock_item: &DockItem) -> Option<Entity<crate::ui::panels::settings_panel::SettingsPanel>> {
@@ -663,26 +663,60 @@ impl Workspace {
         cx.notify();
     }
 
-    fn find_existing_panel(&self, path: &std::path::Path, cx: &App) -> Option<FocusHandle> {
-        let dock_area = self.dock_area.read(cx);
-        Self::find_panel_in_items(dock_area.items(), path, cx)
+    fn add_panel_to_center_dock(&self, panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut Context<Self>) {
+        self.dock_area.update(cx, |dock_area, cx| {
+            dock_area.add_panel(panel.clone(), DockPlacement::Center, None, window, cx);
+            let mut items = dock_area.items().clone();
+            if Self::add_panel_to_dock_item_tree(&mut items, panel) {
+                dock_area.set_center(items, window, cx);
+            }
+        });
     }
 
-    fn find_panel_in_items(dock_item: &DockItem, path: &std::path::Path, cx: &App) -> Option<FocusHandle> {
+    fn add_panel_to_dock_item_tree(dock_item: &mut DockItem, panel: Arc<dyn PanelView>) -> bool {
         match dock_item {
             DockItem::Tabs { items, .. } => {
+                if !items.iter().any(|item| item.view().entity_id() == panel.view().entity_id()) {
+                    items.push(panel);
+                    return true;
+                }
+                false
+            }
+            DockItem::Split { items, .. } => {
+                for item in items {
+                    if Self::add_panel_to_dock_item_tree(item, panel.clone()) {
+                        return true;
+                    }
+                }
+                false
+            }
+            _ => false,
+        }
+    }
+
+    fn find_existing_panel_and_tab_panel(&self, path: &std::path::Path, cx: &App) -> Option<(Entity<TabPanel>, Arc<dyn PanelView>)> {
+        let dock_area = self.dock_area.read(cx);
+        Self::find_panel_and_tab_panel_in_items(dock_area.items(), path, cx)
+    }
+
+    fn find_panel_and_tab_panel_in_items(dock_item: &DockItem, path: &std::path::Path, cx: &App) -> Option<(Entity<TabPanel>, Arc<dyn PanelView>)> {
+        let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        match dock_item {
+            DockItem::Tabs { items, view, .. } => {
                 for item in items {
                     if let Ok(panel) = item.view().downcast::<EditorPanel>() {
-                        if panel.read(cx).path(cx) == path {
-                            return Some(panel.read(cx).focus_handle(cx));
+                        let panel_path = panel.read(cx).path(cx);
+                        let canonical_panel_path = panel_path.canonicalize().unwrap_or(panel_path.clone());
+                        if canonical_panel_path == canonical_path {
+                            return Some((view.clone(), item.clone()));
                         }
                     }
                 }
             }
             DockItem::Split { items, .. } => {
                 for item in items {
-                    if let Some(handle) = Self::find_panel_in_items(item, path, cx) {
-                        return Some(handle);
+                    if let Some(res) = Self::find_panel_and_tab_panel_in_items(item, path, cx) {
+                        return Some(res);
                     }
                 }
             }
@@ -961,5 +995,61 @@ impl Render for Workspace {
             .children(Root::render_dialog_layer(window, cx))
             .children(Root::render_sheet_layer(window, cx))
             .children(Root::render_notification_layer(window, cx))
+    }
+}
+
+#[allow(dead_code)]
+pub struct TabPanelMirror {
+    focus_handle: gpui::FocusHandle,
+    dock_area: gpui::WeakEntity<gpui_component::dock::DockArea>,
+    stack_panel: Option<gpui::WeakEntity<gpui_component::dock::StackPanel>>,
+    pub panels: Vec<std::sync::Arc<dyn gpui_component::dock::PanelView>>,
+    pub active_ix: usize,
+    pub closable: bool,
+    tab_bar_scroll_handle: gpui::ScrollHandle,
+    zoomed: bool,
+    collapsed: bool,
+    will_split_placement: Option<gpui_component::Placement>,
+    in_tiles: bool,
+}
+
+impl Workspace {
+    fn activate_tab_via_mirror(tab_panel_entity: &Entity<TabPanel>, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+        tab_panel_entity.update(cx, |tab_panel, cx| {
+            let mirror = unsafe { &mut *(tab_panel as *mut TabPanel as *mut TabPanelMirror) };
+
+            if ix == mirror.active_ix {
+                if let Some(active_panel) = mirror.panels.get(ix) {
+                    active_panel.focus_handle(cx).focus(window);
+                }
+                return;
+            }
+
+            let last_active_ix = mirror.active_ix;
+            mirror.active_ix = ix;
+            mirror.tab_bar_scroll_handle.scroll_to_item(ix);
+
+            if let Some(active_panel) = mirror.panels.get(ix) {
+                active_panel.focus_handle(cx).focus(window);
+            }
+
+            cx.spawn_in(window, async move |view, cx| {
+                _ = cx.update(|window, cx| {
+                    _ = view.update(cx, |view, cx| {
+                        let mirror = unsafe { &mut *(view as *mut TabPanel as *mut TabPanelMirror) };
+                        if let Some(last_active) = mirror.panels.get(last_active_ix) {
+                            last_active.set_active(false, window, cx);
+                        }
+                        if let Some(active) = mirror.panels.get(mirror.active_ix) {
+                            active.set_active(true, window, cx);
+                        }
+                    });
+                });
+            })
+            .detach();
+
+            cx.emit(gpui_component::dock::PanelEvent::LayoutChanged);
+            cx.notify();
+        });
     }
 }

@@ -555,8 +555,7 @@ impl HexView {
             let ascii = window.text_system().shape_line("ASCII".into(), font_size, &[ascii_run], None);
             let ascii_char_width = if ascii.len() > 0 { ascii.width / 5.0 } else { px(10.0) };
 
-            let mut total_width = px(OFFSET_X_START) + offset_width + section_gap 
-                + (hex_byte_width + hex_gap) * max_bytes_per_row as f32;
+            let mut total_width = px(OFFSET_X_START) + offset_width + section_gap + (hex_byte_width + hex_gap) * max_bytes_per_row as f32;
 
             if self.show_ascii {
                 total_width += section_gap + ascii_char_width * max_bytes_per_row as f32 + section_gap;
@@ -886,8 +885,7 @@ impl Render for HexView {
         let hex_gap = px(HEX_GAP);
         let section_gap = px(SECTION_GAP);
 
-        let mut total_width = px(OFFSET_X_START) + offset_width + section_gap 
-            + (hex_byte_width + hex_gap) * max_bytes_per_row as f32;
+        let mut total_width = px(OFFSET_X_START) + offset_width + section_gap + (hex_byte_width + hex_gap) * max_bytes_per_row as f32;
 
         if self.show_ascii {
             total_width += section_gap + ascii_char_width * max_bytes_per_row as f32 + section_gap;
@@ -1462,7 +1460,12 @@ impl Element for HexViewElement {
                 prepaint
                     .header
                     .offset
-                    .paint(point(bounds.left() - self.scroll_offset_x + px(OFFSET_X_START), header_y), header_height, window, cx)
+                    .paint(
+                        point(bounds.left() - self.scroll_offset_x + px(OFFSET_X_START), header_y),
+                        header_height,
+                        window,
+                        cx,
+                    )
                     .ok();
             }
 
