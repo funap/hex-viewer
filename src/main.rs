@@ -83,6 +83,18 @@ fn main() {
                     gpui::MenuItem::action("Clear Definition", crate::actions::ClearStructureDefinition),
                 ],
             },
+            gpui::Menu {
+                name: "Layout".into(),
+                items: vec![
+                    gpui::MenuItem::action("Break Line", crate::actions::AddCustomBreak),
+                    gpui::MenuItem::action("Join Lines", crate::actions::JoinLine),
+                    gpui::MenuItem::separator(),
+                    gpui::MenuItem::action("Remove Break Backward", crate::actions::RemoveCustomBreakBackward),
+                    gpui::MenuItem::action("Remove Break Forward", crate::actions::RemoveCustomBreakForward),
+                    gpui::MenuItem::separator(),
+                    gpui::MenuItem::action("Reset Layout", crate::actions::ClearAllCustomBreaks),
+                ],
+            },
         ]);
 
         cx.bind_keys([
@@ -101,6 +113,7 @@ fn main() {
             gpui::KeyBinding::new("cmd-,", crate::actions::OpenSettings, None),
             gpui::KeyBinding::new("cmd-shift-s", crate::actions::LoadStructureDefinition, None),
             gpui::KeyBinding::new("cmd-shift-v", crate::actions::OpenVisualMap, None),
+            gpui::KeyBinding::new("cmd-shift-backspace", crate::actions::ClearAllCustomBreaks, None),
         ]);
 
         // Parse command line arguments (skip the first one which is the program name)

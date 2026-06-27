@@ -1,4 +1,7 @@
-use crate::actions::{SearchNext, SearchPrev, ToggleSearch};
+use crate::actions::{
+    AddCustomBreak, ClearAllCustomBreaks, JoinLine, RemoveCustomBreakBackward,
+    RemoveCustomBreakForward, SearchNext, SearchPrev, ToggleSearch,
+};
 use crate::core::document::Document;
 use crate::core::editor::Editor;
 use crate::core::encoding::Encoding;
@@ -40,16 +43,12 @@ actions!(
         SelectPageDown,
         SelectHome,
         SelectEnd,
-        AddCustomBreak,
-        RemoveCustomBreakBackward,
-        RemoveCustomBreakForward,
-        JoinLine,
-        ClearAllCustomBreaks,
         TriggerSearch,
         TriggerSearchNext,
         TriggerSearchPrev
     ]
 );
+
 
 const CONTEXT: &str = "HexView";
 
@@ -105,9 +104,9 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("ctrl-shift-g", SearchPrev, Some(CONTEXT)),
         KeyBinding::new("cmd-shift-g", SearchPrev, Some(CONTEXT)),
         KeyBinding::new("enter", AddCustomBreak, Some(CONTEXT)),
-        KeyBinding::new("delete", JoinLine, Some(CONTEXT)),
-        KeyBinding::new("backspace", JoinLine, Some(CONTEXT)),
-        KeyBinding::new("shift-enter", JoinLine, Some(CONTEXT)),
+        KeyBinding::new("shift-j", JoinLine, Some(CONTEXT)),
+        KeyBinding::new("backspace", RemoveCustomBreakBackward, Some(CONTEXT)),
+        KeyBinding::new("delete", RemoveCustomBreakForward, Some(CONTEXT)),
         KeyBinding::new("cmd-shift-backspace", ClearAllCustomBreaks, Some(CONTEXT)),
     ]);
 }

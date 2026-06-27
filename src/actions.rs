@@ -150,3 +150,17 @@ pub struct OpenVisualMap;
 #[derive(Clone, PartialEq, Action)]
 pub struct CloseActivePanel;
 
+#[derive(Clone, PartialEq, Action)]
+pub struct AddCustomBreak;
+
+#[derive(Clone, PartialEq, Action)]
+pub struct RemoveCustomBreakBackward;
+
+#[derive(Clone, PartialEq, Action)]
+pub struct RemoveCustomBreakForward;
+
+#[derive(Clone, PartialEq, Action)]
+pub struct JoinLine;
+
+#[derive(Clone, PartialEq, Action)]
+pub struct ClearAllCustomBreaks;

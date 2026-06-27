@@ -95,16 +95,8 @@ impl Workspace {
         let visual_map = cx.new(|cx| VisualMapPanel::new(None, cx));
 
         cx.on_focus_in(&file_tree.read(cx).focus_handle(cx), window, {
-            let visual_map = visual_map.clone();
             move |this, _, cx| {
-                this.active_editor = None;
-                this.status_bar.update(cx, |status_bar, _| status_bar.set_active_editor(None));
-                this.left_panel.update(cx, |panel, cx| {
-                    panel.set_editor(None, cx);
-                });
-                visual_map.update(cx, |panel, cx| {
-                    panel.set_editor(None, cx);
-                });
+                // Keep active_editor and active_panel reference to support global/menu actions when file tree is focused.
                 this.on_focus_changed(cx);
                 cx.notify();
             }
