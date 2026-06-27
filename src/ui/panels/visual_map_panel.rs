@@ -26,6 +26,7 @@ pub struct VisualMapPanel {
     hovered_info: Option<(usize, u8)>,
     last_bounds: std::cell::Cell<Option<Bounds<Pixels>>>,
     cached_image: RefCell<Option<(Arc<RenderImage>, (usize, usize, usize, ColorMode, usize, f32, f32, u32))>>,
+    is_dragging: bool,
     _editor_subscription: Option<Subscription>,
 }
 
@@ -50,6 +51,7 @@ impl VisualMapPanel {
             hovered_info: None,
             last_bounds: std::cell::Cell::new(None),
             cached_image: RefCell::new(None),
+            is_dragging: false,
             _editor_subscription,
         }
     }
@@ -99,29 +101,37 @@ impl VisualMapPanel {
         cx.notify();
     }
 
+    fn offset_from_point_clamped(&self, point: Point<Pixels>, cx: &App) -> Option<usize> {
+        let bounds = self.last_bounds.get()?;
+        let rel_x = (point.x - bounds.left()).max(px(0.)).min(bounds.size.width - px(1.));
+        let rel_y = (point.y - bounds.top()).max(px(0.)).min(bounds.size.height - px(1.));
+
+        let col = (rel_x.as_f32() / self.pixel_size as f32) as usize;
+        let col = col.min(self.cols.saturating_sub(1));
+        let row = (rel_y.as_f32() / self.pixel_size as f32) as usize + self.scroll_offset;
+        let offset = row * self.cols + col;
+
+        let buffer_len = self.buffer_len(cx);
+        if buffer_len == 0 {
+            return Some(0);
+        }
+        Some(offset.min(buffer_len.saturating_sub(1)))
+    }
+
     fn on_mouse_down(&mut self, event: &MouseDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(bounds) = self.last_bounds.get() {
-            if bounds.contains(&event.position) {
-                let rel_x = event.position.x - bounds.left();
-                let rel_y = event.position.y - bounds.top();
-
-                let col = (rel_x.as_f32() / self.pixel_size as f32) as usize;
-                if col < self.cols {
-                    let row = (rel_y.as_f32() / self.pixel_size as f32) as usize + self.scroll_offset;
-                    let offset = row * self.cols + col;
-
-                    let buffer_len = self.buffer_len(cx);
-                    if offset < buffer_len {
-                        if let Some(editor) = &self.editor {
-                            editor.update(cx, |editor, cx| {
-                                editor.set_cursor_offset(offset);
-                                cx.notify();
-                            });
-                        }
-                    }
-                }
+        self.is_dragging = true;
+        if let Some(offset) = self.offset_from_point_clamped(event.position, cx) {
+            if let Some(editor) = &self.editor {
+                editor.update(cx, |editor, cx| {
+                    editor.set_cursor_offset(offset);
+                    cx.notify();
+                });
             }
         }
+    }
+
+    fn on_mouse_up(&mut self, _event: &MouseUpEvent, _window: &mut Window, _: &mut Context<Self>) {
+        self.is_dragging = false;
     }
 
     fn on_mouse_move(&mut self, event: &MouseMoveEvent, _window: &mut Window, cx: &mut Context<Self>) {
@@ -137,6 +147,17 @@ impl VisualMapPanel {
         if handle_row != self.scroll_offset {
             self.scroll_offset = handle_row.min(total_rows.saturating_sub(1));
             cx.notify();
+        }
+
+        if self.is_dragging {
+            if let Some(offset) = self.offset_from_point_clamped(event.position, cx) {
+                if let Some(editor) = &self.editor {
+                    editor.update(cx, |editor, cx| {
+                        editor.set_cursor_offset(offset);
+                        cx.notify();
+                    });
+                }
+            }
         }
 
         let mut hovered = None;
@@ -263,9 +284,12 @@ impl Render for VisualMapPanel {
                 return v_flex()
                     .id("visual-map-panel")
                     .track_focus(&self.focus_handle)
-                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, _| {
-                        this.focus_handle.focus(window);
-                    }))
+                    .on_mouse_down(
+                        gpui::MouseButton::Left,
+                        cx.listener(|this, _, window, _| {
+                            this.focus_handle.focus(window);
+                        }),
+                    )
                     .size_full()
                     .bg(bg_color)
                     .child(header)
@@ -274,7 +298,7 @@ impl Render for VisualMapPanel {
                             .size_full()
                             .justify_center()
                             .items_center()
-                            .child(div().text_sm().text_color(muted_color).child("No active editor"))
+                            .child(div().text_sm().text_color(muted_color).child("No active editor")),
                     );
             }
         };
@@ -282,6 +306,15 @@ impl Render for VisualMapPanel {
         let buffer_len = self.buffer_len(cx);
         let total_rows = (buffer_len + self.cols - 1) / self.cols;
         let total_height = total_rows as f32 * self.pixel_size as f32;
+
+        // Sync scroll offset from scroll handle (e.g. if changed by scrollbar drag)
+        let pixel_size_px = px(self.pixel_size as f32);
+        let handle_y = self.scroll_handle.offset().y;
+        let handle_row = ((-handle_y).max(px(0.)) / pixel_size_px).round() as usize;
+        let synced_offset = handle_row.min(total_rows.saturating_sub(1));
+        if self.scroll_offset != synced_offset {
+            self.scroll_offset = synced_offset;
+        }
 
         let width_button = |preset: usize, label: &'static str, cx: &mut Context<Self>| {
             let is_selected = self.cols == preset;
@@ -359,9 +392,12 @@ impl Render for VisualMapPanel {
             .size_full()
             .bg(bg_color)
             .track_focus(&self.focus_handle)
-            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, _| {
-                this.focus_handle.focus(window);
-            }))
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(|this, _, window, _| {
+                    this.focus_handle.focus(window);
+                }),
+            )
             .child(header)
             .child(
                 // Toolbar row 1: Presets
@@ -413,6 +449,7 @@ impl Render for VisualMapPanel {
                     .on_scroll_wheel(cx.listener(Self::on_scroll_wheel))
                     .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
                     .on_mouse_move(cx.listener(Self::on_mouse_move))
+                    .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
                     .child(VisualMapElement {
                         panel: cx.entity().downgrade(),
                         document: editor.read(cx).document.clone(),

@@ -1,6 +1,5 @@
 use crate::actions::{
-    AddCustomBreak, ClearAllCustomBreaks, JoinLine, RemoveCustomBreakBackward,
-    RemoveCustomBreakForward, SearchNext, SearchPrev, ToggleSearch,
+    AddCustomBreak, ClearAllCustomBreaks, JoinLine, RemoveCustomBreakBackward, RemoveCustomBreakForward, SearchNext, SearchPrev, ToggleSearch,
 };
 use crate::core::document::Document;
 use crate::core::editor::Editor;
@@ -48,7 +47,6 @@ actions!(
         TriggerSearchPrev
     ]
 );
-
 
 const CONTEXT: &str = "HexView";
 
@@ -767,6 +765,16 @@ impl Render for HexView {
         let line_starts = editor.line_starts();
         let total_rows = line_starts.len().max(1);
 
+        // Sync scroll offset from scroll handle (e.g. if changed by scrollbar drag)
+        let row_height = px(ROW_HEIGHT);
+        let handle_y = self.scroll_handle.offset().y;
+        let handle_row = ((-handle_y).max(px(0.)) / row_height).round() as usize;
+        let synced_offset = handle_row.min(total_rows.saturating_sub(1));
+        if self.scroll_offset != synced_offset {
+            self.scroll_offset = synced_offset;
+            cx.emit(HexViewEvent::Scrolled(self.scroll_offset));
+        }
+
         let visible_rows = self.get_visible_rows();
         let extra_scroll_rows = visible_rows.saturating_sub(1);
         let header_height = if self.show_header { px(HEADER_HEIGHT) } else { px(0.) };
@@ -1063,7 +1071,10 @@ impl Element for HexViewElement {
                     let width = x_end - x_start;
 
                     selection_quads.push(fill(
-                        Bounds::new(point(x_start - px(SELECTION_PADDING), y_pos), size(width + 2.0 * px(SELECTION_PADDING), row_height)),
+                        Bounds::new(
+                            point(x_start - px(SELECTION_PADDING), y_pos),
+                            size(width + 2.0 * px(SELECTION_PADDING), row_height),
+                        ),
                         *color,
                     ));
 
@@ -1091,7 +1102,10 @@ impl Element for HexViewElement {
                 let width = x_end - x_start;
 
                 selection_quads.push(fill(
-                    Bounds::new(point(x_start - px(SELECTION_PADDING), y_pos), size(width + 2.0 * px(SELECTION_PADDING), row_height)),
+                    Bounds::new(
+                        point(x_start - px(SELECTION_PADDING), y_pos),
+                        size(width + 2.0 * px(SELECTION_PADDING), row_height),
+                    ),
                     selection_bg_color,
                 ));
 

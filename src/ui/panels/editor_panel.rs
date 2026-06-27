@@ -418,12 +418,7 @@ impl Panel for EditorPanel {
 
 impl Render for EditorPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let container = div()
-            .size_full()
-            .flex()
-            .flex_col()
-            .key_context(CONTEXT)
-            .track_focus(&self.focus_handle);
+        let container = div().size_full().flex().flex_col().key_context(CONTEXT).track_focus(&self.focus_handle);
 
         container
             .on_action(cx.listener(Self::toggle_search))

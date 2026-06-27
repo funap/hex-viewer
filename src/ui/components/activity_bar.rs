@@ -59,7 +59,7 @@ impl Render for ActivityBar {
                     .gap_2()
                     .items_center()
                     .child(self.render_icon(Activity::Files, IconName::File, "Files", cx))
-                    .child(self.render_icon(Activity::Structure, IconName::Search, "Structure", cx))
+                    .child(self.render_icon(Activity::Structure, IconName::Search, "Structure", cx)),
             )
             .child(
                 div()
@@ -71,7 +71,7 @@ impl Render for ActivityBar {
                     .on_click(cx.listener(move |_, _, _window, cx| {
                         cx.emit(ActivityBarEvent::OpenSettings);
                     }))
-                    .child(Icon::new(IconName::Settings).size(px(24.0)))
+                    .child(Icon::new(IconName::Settings).size(px(24.0))),
             )
     }
 }

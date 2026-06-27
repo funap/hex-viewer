@@ -15,7 +15,7 @@ use crate::app_state::AppState;
 use crate::core::editor::Editor;
 use crate::ui::components::status_bar::StatusBar;
 use gpui_component::Root;
-use gpui_component::dock::{DockArea, DockItem, DockPlacement, PanelView, Panel};
+use gpui_component::dock::{DockArea, DockItem, DockPlacement, Panel, PanelView};
 use gpui_component::menu::AppMenuBar;
 use gpui_component::resizable::{h_resizable, resizable_panel};
 use std::path::PathBuf;
@@ -862,7 +862,7 @@ impl Render for Workspace {
                         .child(Icon::new(IconName::Map).size(px(24.0)))
                         .when(is_active, |this| {
                             this.child(div().absolute().right_0().top_2().bottom_2().w_0p5().bg(theme.accent))
-                        })
+                        }),
                 )
         };
 
@@ -896,40 +896,46 @@ impl Render for Workspace {
             .flex_col()
             .child(self.title_bar.clone())
             .child(
-                div().flex().flex_row().flex_1().child(self.activity_bar.clone()).child(
-                    h_resizable("workspace-h-resize")
-                        .child(
-                            resizable_panel()
-                                .visible(self.is_left_panel_visible)
-                                .size(px(250.))
-                                .child(self.left_panel.clone()),
-                        )
-                        .child(
-                            resizable_panel().child(div().relative().size_full().flex().flex_col().child(self.dock_area.clone()).when(
-                                !self.check_has_panels(cx),
-                                |this| {
-                                    this.child(
-                                        div()
-                                            .absolute()
-                                            .top_0()
-                                            .left_0()
-                                            .size_full()
-                                            .flex()
-                                            .justify_center()
-                                            .items_center()
-                                            .bg(cx.theme().background)
-                                            .child(div().text_xl().text_color(cx.theme().muted_foreground).child("Nothing is open")),
-                                    )
-                                },
-                            )),
-                        )
-                        .child(
-                            resizable_panel()
-                                .visible(self.is_right_panel_visible)
-                                .size(px(250.))
-                                .child(self.visual_map.clone()),
-                        ),
-                ).child(right_activity_bar),
+                div()
+                    .flex()
+                    .flex_row()
+                    .flex_1()
+                    .child(self.activity_bar.clone())
+                    .child(
+                        h_resizable("workspace-h-resize")
+                            .child(
+                                resizable_panel()
+                                    .visible(self.is_left_panel_visible)
+                                    .size(px(250.))
+                                    .child(self.left_panel.clone()),
+                            )
+                            .child(
+                                resizable_panel().child(div().relative().size_full().flex().flex_col().child(self.dock_area.clone()).when(
+                                    !self.check_has_panels(cx),
+                                    |this| {
+                                        this.child(
+                                            div()
+                                                .absolute()
+                                                .top_0()
+                                                .left_0()
+                                                .size_full()
+                                                .flex()
+                                                .justify_center()
+                                                .items_center()
+                                                .bg(cx.theme().background)
+                                                .child(div().text_xl().text_color(cx.theme().muted_foreground).child("Nothing is open")),
+                                        )
+                                    },
+                                )),
+                            )
+                            .child(
+                                resizable_panel()
+                                    .visible(self.is_right_panel_visible)
+                                    .size(px(250.))
+                                    .child(self.visual_map.clone()),
+                            ),
+                    )
+                    .child(right_activity_bar),
             )
             .child(self.status_bar.clone())
             .children(Root::render_dialog_layer(window, cx))
