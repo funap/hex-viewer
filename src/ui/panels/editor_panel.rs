@@ -380,7 +380,7 @@ impl Panel for EditorPanel {
                 .hover(|style| style.bg(theme.accent).text_color(theme.accent_foreground))
                 .on_click(cx.listener(|this, _, window, cx| {
                     this.focus_handle(cx).focus(window);
-                    window.dispatch_action(Box::new(gpui_component::dock::ClosePanel), cx);
+                    window.dispatch_action(Box::new(crate::actions::CloseActivePanel), cx);
                 }))
                 .child(Icon::new(IconName::Close).size(px(14.0))),
         )

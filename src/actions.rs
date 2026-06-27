@@ -146,3 +146,7 @@ pub struct ClearStructureDefinition;
 
 #[derive(Clone, PartialEq, Action)]
 pub struct OpenVisualMap;
+
+#[derive(Clone, PartialEq, Action)]
+pub struct CloseActivePanel;
+

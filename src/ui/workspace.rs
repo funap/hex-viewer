@@ -14,7 +14,7 @@ use crate::app_state::AppState;
 use crate::core::editor::Editor;
 use crate::ui::components::status_bar::StatusBar;
 use gpui_component::Root;
-use gpui_component::dock::{DockArea, DockItem, DockPlacement};
+use gpui_component::dock::{DockArea, DockItem, DockPlacement, PanelView, Panel};
 use gpui_component::menu::AppMenuBar;
 use gpui_component::resizable::{h_resizable, resizable_panel};
 use std::path::PathBuf;
@@ -25,6 +25,7 @@ pub struct Workspace {
     pub title_bar: Entity<AppTitleBar>,
     pub status_bar: Entity<StatusBar>,
     pub active_editor: Option<Entity<Editor>>,
+    pub active_panel: Option<Arc<dyn PanelView>>,
     pub left_panel: Entity<LeftPanel>,
     pub activity_bar: Entity<ActivityBar>,
     pub ksy_definition: Option<Arc<crate::core::structure::KsyDefinition>>,
@@ -37,7 +38,7 @@ const MAIN_DOCK_AREA_VERSION: usize = 1;
 pub fn init(cx: &mut App) {
     cx.bind_keys(vec![
         KeyBinding::new("shift-escape", gpui_component::dock::ToggleZoom, None),
-        KeyBinding::new("ctrl-w", gpui_component::dock::ClosePanel, None),
+        KeyBinding::new("ctrl-w", crate::actions::CloseActivePanel, None),
     ]);
 
     cx.activate(true);
@@ -122,6 +123,7 @@ impl Workspace {
             title_bar,
             status_bar,
             active_editor: None,
+            active_panel: None,
             left_panel,
             activity_bar,
             ksy_definition: None,
@@ -204,6 +206,7 @@ impl Workspace {
             move |this, _window, cx| {
                 let editor = editor_panel.read(cx).editor();
                 this.active_editor = Some(editor.clone());
+                this.active_panel = Some(Arc::new(editor_panel.clone()));
 
                 // Apply workspace-wide definition to the newly active editor
                 if let Some(ksy) = &this.ksy_definition {
@@ -392,9 +395,11 @@ impl Workspace {
                                     view
                                 });
 
-                                cx.on_focus_in(&diff_view.read(cx).focus_handle(cx), window, |this, _, cx| {
+                                let diff_view_clone = diff_view.clone();
+                                cx.on_focus_in(&diff_view.read(cx).focus_handle(cx), window, move |this, _, cx| {
                                     this.active_editor = None;
                                     this.status_bar.update(cx, |status_bar, _| status_bar.set_active_editor(None));
+                                    this.active_panel = Some(Arc::new(diff_view_clone.clone()));
                                     this.on_focus_changed(cx);
                                     cx.notify();
                                 })
@@ -554,6 +559,19 @@ impl Workspace {
         });
     }
 
+    fn on_action_close_active_panel(&mut self, _: &CloseActivePanel, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(panel) = self.active_panel.take() {
+            self.dock_area.update(cx, |dock_area, cx| {
+                dock_area.remove_panel_from_all_docks(panel, window, cx);
+            });
+            if !self.check_has_panels(cx) {
+                let weak_dock_area = self.dock_area.downgrade();
+                Self::reset_default_layout(weak_dock_area, window, cx);
+            }
+            cx.notify();
+        }
+    }
+
     fn on_action_open_settings(&mut self, _: &OpenSettings, window: &mut Window, cx: &mut Context<Self>) {
         self.open_settings_panel(window, cx);
     }
@@ -571,9 +589,11 @@ impl Workspace {
         }
 
         let settings_panel = cx.new(|cx| SettingsPanel::new(window, cx));
-        cx.on_focus_in(&settings_panel.read(cx).focus_handle(cx), window, |this, _, cx| {
+        let settings_panel_clone = settings_panel.clone();
+        cx.on_focus_in(&settings_panel.read(cx).focus_handle(cx), window, move |this, _, cx| {
             this.active_editor = None;
             this.status_bar.update(cx, |status_bar, _| status_bar.set_active_editor(None));
+            this.active_panel = Some(Arc::new(settings_panel_clone.clone()));
             this.on_focus_changed(cx);
             cx.notify();
         })
@@ -620,7 +640,9 @@ impl Workspace {
             }
 
             let visual_map_panel = cx.new(|cx| VisualMapPanel::new(editor.clone(), cx));
-            cx.on_focus_in(&visual_map_panel.read(cx).focus_handle(cx), window, |this, _, cx| {
+            let visual_map_panel_clone = visual_map_panel.clone();
+            cx.on_focus_in(&visual_map_panel.read(cx).focus_handle(cx), window, move |this, _, cx| {
+                this.active_panel = Some(Arc::new(visual_map_panel_clone.clone()));
                 this.on_focus_changed(cx);
                 cx.notify();
             })
@@ -728,27 +750,28 @@ impl Workspace {
 
     fn check_has_panels(&self, cx: &App) -> bool {
         let dock_area = self.dock_area.read(cx);
-        Self::has_panels_recursive(dock_area.items())
+        Self::has_panels_recursive(dock_area.items(), cx)
     }
 
-    fn has_panels_recursive(dock_item: &DockItem) -> bool {
+    fn has_panels_recursive(dock_item: &DockItem, cx: &App) -> bool {
         match dock_item {
-            DockItem::Tabs { items, .. } => {
-                for item in items {
-                    if item.view().downcast::<EditorPanel>().is_ok() {
+            DockItem::Tabs { view, .. } => {
+                let state = view.read(cx).dump(cx);
+                for child in state.children {
+                    if child.panel_name == "EditorPanel" {
                         return true;
                     }
-                    if item.view().downcast::<crate::ui::panels::diff_panel::DiffPanel>().is_ok() {
+                    if child.panel_name == "DiffPanel" {
                         return true;
                     }
-                    if item.view().downcast::<crate::ui::panels::settings_panel::SettingsPanel>().is_ok() {
+                    if child.panel_name == "SettingsPanel" {
                         return true;
                     }
                 }
             }
             DockItem::Split { items, .. } => {
                 for item in items {
-                    if Self::has_panels_recursive(item) {
+                    if Self::has_panels_recursive(item, cx) {
                         return true;
                     }
                 }
@@ -759,16 +782,17 @@ impl Workspace {
                 }
             }
             DockItem::Panel { view, .. } => {
-                if view.view().downcast::<EditorPanel>().is_ok() {
+                let state = view.dump(cx);
+                if state.panel_name == "EditorPanel" {
                     return true;
                 }
-                if view.view().downcast::<crate::ui::panels::diff_panel::DiffPanel>().is_ok() {
+                if state.panel_name == "DiffPanel" {
                     return true;
                 }
-                if view.view().downcast::<crate::ui::panels::settings_panel::SettingsPanel>().is_ok() {
+                if state.panel_name == "SettingsPanel" {
                     return true;
                 }
-                if view.view().downcast::<crate::ui::panels::visual_map_panel::VisualMapPanel>().is_ok() {
+                if state.panel_name == "VisualMapPanel" {
                     return true;
                 }
             }
@@ -843,6 +867,7 @@ impl Render for Workspace {
         div()
             .id("workspace")
             .on_action(cx.listener(Self::on_action_open_file))
+            .on_action(cx.listener(Self::on_action_close_active_panel))
             .on_action(cx.listener(Self::on_action_open_file_dialog))
             .on_action(cx.listener(Self::on_action_quit))
             .on_action(cx.listener(Self::on_action_select_all))
