@@ -41,7 +41,7 @@ fn main() {
                     gpui::MenuItem::action("Open Folder...", crate::actions::OpenFolder),
                     gpui::MenuItem::action("Close Folder", crate::actions::CloseFolder),
                     gpui::MenuItem::separator(),
-                    gpui::MenuItem::action("Toggle Left Panel", crate::actions::ToggleLeftPanel),
+                    gpui::MenuItem::action("Settings", crate::actions::OpenSettings),
                     gpui::MenuItem::separator(),
                     gpui::MenuItem::action("Quit", crate::actions::Quit),
                 ],
@@ -49,11 +49,16 @@ fn main() {
             gpui::Menu {
                 name: "Edit".into(),
                 items: vec![
+                    gpui::MenuItem::action("Select All", crate::actions::SelectAll),
+                    gpui::MenuItem::separator(),
                     gpui::MenuItem::action("Find", crate::actions::ToggleSearch),
                     gpui::MenuItem::action("Find Next", crate::actions::SearchNext),
                     gpui::MenuItem::action("Find Previous", crate::actions::SearchPrev),
-                    gpui::MenuItem::separator(),
-                    gpui::MenuItem::action("Select All", crate::actions::SelectAll),
+                ],
+            },
+            gpui::Menu {
+                name: "Go".into(),
+                items: vec![
                     gpui::MenuItem::action("Go to Beginning", crate::actions::GoToBeginning),
                     gpui::MenuItem::action("Go to End", crate::actions::GoToEnd),
                 ],
@@ -61,6 +66,10 @@ fn main() {
             gpui::Menu {
                 name: "View".into(),
                 items: vec![
+                    gpui::MenuItem::action("Toggle Left Panel", crate::actions::ToggleLeftPanel),
+                    gpui::MenuItem::separator(),
+                    gpui::MenuItem::action("2D Visual Map", crate::actions::OpenVisualMap),
+                    gpui::MenuItem::separator(),
                     gpui::MenuItem::submenu(gpui::Menu {
                         name: "Encoding".into(),
                         items: vec![
@@ -70,10 +79,6 @@ fn main() {
                             gpui::MenuItem::action("UTF-16 BE", crate::actions::SetEncodingUtf16Be),
                         ],
                     }),
-                    gpui::MenuItem::separator(),
-                    gpui::MenuItem::action("2D Visual Map", crate::actions::OpenVisualMap),
-                    gpui::MenuItem::separator(),
-                    gpui::MenuItem::action("Settings", crate::actions::OpenSettings),
                 ],
             },
             gpui::Menu {
