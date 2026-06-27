@@ -144,18 +144,6 @@ impl Render for StatusBar {
             .px_4()
             .gap_4()
             .child(
-                div().flex().items_center().gap_1().child(
-                    div()
-                        .id("toggle-sidebar")
-                        .cursor_pointer()
-                        .hover(|style| style.bg(theme.accent).text_color(theme.accent_foreground))
-                        .on_click(cx.listener(|_, _, _window, cx| {
-                            cx.emit(StatusBarEvent::ToggleLeftPanel);
-                        }))
-                        .child(gpui_component::Icon::new(gpui_component::IconName::Folder).size(px(14.0))),
-                ),
-            )
-            .child(
                 div()
                     .flex()
                     .items_center()

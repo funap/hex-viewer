@@ -47,8 +47,9 @@ impl Render for ActivityBar {
             .w(px(42.0))
             .h_full()
             .bg(bg_color)
-            .border_r_1()
-            .border_color(border_color)
+            .when(self.active_activity.is_some(), |this| {
+                this.border_r_1().border_color(border_color)
+            })
             .items_center()
             .py_4()
             .justify_between()
