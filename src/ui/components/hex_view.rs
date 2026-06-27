@@ -119,6 +119,8 @@ pub struct HexView {
     scroll_offset: usize,
     scroll_remainder: f32,
     scroll_handle: ScrollHandle,
+    horizontal_scroll_handle: ScrollHandle,
+    scroll_offset_x: Pixels,
     highlights: Vec<(Range<usize>, Hsla)>,
     max_highlight_len: usize,
     show_offset: bool,
@@ -148,6 +150,8 @@ impl HexView {
             scroll_offset: 0,
             scroll_remainder: 0.0,
             scroll_handle: ScrollHandle::new(),
+            horizontal_scroll_handle: ScrollHandle::new(),
+            scroll_offset_x: px(0.),
             highlights: Vec::new(),
             max_highlight_len: 0,
             show_offset: true,
@@ -294,7 +298,7 @@ impl HexView {
         let header_height = if self.show_header { px(HEADER_HEIGHT) } else { px(0.) };
         let row_height = px(ROW_HEIGHT);
         let offset_width = if self.show_offset { px(OFFSET_WIDTH) } else { px(0.) };
-        let hex_start_x = bounds.left() + px(OFFSET_X_START) + offset_width + px(SECTION_GAP);
+        let hex_start_x = bounds.left() - self.scroll_offset_x + px(OFFSET_X_START) + offset_width + px(SECTION_GAP);
 
         let hex_byte_width = px(HEX_BYTE_WIDTH);
         let hex_gap = px(HEX_GAP);
@@ -370,7 +374,7 @@ impl HexView {
         let header_height = if self.show_header { px(HEADER_HEIGHT) } else { px(0.) };
         let row_height = px(ROW_HEIGHT);
         let offset_width = if self.show_offset { px(OFFSET_WIDTH) } else { px(0.) };
-        let hex_start_x = bounds.left() + px(OFFSET_X_START) + offset_width + px(SECTION_GAP);
+        let hex_start_x = bounds.left() - self.scroll_offset_x + px(OFFSET_X_START) + offset_width + px(SECTION_GAP);
 
         let hex_byte_width = px(HEX_BYTE_WIDTH);
         let hex_gap = px(HEX_GAP);
@@ -432,6 +436,14 @@ impl HexView {
             cx.emit(HexViewEvent::Scrolled(self.scroll_offset));
         }
 
+        // Sync horizontal scroll handle
+        let handle_x = self.horizontal_scroll_handle.offset().x;
+        let synced_offset_x = -handle_x;
+        if self.scroll_offset_x != synced_offset_x {
+            self.scroll_offset_x = synced_offset_x;
+            cx.notify();
+        }
+
         if self.is_dragging {
             if let Some(bounds) = self.last_bounds.get() {
                 let header_height = if self.show_header { px(HEADER_HEIGHT) } else { px(0.) };
@@ -489,9 +501,17 @@ impl HexView {
         } else {
             cx.notify();
         }
+
+        // Sync horizontal scroll handle on mouse up as well
+        let handle_x = self.horizontal_scroll_handle.offset().x;
+        let synced_offset_x = -handle_x;
+        if self.scroll_offset_x != synced_offset_x {
+            self.scroll_offset_x = synced_offset_x;
+            cx.notify();
+        }
     }
 
-    fn on_scroll_wheel(&mut self, event: &ScrollWheelEvent, _window: &mut Window, cx: &mut Context<Self>) {
+    fn on_scroll_wheel(&mut self, event: &ScrollWheelEvent, window: &mut Window, cx: &mut Context<Self>) {
         let row_height = px(ROW_HEIGHT);
         let total_rows = self.editor.read(cx).line_starts().len();
         let max_offset = total_rows.saturating_sub(1).max(0) as i32;
@@ -505,6 +525,49 @@ impl HexView {
 
         self.scroll_offset = cmp::max(0, cmp::min(new_scroll_offset, max_offset)) as usize;
         self.scroll_handle.set_offset(point(px(0.), -(self.scroll_offset as f32 * row_height)));
+
+        // Handle horizontal scrolling via wheel
+        let delta_x_pixels = event.delta.pixel_delta(row_height).x.as_f32();
+        if delta_x_pixels != 0.0 {
+            let bounds_width = self.last_bounds.get().map(|b| b.size.width).unwrap_or(px(0.));
+            let line_starts = self.editor.read(cx).line_starts();
+            let max_bytes_per_row = line_starts.max_bytes_per_row();
+            let offset_width = if self.show_offset { px(OFFSET_WIDTH) } else { px(0.) };
+            let hex_byte_width = px(HEX_BYTE_WIDTH);
+            let hex_gap = px(HEX_GAP);
+            let section_gap = px(SECTION_GAP);
+
+            let text_style = TextStyle {
+                font_family: self.font_family_prop.clone(),
+                font_size: gpui::AbsoluteLength::Pixels(self.font_size_prop),
+                ..window.text_style()
+            };
+            let font = text_style.font();
+            let font_size = self.font_size_prop;
+            let ascii_run = TextRun {
+                len: 5,
+                font: font.clone(),
+                color: cx.theme().foreground.into(),
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            };
+            let ascii = window.text_system().shape_line("ASCII".into(), font_size, &[ascii_run], None);
+            let ascii_char_width = if ascii.len() > 0 { ascii.width / 5.0 } else { px(10.0) };
+
+            let mut total_width = px(OFFSET_X_START) + offset_width + section_gap 
+                + (hex_byte_width + hex_gap) * max_bytes_per_row as f32;
+
+            if self.show_ascii {
+                total_width += section_gap + ascii_char_width * max_bytes_per_row as f32 + section_gap;
+            }
+
+            let max_scroll_x = (total_width - bounds_width).max(px(0.));
+            let new_scroll_offset_x = (self.scroll_offset_x.as_f32() - delta_x_pixels).max(0.0);
+            self.scroll_offset_x = px(new_scroll_offset_x).min(max_scroll_x);
+            self.horizontal_scroll_handle.set_offset(point(-self.scroll_offset_x, px(0.)));
+        }
+
         cx.notify();
         cx.emit(HexViewEvent::Scrolled(self.scroll_offset));
     }
@@ -781,16 +844,54 @@ impl Render for HexView {
             cx.emit(HexViewEvent::Scrolled(self.scroll_offset));
         }
 
+        // Sync horizontal scroll offset
+        let handle_x = self.horizontal_scroll_handle.offset().x;
+        let synced_offset_x = -handle_x;
+        if self.scroll_offset_x != synced_offset_x {
+            self.scroll_offset_x = synced_offset_x;
+        }
+
         let visible_rows = self.get_visible_rows();
         let extra_scroll_rows = visible_rows.saturating_sub(1);
         let header_height = if self.show_header { px(HEADER_HEIGHT) } else { px(0.) };
-        let row_height = px(ROW_HEIGHT);
         let total_height = header_height + row_height * (total_rows + extra_scroll_rows) as f32;
 
         let (selection_start, selection_end, cursor_offset) = {
             let editor = self.editor.read(cx);
             (editor.selection_start, editor.selection_end, editor.cursor_offset)
         };
+
+        // Compute ascii char width to calculate total content width
+        let text_style = TextStyle {
+            font_family: self.font_family_prop.clone(),
+            font_size: gpui::AbsoluteLength::Pixels(self.font_size_prop),
+            .._window.text_style()
+        };
+        let font = text_style.font();
+        let font_size = self.font_size_prop;
+        let ascii_run = TextRun {
+            len: 5,
+            font: font.clone(),
+            color: cx.theme().foreground.into(),
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+        };
+        let ascii = _window.text_system().shape_line("ASCII".into(), font_size, &[ascii_run], None);
+        let ascii_char_width = if ascii.len() > 0 { ascii.width / 5.0 } else { px(10.0) };
+
+        let offset_width = if self.show_offset { px(OFFSET_WIDTH) } else { px(0.) };
+        let max_bytes_per_row = line_starts.max_bytes_per_row();
+        let hex_byte_width = px(HEX_BYTE_WIDTH);
+        let hex_gap = px(HEX_GAP);
+        let section_gap = px(SECTION_GAP);
+
+        let mut total_width = px(OFFSET_X_START) + offset_width + section_gap 
+            + (hex_byte_width + hex_gap) * max_bytes_per_row as f32;
+
+        if self.show_ascii {
+            total_width += section_gap + ascii_char_width * max_bytes_per_row as f32 + section_gap;
+        }
 
         div()
             .flex()
@@ -831,9 +932,6 @@ impl Render for HexView {
                 let editor = self.editor.read(cx);
                 let custom_breaks = editor.custom_breaks.clone();
 
-                // 最大行長を計算（ヘッダーとASCI位置の動的調整に使用）
-                let max_bytes_per_row = line_starts.max_bytes_per_row();
-
                 HexViewElement {
                     view: cx.entity().downgrade(),
                     document,
@@ -842,6 +940,7 @@ impl Render for HexView {
                     selection_end,
                     cursor_offset,
                     scroll_offset: self.scroll_offset,
+                    scroll_offset_x: self.scroll_offset_x,
                     focus_handle: self.focus_handle.clone(),
                     highlights: self.highlights.clone(),
                     max_highlight_len: self.max_highlight_len,
@@ -862,6 +961,13 @@ impl Render for HexView {
                         .scroll_size(size(px(0.), total_height)),
                 ),
             )
+            .child(
+                div().absolute().left_0().right_0().bottom_0().h_4().child(
+                    Scrollbar::horizontal(&self.horizontal_scroll_handle)
+                        .axis(ScrollbarAxis::Horizontal)
+                        .scroll_size(size(total_width, px(0.))),
+                ),
+            )
     }
 }
 
@@ -873,6 +979,7 @@ struct HexViewElement {
     selection_end: Option<usize>,
     cursor_offset: usize,
     scroll_offset: usize,
+    scroll_offset_x: Pixels,
     focus_handle: FocusHandle,
     highlights: Vec<(Range<usize>, Hsla)>,
     max_highlight_len: usize,
@@ -997,7 +1104,7 @@ impl Element for HexViewElement {
         let mut break_indicator_quads = Vec::new();
 
         let offset_width = if self.show_offset { px(OFFSET_WIDTH) } else { px(0.) };
-        let hex_start_x = bounds.left() + px(OFFSET_X_START) + offset_width + px(SECTION_GAP);
+        let hex_start_x = bounds.left() - self.scroll_offset_x + px(OFFSET_X_START) + offset_width + px(SECTION_GAP);
 
         let hex_byte_width = px(HEX_BYTE_WIDTH);
         let hex_gap = px(HEX_GAP);
@@ -1329,7 +1436,7 @@ impl Element for HexViewElement {
         let row_height = px(ROW_HEIGHT);
         let offset_width = if self.show_offset { px(OFFSET_WIDTH) } else { px(0.) };
 
-        let hex_start_x = bounds.left() + px(OFFSET_X_START) + offset_width + px(SECTION_GAP);
+        let hex_start_x = bounds.left() - self.scroll_offset_x + px(OFFSET_X_START) + offset_width + px(SECTION_GAP);
         let hex_byte_width = px(HEX_BYTE_WIDTH);
         let hex_gap = px(HEX_GAP);
         let ascii_start_x = hex_start_x + (hex_byte_width + hex_gap) * prepaint.max_bytes_per_row as f32 + px(SECTION_GAP);
@@ -1342,7 +1449,7 @@ impl Element for HexViewElement {
 
         window.paint_quad(fill(
             Bounds::new(
-                point(bounds.left() + px(OFFSET_X_START), bounds.top() + header_height - px(1.)),
+                point(bounds.left() - self.scroll_offset_x + px(OFFSET_X_START), bounds.top() + header_height - px(1.)),
                 size(bounds.size.width - px(OFFSET_X_START), px(1.)),
             ),
             border_color,
@@ -1355,7 +1462,7 @@ impl Element for HexViewElement {
                 prepaint
                     .header
                     .offset
-                    .paint(point(bounds.left() + px(OFFSET_X_START), header_y), header_height, window, cx)
+                    .paint(point(bounds.left() - self.scroll_offset_x + px(OFFSET_X_START), header_y), header_height, window, cx)
                     .ok();
             }
 
@@ -1389,7 +1496,7 @@ impl Element for HexViewElement {
             if self.show_offset {
                 data_line
                     .offset_line
-                    .paint(point(bounds.left() + px(OFFSET_X_START), y_pos), row_height, window, cx)
+                    .paint(point(bounds.left() - self.scroll_offset_x + px(OFFSET_X_START), y_pos), row_height, window, cx)
                     .ok();
             }
 
