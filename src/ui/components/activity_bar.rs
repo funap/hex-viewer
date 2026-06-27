@@ -10,6 +10,7 @@ pub enum Activity {
 
 pub enum ActivityBarEvent {
     Select(Activity),
+    OpenSettings,
 }
 
 pub struct ActivityBar {
@@ -35,21 +36,43 @@ impl ActivityBar {
 
 impl Render for ActivityBar {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
+        let (bg_color, border_color, muted_color, foreground_color) = {
+            let theme = cx.theme();
+            (theme.background, theme.border, theme.muted_foreground, theme.foreground)
+        };
 
         div()
             .flex()
             .flex_col()
             .w(px(42.0))
             .h_full()
-            .bg(theme.background)
+            .bg(bg_color)
             .border_r_1()
-            .border_color(theme.border)
+            .border_color(border_color)
             .items_center()
             .py_4()
-            .gap_2()
-            .child(self.render_icon(Activity::Files, IconName::File, "Files", cx))
-            .child(self.render_icon(Activity::Structure, IconName::Search, "Structure", cx))
+            .justify_between()
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .items_center()
+                    .child(self.render_icon(Activity::Files, IconName::File, "Files", cx))
+                    .child(self.render_icon(Activity::Structure, IconName::Search, "Structure", cx))
+            )
+            .child(
+                div()
+                    .id("activity-settings")
+                    .cursor_pointer()
+                    .p_2()
+                    .text_color(muted_color)
+                    .hover(|style| style.text_color(foreground_color))
+                    .on_click(cx.listener(move |_, _, _window, cx| {
+                        cx.emit(ActivityBarEvent::OpenSettings);
+                    }))
+                    .child(Icon::new(IconName::Settings).size(px(24.0)))
+            )
     }
 }
 

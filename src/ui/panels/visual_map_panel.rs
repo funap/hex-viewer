@@ -3,7 +3,7 @@ use gpui::prelude::*;
 use gpui::*;
 use gpui_component::dock::{Panel, PanelEvent};
 use gpui_component::scroll::*;
-use gpui_component::{ActiveTheme, Icon, IconName, PixelsExt, button::Button, button::ButtonVariants, h_flex};
+use gpui_component::{ActiveTheme, Icon, IconName, PixelsExt, button::Button, button::ButtonVariants, h_flex, v_flex};
 use std::cell::RefCell;
 use std::cmp;
 use std::sync::Arc;
@@ -16,7 +16,7 @@ pub enum ColorMode {
 }
 
 pub struct VisualMapPanel {
-    pub editor: Entity<Editor>,
+    pub editor: Option<Entity<Editor>>,
     focus_handle: FocusHandle,
     cols: usize,
     pixel_size: usize,
@@ -26,15 +26,17 @@ pub struct VisualMapPanel {
     hovered_info: Option<(usize, u8)>,
     last_bounds: std::cell::Cell<Option<Bounds<Pixels>>>,
     cached_image: RefCell<Option<(Arc<RenderImage>, (usize, usize, usize, ColorMode, usize, f32, f32, u32))>>,
-    _editor_subscription: Subscription,
+    _editor_subscription: Option<Subscription>,
 }
 
 impl EventEmitter<PanelEvent> for VisualMapPanel {}
 
 impl VisualMapPanel {
-    pub fn new(editor: Entity<Editor>, cx: &mut Context<Self>) -> Self {
-        let _editor_subscription = cx.observe(&editor, |_this, _, cx| {
-            cx.notify();
+    pub fn new(editor: Option<Entity<Editor>>, cx: &mut Context<Self>) -> Self {
+        let _editor_subscription = editor.as_ref().map(|ed| {
+            cx.observe(ed, |_, _, cx| {
+                cx.notify();
+            })
         });
 
         Self {
@@ -52,12 +54,24 @@ impl VisualMapPanel {
         }
     }
 
-    fn file_path(&self, cx: &App) -> std::path::PathBuf {
-        self.editor.read(cx).document.read().unwrap().path().to_path_buf()
+    pub fn set_editor(&mut self, editor: Option<Entity<Editor>>, cx: &mut Context<Self>) {
+        self._editor_subscription = None;
+        self.editor = editor.clone();
+        if let Some(ed) = &editor {
+            self._editor_subscription = Some(cx.observe(ed, |_, _, cx| {
+                cx.notify();
+            }));
+        }
+        self.cached_image.borrow_mut().take();
+        cx.notify();
+    }
+
+    fn file_path(&self, cx: &App) -> Option<std::path::PathBuf> {
+        self.editor.as_ref().map(|ed| ed.read(cx).document.read().unwrap().path().to_path_buf())
     }
 
     fn buffer_len(&self, cx: &App) -> usize {
-        self.editor.read(cx).document.read().unwrap().buffer.len()
+        self.editor.as_ref().map(|ed| ed.read(cx).document.read().unwrap().buffer.len()).unwrap_or(0)
     }
 
     fn update_scrollbar(&mut self, cx: &mut Context<Self>) {
@@ -71,6 +85,9 @@ impl VisualMapPanel {
     fn on_scroll_wheel(&mut self, event: &ScrollWheelEvent, _window: &mut Window, cx: &mut Context<Self>) {
         let pixel_size_px = px(self.pixel_size as f32);
         let buffer_len = self.buffer_len(cx);
+        if buffer_len == 0 {
+            return;
+        }
         let total_rows = (buffer_len + self.cols - 1) / self.cols;
 
         let max_offset = total_rows.saturating_sub(1).max(0) as i32;
@@ -95,10 +112,12 @@ impl VisualMapPanel {
 
                     let buffer_len = self.buffer_len(cx);
                     if offset < buffer_len {
-                        self.editor.update(cx, |editor, cx| {
-                            editor.set_cursor_offset(offset);
-                            cx.notify();
-                        });
+                        if let Some(editor) = &self.editor {
+                            editor.update(cx, |editor, cx| {
+                                editor.set_cursor_offset(offset);
+                                cx.notify();
+                            });
+                        }
                     }
                 }
             }
@@ -111,6 +130,9 @@ impl VisualMapPanel {
         let handle_y = self.scroll_handle.offset().y;
         let handle_row = ((-handle_y).max(px(0.)) / pixel_size_px).round() as usize;
         let buffer_len = self.buffer_len(cx);
+        if buffer_len == 0 {
+            return;
+        }
         let total_rows = (buffer_len + self.cols - 1) / self.cols;
         if handle_row != self.scroll_offset {
             self.scroll_offset = handle_row.min(total_rows.saturating_sub(1));
@@ -129,9 +151,11 @@ impl VisualMapPanel {
                     let offset = row * self.cols + col;
 
                     if offset < buffer_len {
-                        let doc = self.editor.read(cx).document.read().unwrap();
-                        let byte = doc.buffer.get_range(offset, 1)[0];
-                        hovered = Some((offset, byte));
+                        if let Some(editor) = &self.editor {
+                            let doc = editor.read(cx).document.read().unwrap();
+                            let byte = doc.buffer.get_range(offset, 1)[0];
+                            hovered = Some((offset, byte));
+                        }
                     }
                 }
             }
@@ -158,7 +182,8 @@ impl Panel for VisualMapPanel {
     fn title(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let path = self.file_path(cx);
         let name = path
-            .file_name()
+            .as_ref()
+            .and_then(|p| p.file_name())
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| "(untitled)".to_string());
         let title = format!("2D Map: {}", name);
@@ -200,7 +225,7 @@ impl Panel for VisualMapPanel {
 
     fn dump(&self, cx: &App) -> gpui_component::dock::PanelState {
         let mut state = gpui_component::dock::PanelState::new(self);
-        let path = self.file_path(cx);
+        let path = self.file_path(cx).unwrap_or_default();
         let map_state = VisualMapPanelState {
             path,
             cols: self.cols,
@@ -221,10 +246,37 @@ pub struct VisualMapPanelState {
 }
 
 impl Render for VisualMapPanel {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let (bg_color, border_color, muted_color) = {
-            let theme = cx.theme();
-            (theme.background, theme.border, theme.muted_foreground)
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+        let (bg_color, border_color, muted_color) = (theme.sidebar, theme.border, theme.muted_foreground);
+        let is_focused = self.focus_handle.is_focused(window);
+
+        let header = div()
+            .p_2()
+            .text_sm()
+            .text_color(crate::ui::style::header_text_color(is_focused, theme))
+            .child("2D VISUAL MAP");
+
+        let editor = match &self.editor {
+            Some(ed) => ed,
+            None => {
+                return v_flex()
+                    .id("visual-map-panel")
+                    .track_focus(&self.focus_handle)
+                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, _| {
+                        this.focus_handle.focus(window);
+                    }))
+                    .size_full()
+                    .bg(bg_color)
+                    .child(header)
+                    .child(
+                        v_flex()
+                            .size_full()
+                            .justify_center()
+                            .items_center()
+                            .child(div().text_sm().text_color(muted_color).child("No active editor"))
+                    );
+            }
         };
 
         let buffer_len = self.buffer_len(cx);
@@ -302,12 +354,15 @@ impl Render for VisualMapPanel {
             "Hover over pixels to view details".to_string()
         };
 
-        div()
-            .flex()
-            .flex_col()
+        v_flex()
+            .id("visual-map-panel")
             .size_full()
             .bg(bg_color)
             .track_focus(&self.focus_handle)
+            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, _| {
+                this.focus_handle.focus(window);
+            }))
+            .child(header)
             .child(
                 // Toolbar row 1: Presets
                 h_flex()
@@ -360,7 +415,7 @@ impl Render for VisualMapPanel {
                     .on_mouse_move(cx.listener(Self::on_mouse_move))
                     .child(VisualMapElement {
                         panel: cx.entity().downgrade(),
-                        document: self.editor.read(cx).document.clone(),
+                        document: editor.read(cx).document.clone(),
                         cols: self.cols,
                         pixel_size: self.pixel_size,
                         scroll_offset: self.scroll_offset,

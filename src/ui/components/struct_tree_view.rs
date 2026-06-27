@@ -162,7 +162,7 @@ impl Render for StructTreeView {
         let is_focused = self.focus_handle.is_focused(window);
         let theme = cx.theme();
 
-        let container = crate::ui::style::apply_focus_indicator(v_flex(), is_focused, theme)
+        let container = v_flex()
             .id("struct-tree-view")
             .track_focus(&self.focus_handle)
             .on_mouse_down(
@@ -173,9 +173,7 @@ impl Render for StructTreeView {
             )
             .size_full()
             .flex_shrink_0()
-            .bg(theme.sidebar)
-            .border_r(px(1.0))
-            .border_color(theme.border);
+            .bg(theme.sidebar);
 
         container
             .child(

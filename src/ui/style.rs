@@ -14,6 +14,7 @@ pub fn focus_border_color(focused: bool, theme: &Theme) -> Hsla {
 }
 
 /// Applies a focus indicator (2px left border-like line) to a container.
+#[allow(dead_code)]
 pub fn apply_focus_indicator(element: Div, focused: bool, theme: &Theme) -> Div {
     if focused {
         element

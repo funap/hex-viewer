@@ -417,11 +417,8 @@ impl Panel for EditorPanel {
 }
 
 impl Render for EditorPanel {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let is_focused = self.focus_handle.is_focused(window);
-        let theme = cx.theme();
-
-        let container = crate::ui::style::apply_focus_indicator(div(), is_focused, theme)
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let container = div()
             .size_full()
             .flex()
             .flex_col()

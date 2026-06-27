@@ -285,7 +285,7 @@ pub struct DiffPanelState {
 }
 
 impl Render for DiffPanel {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let sync_scroll = self.sync_scroll;
         let diff_count = self
@@ -294,9 +294,7 @@ impl Render for DiffPanel {
             .map(|r| r.chunks.iter().filter(|c| matches!(c, DiffChunk::Modified { .. })).count())
             .unwrap_or(0);
         let current_index = if diff_count > 0 { self.current_diff_index + 1 } else { 0 };
-        let is_focused = self.focus_handle.is_focused(window);
-
-        let container = crate::ui::style::apply_focus_indicator(div(), is_focused, theme)
+        let container = div()
             .flex()
             .flex_col()
             .size_full()

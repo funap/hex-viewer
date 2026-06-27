@@ -231,7 +231,7 @@ impl Render for FileTreeView {
         let is_focused = self.focus_handle.is_focused(window);
         let theme = cx.theme();
 
-        let container = crate::ui::style::apply_focus_indicator(v_flex(), is_focused, theme)
+        let container = v_flex()
             .id("file-tree-view")
             .key_context(CONTEXT)
             .track_focus(&self.focus_handle)
@@ -248,9 +248,7 @@ impl Render for FileTreeView {
             .size_full()
             .flex_shrink_0()
             .h_full()
-            .bg(theme.sidebar)
-            .border_r(px(1.0))
-            .border_color(theme.border);
+            .bg(theme.sidebar);
 
         container
             .child(
