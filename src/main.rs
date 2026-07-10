@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use gpui::Application;
 use gpui_component_assets::Assets;
 
