@@ -55,6 +55,13 @@ impl Render for StatusBar {
             0
         };
 
+        let is_big_endian = if let Some(editor) = &active_editor {
+            let editor = editor.read(cx);
+            editor.encoding == crate::core::encoding::Encoding::Utf16Be
+        } else {
+            false
+        };
+
         let mut i8_val = "--".to_string();
         let mut u8_val = "--".to_string();
         let mut i16_val = "--".to_string();
@@ -84,10 +91,12 @@ impl Render for StatusBar {
 
         if bytes_at_cursor.len() >= 2 {
             let arr: [u8; 2] = bytes_at_cursor[0..2].try_into().unwrap();
-            i16_val = format!("{}", i16::from_le_bytes(arr));
-            u16_val = format!("{}", u16::from_le_bytes(arr));
+            let i16_val_raw = if is_big_endian { i16::from_be_bytes(arr) } else { i16::from_le_bytes(arr) };
+            let u16_val_raw = if is_big_endian { u16::from_be_bytes(arr) } else { u16::from_le_bytes(arr) };
+            i16_val = format!("{}", i16_val_raw);
+            u16_val = format!("{}", u16_val_raw);
 
-            let ch = u16::from_le_bytes(arr);
+            let ch = u16_val_raw;
             if let Some(c) = char::from_u32(ch as u32) {
                 if !c.is_control() {
                     utf16_val = format!("'{}'", c);
@@ -101,22 +110,41 @@ impl Render for StatusBar {
 
         if bytes_at_cursor.len() >= 4 {
             let arr: [u8; 4] = bytes_at_cursor[0..4].try_into().unwrap();
-            i32_val = format!("{}", i32::from_le_bytes(arr));
-            u32_val = format!("{}", u32::from_le_bytes(arr));
-            f32_val = format!("{:.4}", f32::from_le_bytes(arr));
+            let i32_val_raw = if is_big_endian { i32::from_be_bytes(arr) } else { i32::from_le_bytes(arr) };
+            let u32_val_raw = if is_big_endian { u32::from_be_bytes(arr) } else { u32::from_le_bytes(arr) };
+            let f32_val_raw = if is_big_endian { f32::from_be_bytes(arr) } else { f32::from_le_bytes(arr) };
+            i32_val = format!("{}", i32_val_raw);
+            u32_val = format!("{}", u32_val_raw);
+            f32_val = format!("{:.4}", f32_val_raw);
         }
 
         if bytes_at_cursor.len() >= 8 {
             let arr: [u8; 8] = bytes_at_cursor[0..8].try_into().unwrap();
-            i64_val = format!("{}", i64::from_le_bytes(arr));
-            u64_val = format!("{}", u64::from_le_bytes(arr));
-            f64_val = format!("{:.4}", f64::from_le_bytes(arr));
+            let i64_val_raw = if is_big_endian { i64::from_be_bytes(arr) } else { i64::from_le_bytes(arr) };
+            let u64_val_raw = if is_big_endian { u64::from_be_bytes(arr) } else { u64::from_le_bytes(arr) };
+            let f64_val_raw = if is_big_endian { f64::from_be_bytes(arr) } else { f64::from_le_bytes(arr) };
+            i64_val = format!("{}", i64_val_raw);
+            u64_val = format!("{}", u64_val_raw);
+            f64_val = format!("{:.4}", f64_val_raw);
         }
 
         if !bytes_at_cursor.is_empty() {
+            let first_byte = bytes_at_cursor[0];
+            let expected_len = if first_byte & 0x80 == 0 {
+                1
+            } else if first_byte & 0xE0 == 0xC0 {
+                2
+            } else if first_byte & 0xF0 == 0xE0 {
+                3
+            } else if first_byte & 0xF8 == 0xF0 {
+                4
+            } else {
+                0
+            };
+
             let mut decoded = false;
-            for len in (1..=std::cmp::min(4, bytes_at_cursor.len())).rev() {
-                if let Ok(s) = std::str::from_utf8(&bytes_at_cursor[0..len]) {
+            if expected_len > 0 && expected_len <= bytes_at_cursor.len() {
+                if let Ok(s) = std::str::from_utf8(&bytes_at_cursor[0..expected_len]) {
                     if let Some(c) = s.chars().next() {
                         if !c.is_control() {
                             utf8_val = format!("'{}'", c);
@@ -124,7 +152,6 @@ impl Render for StatusBar {
                             utf8_val = ".".to_string();
                         }
                         decoded = true;
-                        break;
                     }
                 }
             }
