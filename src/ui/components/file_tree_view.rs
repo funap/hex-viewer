@@ -294,6 +294,7 @@ impl Render for FileTreeView {
                 tree(&self.tree_state, {
                     let selected_ids: HashSet<_> = self.selected_items.iter().map(|i| i.id.clone()).collect();
                     let focus_handle = self.focus_handle.clone();
+                    let loaded_paths = self.loaded_paths.clone();
                     move |ix, entry, _selected, window, cx| {
                         let item = entry.item();
                         let icon = if !entry.is_folder() {
@@ -307,7 +308,7 @@ impl Render for FileTreeView {
                         let is_multi_selected = selected_ids.contains(&item.id);
                         let is_focused = focus_handle.is_focused(window);
 
-                        if entry.is_expanded() && entry.is_folder() {
+                        if entry.is_expanded() && entry.is_folder() && !loaded_paths.contains(&item.id.to_string()) {
                             let item_id = item.id.to_string();
                             window.dispatch_action(Box::new(crate::actions::LoadChildren { path: item_id }), cx);
                         }
