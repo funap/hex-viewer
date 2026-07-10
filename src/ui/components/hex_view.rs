@@ -430,8 +430,10 @@ impl HexView {
         let handle_y = self.scroll_handle.offset().y;
         let handle_row = ((-handle_y).max(px(0.)) / row_height).round() as usize;
         let total_rows = self.editor.read(cx).line_starts().len();
+        let visible_rows = self.get_visible_rows();
+        let max_scroll_row = total_rows.saturating_sub(visible_rows).max(0);
         if handle_row != self.scroll_offset {
-            self.scroll_offset = handle_row.min(total_rows.saturating_sub(1));
+            self.scroll_offset = handle_row.min(max_scroll_row);
             cx.notify();
             cx.emit(HexViewEvent::Scrolled(self.scroll_offset));
         }
@@ -494,8 +496,10 @@ impl HexView {
         let handle_y = self.scroll_handle.offset().y;
         let handle_row = ((-handle_y).max(px(0.)) / row_height).round() as usize;
         let total_rows = self.editor.read(cx).line_starts().len();
+        let visible_rows = self.get_visible_rows();
+        let max_scroll_row = total_rows.saturating_sub(visible_rows).max(0);
         if handle_row != self.scroll_offset {
-            self.scroll_offset = handle_row.min(total_rows.saturating_sub(1));
+            self.scroll_offset = handle_row.min(max_scroll_row);
             cx.notify();
             cx.emit(HexViewEvent::Scrolled(self.scroll_offset));
         } else {
@@ -514,7 +518,8 @@ impl HexView {
     fn on_scroll_wheel(&mut self, event: &ScrollWheelEvent, window: &mut Window, cx: &mut Context<Self>) {
         let row_height = px(ROW_HEIGHT);
         let total_rows = self.editor.read(cx).line_starts().len();
-        let max_offset = total_rows.saturating_sub(1).max(0) as i32;
+        let visible_rows = self.get_visible_rows();
+        let max_offset = total_rows.saturating_sub(visible_rows).max(0) as i32;
 
         let delta_y_pixels = event.delta.pixel_delta(row_height).y.as_f32();
         let total_delta = delta_y_pixels + self.scroll_remainder;
@@ -837,7 +842,9 @@ impl Render for HexView {
         let row_height = px(ROW_HEIGHT);
         let handle_y = self.scroll_handle.offset().y;
         let handle_row = ((-handle_y).max(px(0.)) / row_height).round() as usize;
-        let synced_offset = handle_row.min(total_rows.saturating_sub(1));
+        let visible_rows = self.get_visible_rows();
+        let max_scroll_row = total_rows.saturating_sub(visible_rows).max(0);
+        let synced_offset = handle_row.min(max_scroll_row);
         if self.scroll_offset != synced_offset {
             self.scroll_offset = synced_offset;
             cx.emit(HexViewEvent::Scrolled(self.scroll_offset));
