@@ -68,10 +68,11 @@ impl StructTreeView {
 
     fn sync_fields(&mut self, editor: &Entity<Editor>, cx: &mut Context<Self>) {
         let editor_lock = editor.read(cx);
+        let doc_version = editor_lock.document.read().ok().map(|d| d.history.version()).unwrap_or(0);
         let current_parse_id = editor_lock
             .parse_result
             .as_ref()
-            .map(|r| format!("{}-{}-{}", r.definition_id, r.total_parsed_bytes, r.fields.len()));
+            .map(|r| format!("{}-{}-{}-{}", r.definition_id, r.total_parsed_bytes, r.fields.len(), doc_version));
 
         if current_parse_id != self.last_parse_id {
             let fields = editor_lock.parse_result.as_ref().map(|res| res.fields.clone()).unwrap_or_default();
