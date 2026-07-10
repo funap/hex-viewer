@@ -1,4 +1,5 @@
 pub mod activity_bar;
+pub mod data_inspector;
 pub mod file_tree_view;
 pub mod hex_view;
 pub mod search_bar;

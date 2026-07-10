@@ -9,7 +9,6 @@ use crate::ui::components::file_tree_view::{FileTreeView, FileTreeViewEvent};
 use crate::ui::components::title_bar::AppTitleBar;
 use crate::ui::panels::editor_panel::EditorPanel;
 use crate::ui::panels::left_panel::{LeftPanel, LeftPanelTab};
-use crate::ui::panels::visual_map_panel::VisualMapPanel;
 
 use crate::app_state::AppState;
 use crate::core::editor::Editor;
@@ -29,10 +28,8 @@ pub struct Workspace {
     pub active_panel: Option<Arc<dyn PanelView>>,
     pub left_panel: Entity<LeftPanel>,
     pub activity_bar: Entity<ActivityBar>,
-    pub visual_map: Entity<VisualMapPanel>,
     pub ksy_definition: Option<Arc<crate::core::structure::KsyDefinition>>,
     pub is_left_panel_visible: bool,
-    pub is_right_panel_visible: bool,
 }
 
 const MAIN_DOCK_AREA_ID: &str = "main_dock_area";
@@ -92,8 +89,6 @@ impl Workspace {
         })
         .detach();
 
-        let visual_map = cx.new(|cx| VisualMapPanel::new(None, cx));
-
         cx.on_focus_in(&file_tree.read(cx).focus_handle(cx), window, {
             move |this, _, cx| {
                 // Keep active_editor and active_panel reference to support global/menu actions when file tree is focused.
@@ -110,11 +105,20 @@ impl Workspace {
         })
         .detach();
 
+        let data_inspector = left_panel.read(cx).data_inspector.clone();
+        cx.on_focus_in(&data_inspector.read(cx).focus_handle(cx), window, |this, _, cx| {
+            this.on_focus_changed(cx);
+            cx.notify();
+        })
+        .detach();
+
+        let visual_map = left_panel.read(cx).visual_map.clone();
         cx.on_focus_in(&visual_map.read(cx).focus_handle(cx), window, |this, _, cx| {
             this.on_focus_changed(cx);
             cx.notify();
         })
         .detach();
+
         cx.subscribe(&left_panel, |_, _, event, cx| match event {
             FileTreeViewEvent::OpenFile(path) => {
                 cx.dispatch_action(&crate::actions::OpenFile {
@@ -133,10 +137,8 @@ impl Workspace {
             active_panel: None,
             left_panel,
             activity_bar,
-            visual_map,
             ksy_definition: None,
             is_left_panel_visible: true,
-            is_right_panel_visible: false,
         }
     }
 
@@ -230,9 +232,6 @@ impl Workspace {
                     status_bar.set_active_editor(Some(editor.clone()));
                 });
                 this.left_panel.update(cx, |panel, cx| {
-                    panel.set_editor(Some(editor.clone()), cx);
-                });
-                this.visual_map.update(cx, |panel, cx| {
                     panel.set_editor(Some(editor.clone()), cx);
                 });
                 this.on_focus_changed(cx);
@@ -453,6 +452,8 @@ impl Workspace {
         let tab = match activity {
             Activity::Files => LeftPanelTab::Files,
             Activity::Structure => LeftPanelTab::Structure,
+            Activity::Inspector => LeftPanelTab::Inspector,
+            Activity::Map => LeftPanelTab::Map,
         };
 
         let current_tab = self.left_panel.read(cx).active_tab;
@@ -613,9 +614,6 @@ impl Workspace {
                 this.left_panel.update(cx, |panel, cx| {
                     panel.set_editor(None, cx);
                 });
-                this.visual_map.update(cx, |panel, cx| {
-                    panel.set_editor(None, cx);
-                });
                 this.active_panel = Some(Arc::new(settings_panel_clone.clone()));
                 this.on_focus_changed(cx);
                 cx.notify();
@@ -648,19 +646,7 @@ impl Workspace {
     }
 
     fn on_action_open_visual_map(&mut self, _: &OpenVisualMap, window: &mut Window, cx: &mut Context<Self>) {
-        self.is_right_panel_visible = true;
-        let focus_handle = self.visual_map.read(cx).focus_handle(cx);
-        focus_handle.focus(window);
-        cx.notify();
-    }
-
-    fn toggle_right_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.is_right_panel_visible = !self.is_right_panel_visible;
-        if self.is_right_panel_visible {
-            let focus_handle = self.visual_map.read(cx).focus_handle(cx);
-            focus_handle.focus(window);
-        }
-        cx.notify();
+        self.select_activity(Activity::Map, window, cx);
     }
 
     fn add_panel_to_center_dock(&self, panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut Context<Self>) {
@@ -809,8 +795,9 @@ impl Workspace {
         self.left_panel.update(cx, |panel, cx| {
             panel.file_tree.update(cx, |_, cx| cx.notify());
             panel.struct_tree.update(cx, |_, cx| cx.notify());
+            panel.data_inspector.update(cx, |_, cx| cx.notify());
+            panel.visual_map.update(cx, |_, cx| cx.notify());
         });
-        self.visual_map.update(cx, |_, cx| cx.notify());
 
         // Clone the item to release the immutable borrow on cx
         let item = self.dock_area.read(cx).items().clone();
@@ -856,6 +843,8 @@ impl Workspace {
                 match active_tab {
                     LeftPanelTab::Files => activity_bar.set_activity(Some(Activity::Files), cx),
                     LeftPanelTab::Structure => activity_bar.set_activity(Some(Activity::Structure), cx),
+                    LeftPanelTab::Inspector => activity_bar.set_activity(Some(Activity::Inspector), cx),
+                    LeftPanelTab::Map => activity_bar.set_activity(Some(Activity::Map), cx),
                 }
             } else {
                 activity_bar.set_activity(None, cx);
@@ -866,40 +855,6 @@ impl Workspace {
 
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let right_activity_bar = {
-            let theme = cx.theme();
-            let is_active = self.is_right_panel_visible;
-            use gpui_component::{Icon, IconName};
-
-            div()
-                .flex()
-                .flex_col()
-                .w(px(42.0))
-                .h_full()
-                .bg(theme.background)
-                .border_l_1()
-                .border_color(theme.border)
-                .items_center()
-                .py_4()
-                .gap_2()
-                .child(
-                    div()
-                        .id("right-activity-map")
-                        .cursor_pointer()
-                        .p_2()
-                        .text_color(if is_active { theme.foreground } else { theme.muted_foreground })
-                        .relative()
-                        .hover(|style| style.text_color(theme.foreground))
-                        .on_click(cx.listener(move |this, _, window, cx| {
-                            this.toggle_right_panel(window, cx);
-                        }))
-                        .child(Icon::new(IconName::Map).size(px(24.0)))
-                        .when(is_active, |this| {
-                            this.child(div().absolute().right_0().top_2().bottom_2().w_0p5().bg(theme.accent))
-                        }),
-                )
-        };
-
         div()
             .id("workspace")
             .on_action(cx.listener(Self::on_action_open_file))
@@ -981,15 +936,8 @@ impl Render for Workspace {
                                         )
                                     },
                                 )),
-                            )
-                            .child(
-                                resizable_panel()
-                                    .visible(self.is_right_panel_visible)
-                                    .size(px(250.))
-                                    .child(self.visual_map.clone()),
                             ),
-                    )
-                    .child(right_activity_bar),
+                    ),
             )
             .child(self.status_bar.clone())
             .children(Root::render_dialog_layer(window, cx))

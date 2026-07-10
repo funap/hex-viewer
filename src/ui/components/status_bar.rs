@@ -5,6 +5,7 @@ use gpui::*;
 use gpui_component::ActiveTheme;
 
 pub enum StatusBarEvent {
+    #[allow(dead_code)]
     ToggleLeftPanel,
 }
 
@@ -29,16 +30,14 @@ impl Render for StatusBar {
         let theme = cx.theme();
         let active_editor = self.active_editor.as_ref().and_then(|e| e.upgrade());
 
-        let (cursor_offset, total_size, _value_at_cursor, bytes_at_cursor) = if let Some(editor) = &active_editor {
+        let (cursor_offset, total_size) = if let Some(editor) = &active_editor {
             let editor = editor.read(cx);
             (
                 editor.cursor_offset,
                 editor.total_size(),
-                editor.value_at_cursor(),
-                editor.read_bytes_at_cursor(8),
             )
         } else {
-            (0, 0, None, Vec::new())
+            (0, 0)
         };
 
         let has_custom_layout = if let Some(editor) = &active_editor {
@@ -55,110 +54,12 @@ impl Render for StatusBar {
             0
         };
 
-        let is_big_endian = if let Some(editor) = &active_editor {
+        let encoding_name = if let Some(editor) = &active_editor {
             let editor = editor.read(cx);
-            editor.encoding == crate::core::encoding::Encoding::Utf16Be
+            format!("{:?}", editor.encoding)
         } else {
-            false
+            "--".to_string()
         };
-
-        let mut i8_val = "--".to_string();
-        let mut u8_val = "--".to_string();
-        let mut i16_val = "--".to_string();
-        let mut u16_val = "--".to_string();
-        let mut i32_val = "--".to_string();
-        let mut u32_val = "--".to_string();
-        let mut i64_val = "--".to_string();
-        let mut u64_val = "--".to_string();
-        let mut f32_val = "--".to_string();
-        let mut f64_val = "--".to_string();
-        let mut ascii_val = "--".to_string();
-        let mut utf8_val = "--".to_string();
-        let mut utf16_val = "--".to_string();
-
-        if bytes_at_cursor.len() >= 1 {
-            let b = bytes_at_cursor[0];
-            i8_val = format!("{}", b as i8);
-            u8_val = format!("{}", b);
-
-            let ch = b as char;
-            if ch.is_ascii_graphic() || ch == ' ' {
-                ascii_val = format!("'{}'", ch);
-            } else {
-                ascii_val = ".".to_string();
-            }
-        }
-
-        if bytes_at_cursor.len() >= 2 {
-            let arr: [u8; 2] = bytes_at_cursor[0..2].try_into().unwrap();
-            let i16_val_raw = if is_big_endian { i16::from_be_bytes(arr) } else { i16::from_le_bytes(arr) };
-            let u16_val_raw = if is_big_endian { u16::from_be_bytes(arr) } else { u16::from_le_bytes(arr) };
-            i16_val = format!("{}", i16_val_raw);
-            u16_val = format!("{}", u16_val_raw);
-
-            let ch = u16_val_raw;
-            if let Some(c) = char::from_u32(ch as u32) {
-                if !c.is_control() {
-                    utf16_val = format!("'{}'", c);
-                } else {
-                    utf16_val = ".".to_string();
-                }
-            } else {
-                utf16_val = ".".to_string();
-            }
-        }
-
-        if bytes_at_cursor.len() >= 4 {
-            let arr: [u8; 4] = bytes_at_cursor[0..4].try_into().unwrap();
-            let i32_val_raw = if is_big_endian { i32::from_be_bytes(arr) } else { i32::from_le_bytes(arr) };
-            let u32_val_raw = if is_big_endian { u32::from_be_bytes(arr) } else { u32::from_le_bytes(arr) };
-            let f32_val_raw = if is_big_endian { f32::from_be_bytes(arr) } else { f32::from_le_bytes(arr) };
-            i32_val = format!("{}", i32_val_raw);
-            u32_val = format!("{}", u32_val_raw);
-            f32_val = format!("{:.4}", f32_val_raw);
-        }
-
-        if bytes_at_cursor.len() >= 8 {
-            let arr: [u8; 8] = bytes_at_cursor[0..8].try_into().unwrap();
-            let i64_val_raw = if is_big_endian { i64::from_be_bytes(arr) } else { i64::from_le_bytes(arr) };
-            let u64_val_raw = if is_big_endian { u64::from_be_bytes(arr) } else { u64::from_le_bytes(arr) };
-            let f64_val_raw = if is_big_endian { f64::from_be_bytes(arr) } else { f64::from_le_bytes(arr) };
-            i64_val = format!("{}", i64_val_raw);
-            u64_val = format!("{}", u64_val_raw);
-            f64_val = format!("{:.4}", f64_val_raw);
-        }
-
-        if !bytes_at_cursor.is_empty() {
-            let first_byte = bytes_at_cursor[0];
-            let expected_len = if first_byte & 0x80 == 0 {
-                1
-            } else if first_byte & 0xE0 == 0xC0 {
-                2
-            } else if first_byte & 0xF0 == 0xE0 {
-                3
-            } else if first_byte & 0xF8 == 0xF0 {
-                4
-            } else {
-                0
-            };
-
-            let mut decoded = false;
-            if expected_len > 0 && expected_len <= bytes_at_cursor.len() {
-                if let Ok(s) = std::str::from_utf8(&bytes_at_cursor[0..expected_len]) {
-                    if let Some(c) = s.chars().next() {
-                        if !c.is_control() {
-                            utf8_val = format!("'{}'", c);
-                        } else {
-                            utf8_val = ".".to_string();
-                        }
-                        decoded = true;
-                    }
-                }
-            }
-            if !decoded {
-                utf8_val = ".".to_string();
-            }
-        }
 
         div()
             .flex()
@@ -195,56 +96,8 @@ impl Render for StatusBar {
                     .flex()
                     .items_center()
                     .text_xs()
-                    .gap_4()
                     .text_color(theme.muted_foreground)
-                    .when(!bytes_at_cursor.is_empty(), |el| {
-                        el.child(
-                            div()
-                                .flex()
-                                .gap_2()
-                                .child(div().child(format!("i8: {}", i8_val)))
-                                .child(div().text_color(theme.border).child("|"))
-                                .child(div().child(format!("u8: {}", u8_val))),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .gap_2()
-                                .child(div().child(format!("i16: {}", i16_val)))
-                                .child(div().text_color(theme.border).child("|"))
-                                .child(div().child(format!("u16: {}", u16_val))),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .gap_2()
-                                .child(div().child(format!("i32: {}", i32_val)))
-                                .child(div().text_color(theme.border).child("|"))
-                                .child(div().child(format!("u32: {}", u32_val)))
-                                .child(div().text_color(theme.border).child("|"))
-                                .child(div().child(format!("f32: {}", f32_val))),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .gap_2()
-                                .child(div().child(format!("i64: {}", i64_val)))
-                                .child(div().text_color(theme.border).child("|"))
-                                .child(div().child(format!("u64: {}", u64_val)))
-                                .child(div().text_color(theme.border).child("|"))
-                                .child(div().child(format!("f64: {}", f64_val))),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .gap_2()
-                                .child(div().child(format!("ASCII: {}", ascii_val)))
-                                .child(div().text_color(theme.border).child("|"))
-                                .child(div().child(format!("UTF-8: {}", utf8_val)))
-                                .child(div().text_color(theme.border).child("|"))
-                                .child(div().child(format!("UTF-16: {}", utf16_val))),
-                        )
-                    }),
+                    .child(format!("Encoding: {}", encoding_name))
             )
     }
 }

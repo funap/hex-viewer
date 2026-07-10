@@ -3,16 +3,22 @@ use gpui::*;
 use crate::core::editor::Editor;
 use crate::ui::components::file_tree_view::{FileTreeView, FileTreeViewEvent};
 use crate::ui::components::struct_tree_view::StructTreeView;
+use crate::ui::components::data_inspector::DataInspector;
+use crate::ui::panels::visual_map_panel::VisualMapPanel;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum LeftPanelTab {
     Files,
     Structure,
+    Inspector,
+    Map,
 }
 
 pub struct LeftPanel {
     pub file_tree: Entity<FileTreeView>,
     pub struct_tree: Entity<StructTreeView>,
+    pub data_inspector: Entity<DataInspector>,
+    pub visual_map: Entity<VisualMapPanel>,
     pub active_tab: LeftPanelTab,
 }
 
@@ -21,6 +27,8 @@ impl EventEmitter<FileTreeViewEvent> for LeftPanel {}
 impl LeftPanel {
     pub fn new(file_tree: Entity<FileTreeView>, cx: &mut Context<Self>) -> Self {
         let struct_tree = cx.new(|cx| StructTreeView::new(Vec::new(), None, cx));
+        let data_inspector = cx.new(|cx| DataInspector::new(None, cx));
+        let visual_map = cx.new(|cx| VisualMapPanel::new(None, cx));
 
         cx.subscribe(&file_tree, |_, _, event: &FileTreeViewEvent, cx| match event {
             FileTreeViewEvent::OpenFile(path) => cx.emit(FileTreeViewEvent::OpenFile(path.clone())),
@@ -30,12 +38,20 @@ impl LeftPanel {
         Self {
             file_tree,
             struct_tree,
+            data_inspector,
+            visual_map,
             active_tab: LeftPanelTab::Files,
         }
     }
 
     pub fn set_editor(&mut self, editor: Option<Entity<Editor>>, cx: &mut Context<Self>) {
         self.struct_tree.update(cx, |panel, cx| {
+            panel.set_editor(editor.clone(), cx);
+        });
+        self.data_inspector.update(cx, |panel, cx| {
+            panel.set_editor(editor.clone(), cx);
+        });
+        self.visual_map.update(cx, |panel, cx| {
             panel.set_editor(editor, cx);
         });
     }
@@ -48,11 +64,19 @@ impl LeftPanel {
 
 impl Render for LeftPanel {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        div().flex().flex_col().w_full().h_full().child(if self.active_tab == LeftPanelTab::Files {
-            self.file_tree.clone().into_any_element()
-        } else {
-            self.struct_tree.clone().into_any_element()
-        })
+        div()
+            .flex()
+            .flex_col()
+            .w_full()
+            .h_full()
+            .overflow_hidden()
+            .min_w_0()
+            .child(match self.active_tab {
+                LeftPanelTab::Files => self.file_tree.clone().into_any_element(),
+                LeftPanelTab::Structure => self.struct_tree.clone().into_any_element(),
+                LeftPanelTab::Inspector => self.data_inspector.clone().into_any_element(),
+                LeftPanelTab::Map => self.visual_map.clone().into_any_element(),
+            })
     }
 }
 
@@ -61,6 +85,8 @@ impl Focusable for LeftPanel {
         match self.active_tab {
             LeftPanelTab::Files => self.file_tree.read(cx).focus_handle(cx),
             LeftPanelTab::Structure => self.struct_tree.read(cx).focus_handle(cx),
+            LeftPanelTab::Inspector => self.data_inspector.read(cx).focus_handle(cx),
+            LeftPanelTab::Map => self.visual_map.read(cx).focus_handle(cx),
         }
     }
 }

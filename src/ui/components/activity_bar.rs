@@ -4,8 +4,10 @@ use gpui_component::{ActiveTheme, Icon, IconName};
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Activity {
-    Files,
-    Structure,
+    Files = 0,
+    Structure = 1,
+    Inspector = 2,
+    Map = 3,
 }
 
 pub enum ActivityBarEvent {
@@ -58,7 +60,9 @@ impl Render for ActivityBar {
                     .gap_2()
                     .items_center()
                     .child(self.render_icon(Activity::Files, IconName::File, "Files", cx))
-                    .child(self.render_icon(Activity::Structure, IconName::Search, "Structure", cx)),
+                    .child(self.render_icon(Activity::Structure, IconName::Search, "Structure", cx))
+                    .child(self.render_icon(Activity::Inspector, IconName::Inspector, "Inspector", cx))
+                    .child(self.render_icon(Activity::Map, IconName::Map, "Map", cx)),
             )
             .child(
                 div()
