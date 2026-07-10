@@ -117,16 +117,15 @@ impl Render for SearchBar {
             .bg(cx.theme().background)
             .border_b_1()
             .border_color(cx.theme().border)
-            .on_key_down(cx.listener(|_this, event: &gpui::KeyDownEvent, _window, cx| {
-                if event.keystroke.key == "enter" {
-                    if event.keystroke.modifiers.shift {
-                        cx.emit(SearchBarEvent::Prev);
-                    } else {
-                        cx.emit(SearchBarEvent::Next);
-                    }
-                } else if event.keystroke.key == "escape" {
-                    cx.emit(SearchBarEvent::Dismiss);
-                }
+            .key_context("SearchBar")
+            .on_action(cx.listener(|_, _: &crate::actions::SearchNext, _, cx| {
+                cx.emit(SearchBarEvent::Next);
+            }))
+            .on_action(cx.listener(|_, _: &crate::actions::SearchPrev, _, cx| {
+                cx.emit(SearchBarEvent::Prev);
+            }))
+            .on_action(cx.listener(|_, _: &crate::actions::ToggleSearch, _, cx| {
+                cx.emit(SearchBarEvent::Dismiss);
             }))
             .child(
                 div()
@@ -170,4 +169,12 @@ impl Render for SearchBar {
                 cx.emit(SearchBarEvent::Dismiss);
             })))
     }
+}
+
+pub fn init(cx: &mut App) {
+    cx.bind_keys([
+        gpui::KeyBinding::new("enter", crate::actions::SearchNext, Some("SearchBar")),
+        gpui::KeyBinding::new("shift-enter", crate::actions::SearchPrev, Some("SearchBar")),
+        gpui::KeyBinding::new("escape", crate::actions::ToggleSearch, Some("SearchBar")),
+    ]);
 }
