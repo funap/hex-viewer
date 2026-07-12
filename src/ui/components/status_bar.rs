@@ -32,10 +32,7 @@ impl Render for StatusBar {
 
         let (cursor_offset, total_size) = if let Some(editor) = &active_editor {
             let editor = editor.read(cx);
-            (
-                editor.cursor_offset,
-                editor.total_size(),
-            )
+            (editor.cursor_offset, editor.total_size())
         } else {
             (0, 0)
         };
@@ -97,7 +94,7 @@ impl Render for StatusBar {
                     .items_center()
                     .text_xs()
                     .text_color(theme.muted_foreground)
-                    .child(format!("Encoding: {}", encoding_name))
+                    .child(format!("Encoding: {}", encoding_name)),
             )
     }
 }

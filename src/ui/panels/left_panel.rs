@@ -1,9 +1,9 @@
 use gpui::*;
 
 use crate::core::editor::Editor;
+use crate::ui::components::data_inspector::DataInspector;
 use crate::ui::components::file_tree_view::{FileTreeView, FileTreeViewEvent};
 use crate::ui::components::struct_tree_view::StructTreeView;
-use crate::ui::components::data_inspector::DataInspector;
 use crate::ui::panels::visual_map_panel::VisualMapPanel;
 
 #[derive(Clone, Copy, PartialEq)]

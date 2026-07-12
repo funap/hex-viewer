@@ -58,6 +58,13 @@ impl EditorService {
         Ok(new_document)
     }
 
+    /// Closes a file by removing it from the document cache.
+    pub fn close_file(&self, path: &std::path::Path) {
+        let path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let mut documents = self.documents.write().unwrap();
+        documents.remove(&path);
+    }
+
     /// Searches for a query in the given buffer based on the search options.
     /// Returns a Task that executes the search in the background.
     pub fn search(&self, buffer: Arc<Buffer>, query: String, options: crate::core::search::SearchOptions, cx: &gpui::App) -> gpui::Task<Vec<usize>> {

@@ -1,8 +1,6 @@
-use crate::core::document::Document;
 use gpui::Action;
 use schemars::JsonSchema;
 use serde::Deserialize;
-use std::sync::{Arc, RwLock};
 
 #[derive(Clone, PartialEq, Deserialize, JsonSchema, Action)]
 #[action(namespace = app)]
@@ -71,37 +69,6 @@ pub struct ToggleLeftPanel;
 
 #[derive(Clone, PartialEq, Action)]
 pub struct OpenSettings;
-
-#[derive(Clone)]
-pub struct AddEditorPanel(pub Arc<RwLock<Document>>);
-
-impl Action for AddEditorPanel {
-    fn name(&self) -> &'static str {
-        "AddEditorPanel"
-    }
-
-    fn boxed_clone(&self) -> Box<dyn Action> {
-        Box::new(self.clone())
-    }
-
-    fn partial_eq(&self, other: &dyn Action) -> bool {
-        other.as_any().downcast_ref::<Self>().map_or(false, |other| self == other)
-    }
-
-    fn name_for_type() -> &'static str {
-        "AddEditorPanel"
-    }
-
-    fn build(_: serde_json::Value) -> Result<Box<dyn Action>, anyhow::Error> {
-        todo!()
-    }
-}
-
-impl PartialEq for AddEditorPanel {
-    fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.0, &other.0)
-    }
-}
 
 #[derive(Clone, PartialEq, Action)]
 pub struct OpenFileDialog;

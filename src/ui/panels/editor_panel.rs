@@ -152,6 +152,7 @@ impl EditorPanel {
         }
     }
 
+    #[allow(dead_code)]
     pub fn editor(&self) -> Entity<Editor> {
         self.editor.clone()
     }

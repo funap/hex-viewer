@@ -12,19 +12,20 @@ use crate::ui::panels::left_panel::{LeftPanel, LeftPanelTab};
 
 use crate::app_state::AppState;
 use crate::core::editor::Editor;
+use crate::service::open_file_manager::{OpenFileEvent, OpenFileManager};
 use crate::ui::components::status_bar::StatusBar;
 use gpui_component::Root;
-use gpui_component::dock::{DockArea, DockItem, DockPlacement, Panel, PanelView, TabPanel};
+use gpui_component::dock::{DockArea, DockItem, DockPlacement, Panel, PanelView};
 use gpui_component::menu::AppMenuBar;
 use gpui_component::resizable::{h_resizable, resizable_panel};
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 pub struct Workspace {
     pub dock_area: Entity<DockArea>,
     pub title_bar: Entity<AppTitleBar>,
     pub status_bar: Entity<StatusBar>,
-    pub active_editor: Option<Entity<Editor>>,
+    pub open_file_manager: Entity<OpenFileManager>,
     pub active_panel: Option<Arc<dyn PanelView>>,
     pub left_panel: Entity<LeftPanel>,
     pub activity_bar: Entity<ActivityBar>,
@@ -91,7 +92,6 @@ impl Workspace {
 
         cx.on_focus_in(&file_tree.read(cx).focus_handle(cx), window, {
             move |this, _, cx| {
-                // Keep active_editor and active_panel reference to support global/menu actions when file tree is focused.
                 this.on_focus_changed(cx);
                 cx.notify();
             }
@@ -128,18 +128,48 @@ impl Workspace {
         })
         .detach();
 
+        let open_file_manager = cx.new(|_| OpenFileManager::new());
+        cx.subscribe(&open_file_manager, |this, _, event, cx| match event {
+            OpenFileEvent::Opened(_) => {}
+            OpenFileEvent::Closed(_) => {}
+            OpenFileEvent::Activated(_) => {
+                this.sync_active_editor(cx);
+            }
+        })
+        .detach();
+
         Self::reset_default_layout(weak_dock_area, window, cx);
         Self {
             dock_area,
             title_bar,
             status_bar,
-            active_editor: None,
+            open_file_manager,
             active_panel: None,
             left_panel,
             activity_bar,
             ksy_definition: None,
             is_left_panel_visible: true,
         }
+    }
+
+    pub fn active_editor(&self, cx: &App) -> Option<Entity<Editor>> {
+        if let Some(active_panel) = &self.active_panel {
+            if active_panel.panel_name(cx) == "EditorPanel" {
+                return self.open_file_manager.read(cx).active_editor();
+            }
+        }
+        None
+    }
+
+    fn sync_active_editor(&self, cx: &mut Context<Self>) {
+        let active_editor = self.active_editor(cx);
+        self.status_bar.update(cx, |status_bar, _| {
+            status_bar.set_active_editor(active_editor.clone());
+        });
+        self.left_panel.update(cx, |panel, cx| {
+            panel.set_editor(active_editor, cx);
+        });
+        self.on_focus_changed(cx);
     }
 
     fn reset_default_layout(dock_area: WeakEntity<DockArea>, window: &mut Window, cx: &mut Context<Self>) {
@@ -198,10 +228,9 @@ impl Workspace {
         })
     }
 
-    fn on_action_add_editor_panel(&mut self, action: &AddEditorPanel, window: &mut Window, cx: &mut Context<Self>) {
-        println!("Workspace::on_action_add_editor_panel triggered");
-        let document = action.0.clone();
-        let editor = cx.new(|_| Editor::new(document));
+    fn open_editor_panel(&mut self, document: Arc<RwLock<crate::core::document::Document>>, window: &mut Window, cx: &mut Context<Self>) {
+        let path = document.read().unwrap().path().to_path_buf();
+        let editor = cx.new(|_| Editor::new(document.clone()));
 
         if let Some(ksy) = &self.ksy_definition {
             let ksy = ksy.clone();
@@ -211,30 +240,20 @@ impl Workspace {
             });
         }
 
-        let editor_panel = cx.new(|cx| EditorPanel::new(editor, window, cx));
+        let editor_panel = cx.new(|cx| EditorPanel::new(editor.clone(), window, cx));
+
+        let open_file_manager = self.open_file_manager.clone();
+        let id = open_file_manager.update(cx, |manager, cx| manager.open(path, document, editor.clone(), editor_panel.clone(), cx));
+
         cx.on_focus_in(&editor_panel.read(cx).focus_handle(cx), window, {
             let editor_panel = editor_panel.clone();
+            let open_file_manager = open_file_manager.clone();
             move |this, _window, cx| {
-                let editor = editor_panel.read(cx).editor();
-                this.active_editor = Some(editor.clone());
+                open_file_manager.update(cx, |manager, cx| {
+                    manager.activate(id, cx);
+                });
                 this.active_panel = Some(Arc::new(editor_panel.clone()));
-
-                // Apply workspace-wide definition to the newly active editor
-                if let Some(ksy) = &this.ksy_definition {
-                    let ksy = ksy.clone();
-                    editor.update(cx, |editor, cx| {
-                        editor.set_kaitai_definition(ksy);
-                        cx.notify();
-                    });
-                }
-
-                this.status_bar.update(cx, |status_bar, _| {
-                    status_bar.set_active_editor(Some(editor.clone()));
-                });
-                this.left_panel.update(cx, |panel, cx| {
-                    panel.set_editor(Some(editor.clone()), cx);
-                });
-                this.on_focus_changed(cx);
+                this.sync_active_editor(cx);
                 cx.notify();
             }
         })
@@ -244,7 +263,6 @@ impl Workspace {
     }
 
     fn on_action_open_file_dialog(&mut self, _: &OpenFileDialog, window: &mut Window, cx: &mut Context<Self>) {
-        println!("OpenFileDialog triggered");
         let path = cx.prompt_for_paths(gpui::PathPromptOptions {
             files: true,
             directories: false,
@@ -280,7 +298,7 @@ impl Workspace {
     }
 
     fn on_action_select_all(&mut self, _: &SelectAll, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(editor) = &self.active_editor {
+        if let Some(editor) = self.active_editor(cx) {
             editor.update(cx, |editor, _cx| {
                 editor.select_all();
             });
@@ -288,7 +306,7 @@ impl Workspace {
     }
 
     fn on_action_go_to_beginning(&mut self, _: &GoToBeginning, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(editor) = &self.active_editor {
+        if let Some(editor) = self.active_editor(cx) {
             editor.update(cx, |editor, _cx| {
                 editor.go_to_beginning();
             });
@@ -296,7 +314,7 @@ impl Workspace {
     }
 
     fn on_action_go_to_end(&mut self, _: &GoToEnd, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(editor) = &self.active_editor {
+        if let Some(editor) = self.active_editor(cx) {
             editor.update(cx, |editor, _cx| {
                 editor.go_to_end();
             });
@@ -304,7 +322,7 @@ impl Workspace {
     }
 
     fn on_action_set_encoding_ascii(&mut self, _: &SetEncodingAscii, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(editor) = &self.active_editor {
+        if let Some(editor) = self.active_editor(cx) {
             editor.update(cx, |editor, _cx| {
                 editor.set_encoding(crate::core::encoding::Encoding::Ascii);
             });
@@ -312,7 +330,7 @@ impl Workspace {
     }
 
     fn on_action_set_encoding_utf8(&mut self, _: &SetEncodingUtf8, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(editor) = &self.active_editor {
+        if let Some(editor) = self.active_editor(cx) {
             editor.update(cx, |editor, _cx| {
                 editor.set_encoding(crate::core::encoding::Encoding::Utf8);
             });
@@ -320,7 +338,7 @@ impl Workspace {
     }
 
     fn on_action_set_encoding_utf16le(&mut self, _: &SetEncodingUtf16Le, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(editor) = &self.active_editor {
+        if let Some(editor) = self.active_editor(cx) {
             editor.update(cx, |editor, _cx| {
                 editor.set_encoding(crate::core::encoding::Encoding::Utf16Le);
             });
@@ -328,7 +346,7 @@ impl Workspace {
     }
 
     fn on_action_set_encoding_utf16be(&mut self, _: &SetEncodingUtf16Be, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(editor) = &self.active_editor {
+        if let Some(editor) = self.active_editor(cx) {
             editor.update(cx, |editor, _cx| {
                 editor.set_encoding(crate::core::encoding::Encoding::Utf16Be);
             });
@@ -336,50 +354,33 @@ impl Workspace {
     }
 
     fn on_action_open_file(&mut self, action: &OpenFile, window: &mut Window, cx: &mut Context<Self>) {
-        println!("Workspace::on_action_open_file triggered for {}", action.path);
         let file_path = action.path.clone();
         let path = std::path::PathBuf::from(&file_path);
 
-        if let Some((tab_panel, panel)) = self.find_existing_panel_and_tab_panel(&path, cx) {
-            println!("Found existing panel for {:?}", path);
-            let index_opt = {
-                let mirror = unsafe { &*(tab_panel.read(cx) as *const TabPanel as *const TabPanelMirror) };
-                mirror.panels.iter().position(|p| p.view().entity_id() == panel.view().entity_id())
-            };
-
-            if let Some(ix) = index_opt {
-                Self::activate_tab_via_mirror(&tab_panel, ix, window, cx);
-            } else {
-                panel.focus_handle(cx).focus(window);
-            }
+        if let Some(entry) = self.open_file_manager.read(cx).find_by_path(&path) {
+            entry.panel.read(cx).focus_handle(cx).focus(window);
             return;
         }
 
-        println!("Spawning task to open file {:?}", path);
         let view = cx.entity();
         cx.spawn_in(window, async move |_, window| {
             let editor_service_opt = window.update(|_, cx| AppState::global(cx).editor_service.clone()).ok();
 
             if let Some(editor_service) = editor_service_opt {
-                println!("Opening file through editor service...");
                 match editor_service.open_file(std::path::PathBuf::from(&file_path)).await {
                     Ok(document) => {
-                        println!("File opened successfully. Adding EditorPanel directly");
                         window
                             .update(|window, cx| {
                                 view.update(cx, |this, cx| {
-                                    let action = AddEditorPanel(document);
-                                    this.on_action_add_editor_panel(&action, window, cx);
+                                    this.open_editor_panel(document, window, cx);
                                 });
                             })
                             .ok();
                     }
                     Err(e) => {
-                        println!("Failed to open file: {:?}", e);
+                        eprintln!("Failed to open file: {:?}", e);
                     }
                 }
-            } else {
-                println!("Failed to access window state");
             }
         })
         .detach();
@@ -414,10 +415,8 @@ impl Workspace {
 
                                 let diff_view_clone = diff_view.clone();
                                 cx.on_focus_in(&diff_view.read(cx).focus_handle(cx), window, move |this, _, cx| {
-                                    this.active_editor = None;
-                                    this.status_bar.update(cx, |status_bar, _| status_bar.set_active_editor(None));
                                     this.active_panel = Some(Arc::new(diff_view_clone.clone()));
-                                    this.on_focus_changed(cx);
+                                    this.sync_active_editor(cx);
                                     cx.notify();
                                 })
                                 .detach();
@@ -496,7 +495,7 @@ impl Workspace {
                                         let ksy_arc = Arc::new(ksy);
                                         this.ksy_definition = Some(ksy_arc.clone());
 
-                                        if let Some(editor_entity) = &this.active_editor {
+                                        if let Some(editor_entity) = this.active_editor(cx) {
                                             editor_entity.update(cx, |editor, cx| {
                                                 editor.set_kaitai_definition(ksy_arc.clone());
                                                 cx.notify();
@@ -504,7 +503,7 @@ impl Workspace {
                                         }
 
                                         this.left_panel.update(cx, |p, cx| {
-                                            if let Some(editor_entity) = &this.active_editor {
+                                            if let Some(editor_entity) = this.active_editor(cx) {
                                                 p.set_editor(Some(editor_entity.clone()), cx);
                                             }
                                             p.set_tab(crate::ui::panels::left_panel::LeftPanelTab::Structure, cx);
@@ -530,7 +529,7 @@ impl Workspace {
 
     fn on_action_clear_structure_definition(&mut self, _: &ClearStructureDefinition, _: &mut Window, cx: &mut Context<Self>) {
         self.ksy_definition = None;
-        if let Some(editor_entity) = self.active_editor.as_ref() {
+        if let Some(editor_entity) = self.active_editor(cx) {
             editor_entity.update(cx, |editor, cx| {
                 editor.clear_structure_definition();
                 cx.notify();
@@ -577,9 +576,41 @@ impl Workspace {
 
     fn on_action_close_active_panel(&mut self, _: &CloseActivePanel, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(panel) = self.active_panel.take() {
+            let is_editor = panel.panel_name(cx) == "EditorPanel";
+            let mut closed_path = None;
+            if is_editor {
+                if let Ok(editor_panel) = panel.view().downcast::<EditorPanel>() {
+                    let path = editor_panel.read(cx).path(cx);
+                    closed_path = Some(path);
+                }
+            }
+
             self.dock_area.update(cx, |dock_area, cx| {
-                dock_area.remove_panel_from_all_docks(panel, window, cx);
+                dock_area.remove_panel_from_all_docks(panel.clone(), window, cx);
             });
+
+            if let Some(path) = closed_path {
+                let open_file_manager = self.open_file_manager.clone();
+                let entry_id = open_file_manager.read(cx).find_by_path(&path).map(|e| e.id);
+                if let Some(id) = entry_id {
+                    open_file_manager.update(cx, |manager, cx| {
+                        manager.close(id, cx);
+                    });
+                }
+                let editor_service = AppState::global(cx).editor_service.clone();
+                editor_service.close_file(&path);
+            }
+
+            if is_editor {
+                if let Some(entry) = self.open_file_manager.read(cx).active_entry() {
+                    self.active_panel = Some(Arc::new(entry.panel.clone()));
+                } else {
+                    self.active_panel = None;
+                }
+            }
+
+            self.sync_active_editor(cx);
+
             if !self.check_has_panels(cx) {
                 let weak_dock_area = self.dock_area.downgrade();
                 Self::reset_default_layout(weak_dock_area, window, cx);
@@ -609,13 +640,8 @@ impl Workspace {
         cx.on_focus_in(&settings_panel.read(cx).focus_handle(cx), window, {
             let settings_panel_clone = settings_panel_clone.clone();
             move |this, _, cx| {
-                this.active_editor = None;
-                this.status_bar.update(cx, |status_bar, _| status_bar.set_active_editor(None));
-                this.left_panel.update(cx, |panel, cx| {
-                    panel.set_editor(None, cx);
-                });
                 this.active_panel = Some(Arc::new(settings_panel_clone.clone()));
-                this.on_focus_changed(cx);
+                this.sync_active_editor(cx);
                 cx.notify();
             }
         })
@@ -680,37 +706,6 @@ impl Workspace {
         }
     }
 
-    fn find_existing_panel_and_tab_panel(&self, path: &std::path::Path, cx: &App) -> Option<(Entity<TabPanel>, Arc<dyn PanelView>)> {
-        let dock_area = self.dock_area.read(cx);
-        Self::find_panel_and_tab_panel_in_items(dock_area.items(), path, cx)
-    }
-
-    fn find_panel_and_tab_panel_in_items(dock_item: &DockItem, path: &std::path::Path, cx: &App) -> Option<(Entity<TabPanel>, Arc<dyn PanelView>)> {
-        let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-        match dock_item {
-            DockItem::Tabs { items, view, .. } => {
-                for item in items {
-                    if let Ok(panel) = item.view().downcast::<EditorPanel>() {
-                        let panel_path = panel.read(cx).path(cx);
-                        let canonical_panel_path = panel_path.canonicalize().unwrap_or(panel_path.clone());
-                        if canonical_panel_path == canonical_path {
-                            return Some((view.clone(), item.clone()));
-                        }
-                    }
-                }
-            }
-            DockItem::Split { items, .. } => {
-                for item in items {
-                    if let Some(res) = Self::find_panel_and_tab_panel_in_items(item, path, cx) {
-                        return Some(res);
-                    }
-                }
-            }
-            _ => {}
-        }
-        None
-    }
-
     /// Opens a new workspace window with the specified files and folder.
     /// This is the main public API for creating workspace windows.
     pub fn open_window(cx: &mut App, initial_files: Vec<PathBuf>, initial_folder: Option<PathBuf>) -> Task<()> {
@@ -719,14 +714,12 @@ impl Workspace {
             if let Ok(window) = task.await {
                 // Open all initial files if provided
                 if !initial_files.is_empty() {
-                    if let Ok(app) = cx.update(|cx| AppState::global(cx).clone()) {
-                        for file_path in initial_files {
-                            if let Ok(document) = app.editor_service.open_file(file_path).await {
-                                let _ = window.update(cx, |_root, _window, cx| {
-                                    cx.dispatch_action(&AddEditorPanel(document));
-                                });
-                            }
-                        }
+                    for file_path in initial_files {
+                        let _ = window.update(cx, |_, _window, cx| {
+                            cx.dispatch_action(&crate::actions::OpenFile {
+                                path: file_path.to_string_lossy().to_string(),
+                            });
+                        });
                     }
                 }
 
@@ -868,7 +861,6 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_action_set_encoding_utf8))
             .on_action(cx.listener(Self::on_action_set_encoding_utf16le))
             .on_action(cx.listener(Self::on_action_set_encoding_utf16be))
-            .on_action(cx.listener(Self::on_action_add_editor_panel))
             .on_action(cx.listener(Self::on_action_open_diff))
             .on_action(cx.listener(Self::on_action_toggle_left_panel))
             .on_action(cx.listener(Self::on_action_open_settings))
@@ -905,99 +897,38 @@ impl Render for Workspace {
             .flex_col()
             .child(self.title_bar.clone())
             .child(
-                div()
-                    .flex()
-                    .flex_row()
-                    .flex_1()
-                    .child(self.activity_bar.clone())
-                    .child(
-                        h_resizable("workspace-h-resize")
-                            .child(
-                                resizable_panel()
-                                    .visible(self.is_left_panel_visible)
-                                    .size(px(250.))
-                                    .child(self.left_panel.clone()),
-                            )
-                            .child(
-                                resizable_panel().child(div().relative().size_full().flex().flex_col().child(self.dock_area.clone()).when(
-                                    !self.check_has_panels(cx),
-                                    |this| {
-                                        this.child(
-                                            div()
-                                                .absolute()
-                                                .top_0()
-                                                .left_0()
-                                                .size_full()
-                                                .flex()
-                                                .justify_center()
-                                                .items_center()
-                                                .bg(cx.theme().background)
-                                                .child(div().text_xl().text_color(cx.theme().muted_foreground).child("Nothing is open")),
-                                        )
-                                    },
-                                )),
-                            ),
-                    ),
+                div().flex().flex_row().flex_1().child(self.activity_bar.clone()).child(
+                    h_resizable("workspace-h-resize")
+                        .child(
+                            resizable_panel()
+                                .visible(self.is_left_panel_visible)
+                                .size(px(250.))
+                                .child(self.left_panel.clone()),
+                        )
+                        .child(
+                            resizable_panel().child(div().relative().size_full().flex().flex_col().child(self.dock_area.clone()).when(
+                                !self.check_has_panels(cx),
+                                |this| {
+                                    this.child(
+                                        div()
+                                            .absolute()
+                                            .top_0()
+                                            .left_0()
+                                            .size_full()
+                                            .flex()
+                                            .justify_center()
+                                            .items_center()
+                                            .bg(cx.theme().background)
+                                            .child(div().text_xl().text_color(cx.theme().muted_foreground).child("Nothing is open")),
+                                    )
+                                },
+                            )),
+                        ),
+                ),
             )
             .child(self.status_bar.clone())
             .children(Root::render_dialog_layer(window, cx))
             .children(Root::render_sheet_layer(window, cx))
             .children(Root::render_notification_layer(window, cx))
-    }
-}
-
-#[allow(dead_code)]
-pub struct TabPanelMirror {
-    focus_handle: gpui::FocusHandle,
-    dock_area: gpui::WeakEntity<gpui_component::dock::DockArea>,
-    stack_panel: Option<gpui::WeakEntity<gpui_component::dock::StackPanel>>,
-    pub panels: Vec<std::sync::Arc<dyn gpui_component::dock::PanelView>>,
-    pub active_ix: usize,
-    pub closable: bool,
-    tab_bar_scroll_handle: gpui::ScrollHandle,
-    zoomed: bool,
-    collapsed: bool,
-    will_split_placement: Option<gpui_component::Placement>,
-    in_tiles: bool,
-}
-
-impl Workspace {
-    fn activate_tab_via_mirror(tab_panel_entity: &Entity<TabPanel>, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
-        tab_panel_entity.update(cx, |tab_panel, cx| {
-            let mirror = unsafe { &mut *(tab_panel as *mut TabPanel as *mut TabPanelMirror) };
-
-            if ix == mirror.active_ix {
-                if let Some(active_panel) = mirror.panels.get(ix) {
-                    active_panel.focus_handle(cx).focus(window);
-                }
-                return;
-            }
-
-            let last_active_ix = mirror.active_ix;
-            mirror.active_ix = ix;
-            mirror.tab_bar_scroll_handle.scroll_to_item(ix);
-
-            if let Some(active_panel) = mirror.panels.get(ix) {
-                active_panel.focus_handle(cx).focus(window);
-            }
-
-            cx.spawn_in(window, async move |view, cx| {
-                _ = cx.update(|window, cx| {
-                    _ = view.update(cx, |view, cx| {
-                        let mirror = unsafe { &mut *(view as *mut TabPanel as *mut TabPanelMirror) };
-                        if let Some(last_active) = mirror.panels.get(last_active_ix) {
-                            last_active.set_active(false, window, cx);
-                        }
-                        if let Some(active) = mirror.panels.get(mirror.active_ix) {
-                            active.set_active(true, window, cx);
-                        }
-                    });
-                });
-            })
-            .detach();
-
-            cx.emit(gpui_component::dock::PanelEvent::LayoutChanged);
-            cx.notify();
-        });
     }
 }

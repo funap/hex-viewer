@@ -45,13 +45,7 @@ impl DataInspector {
             .py_1()
             .px_2()
             .hover(|style| style.bg(theme.accent.opacity(0.1)))
-            .child(
-                div()
-                    .flex_shrink_0()
-                    .w(px(110.0))
-                    .text_color(theme.muted_foreground)
-                    .child(label)
-            )
+            .child(div().flex_shrink_0().w(px(110.0)).text_color(theme.muted_foreground).child(label))
             .child(
                 div()
                     .flex_1()
@@ -77,18 +71,19 @@ impl DataInspector {
     }
 
     fn format_unix_time(&self, timestamp: i64) -> String {
-        if timestamp < 0 || timestamp > 253402300799 { // up to year 9999
+        if timestamp < 0 || timestamp > 253402300799 {
+            // up to year 9999
             return "Out of range".to_string();
         }
-        
+
         let seconds = timestamp;
         let day_clock = seconds % 86400;
         let mut days_since_epoch = seconds / 86400;
-        
+
         let hour = day_clock / 3600;
         let minute = (day_clock % 3600) / 60;
         let second = day_clock % 60;
-        
+
         let mut year = 1970;
         loop {
             let is_leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
@@ -99,14 +94,14 @@ impl DataInspector {
             days_since_epoch -= year_days;
             year += 1;
         }
-        
+
         let is_leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
         let month_days = if is_leap {
             [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
         } else {
             [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
         };
-        
+
         let mut month = 1;
         for &days in &month_days {
             if days_since_epoch < days {
@@ -115,7 +110,7 @@ impl DataInspector {
             days_since_epoch -= days;
             month += 1;
         }
-        
+
         let day = days_since_epoch + 1;
         format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02} UTC", year, month, day, hour, minute, second)
     }
