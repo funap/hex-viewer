@@ -4,6 +4,7 @@ use crate::actions::{
 use crate::core::document::Document;
 use crate::core::editor::Editor;
 use crate::core::encoding::Encoding;
+use crate::ui::style::StyleExt as _;
 use gpui::prelude::*;
 use gpui::*;
 use gpui::{ScrollWheelEvent, WeakEntity};
@@ -832,7 +833,7 @@ impl Focusable for HexView {
 }
 
 impl Render for HexView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let editor = self.editor.read(cx);
         let document = editor.document.clone();
         let line_starts = editor.line_starts();
@@ -871,7 +872,7 @@ impl Render for HexView {
         let text_style = TextStyle {
             font_family: self.font_family_prop.clone(),
             font_size: gpui::AbsoluteLength::Pixels(self.font_size_prop),
-            .._window.text_style()
+            ..window.text_style()
         };
         let font = text_style.font();
         let font_size = self.font_size_prop;
@@ -883,7 +884,7 @@ impl Render for HexView {
             underline: None,
             strikethrough: None,
         };
-        let ascii = _window.text_system().shape_line("ASCII".into(), font_size, &[ascii_run], None);
+        let ascii = window.text_system().shape_line("ASCII".into(), font_size, &[ascii_run], None);
         let ascii_char_width = if ascii.len() > 0 { ascii.width / 5.0 } else { px(10.0) };
 
         let offset_width = if self.show_offset { px(OFFSET_WIDTH) } else { px(0.) };
@@ -898,13 +899,20 @@ impl Render for HexView {
             total_width += section_gap + ascii_char_width * max_bytes_per_row as f32 + section_gap;
         }
 
-        div()
+        let is_focused = self.focus_handle.is_focused(window);
+        let theme = cx.theme();
+
+        let container = div()
             .flex()
             .flex_col()
-            .bg(cx.theme().background)
+            .bg(theme.background)
             .font_family(self.font_family_prop.clone())
             .size_full()
-            .key_context(CONTEXT)
+            .key_context(CONTEXT);
+
+        let container = container.focus_indicator(is_focused, theme);
+
+        container
             .track_focus(&self.focus_handle(cx))
             .on_action(cx.listener(Self::move_left))
             .on_action(cx.listener(Self::move_right))

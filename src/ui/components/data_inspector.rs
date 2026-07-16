@@ -1,8 +1,8 @@
 use crate::core::editor::Editor;
+use crate::ui::style::StyleExt as _;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::{ActiveTheme as _, button::Button, button::ButtonVariants, h_flex, v_flex};
-
 pub struct DataInspector {
     pub editor: Option<Entity<Editor>>,
     pub focus_handle: FocusHandle,
@@ -234,7 +234,11 @@ impl Render for DataInspector {
 
         let is_focused = self.focus_handle.is_focused(window);
 
-        v_flex()
+        let container = v_flex().size_full().min_w_0().overflow_hidden().bg(theme.sidebar);
+
+        let container = container.focus_indicator(is_focused, theme);
+
+        container
             .id("data-inspector")
             .track_focus(&self.focus_handle)
             .on_mouse_down(
@@ -243,10 +247,6 @@ impl Render for DataInspector {
                     this.focus_handle.focus(window);
                 }),
             )
-            .size_full()
-            .min_w_0()
-            .overflow_hidden()
-            .bg(theme.sidebar)
             .child(
                 h_flex()
                     .justify_between()

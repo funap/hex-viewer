@@ -1,8 +1,8 @@
 use crate::core::editor::Editor;
 use crate::core::structure::ParsedField;
+use crate::ui::style::StyleExt as _;
 use gpui::*;
 use gpui_component::{ActiveTheme as _, h_flex, list::ListItem, v_flex};
-
 pub struct StructTreeView {
     pub fields: Vec<crate::core::structure::ParsedField>,
     pub flattened_fields: Vec<FlattenedField>,
@@ -163,7 +163,11 @@ impl Render for StructTreeView {
         let is_focused = self.focus_handle.is_focused(window);
         let theme = cx.theme();
 
-        let container = v_flex()
+        let container = v_flex().size_full().flex_shrink_0().bg(theme.sidebar);
+
+        let container = container.focus_indicator(is_focused, theme);
+
+        container
             .id("struct-tree-view")
             .track_focus(&self.focus_handle)
             .on_mouse_down(
@@ -172,11 +176,6 @@ impl Render for StructTreeView {
                     this.focus_handle.focus(window);
                 }),
             )
-            .size_full()
-            .flex_shrink_0()
-            .bg(theme.sidebar);
-
-        container
             .child(
                 div()
                     .p_2()

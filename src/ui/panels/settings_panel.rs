@@ -1,4 +1,5 @@
 use crate::core::appearance::Appearance;
+use crate::ui::style::StyleExt as _;
 use gpui::prelude::*;
 use gpui::{Action, App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, ParentElement, Render, Subscription, Window, div, px};
 use gpui_component::{
@@ -93,12 +94,15 @@ impl SettingsPanel {
 }
 
 impl Render for SettingsPanel {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .p_4()
-            .flex()
-            .flex_col()
-            .gap_4()
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let is_focused = self.focus_handle.is_focused(window);
+        let theme = cx.theme();
+
+        let container = div().p_4().flex().flex_col().gap_4();
+
+        let container = container.focus_indicator(is_focused, theme);
+
+        container
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::on_action_update_setting_input))
             .child(div().child("Editor").font_weight(gpui::FontWeight::BOLD).mb_2())

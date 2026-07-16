@@ -1,4 +1,5 @@
 use crate::core::editor::Editor;
+use crate::ui::style::StyleExt as _;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::dock::{Panel, PanelEvent};
@@ -124,7 +125,8 @@ impl VisualMapPanel {
         Some(offset.min(buffer_len.saturating_sub(1)))
     }
 
-    fn on_mouse_down(&mut self, event: &MouseDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
+    fn on_mouse_down(&mut self, event: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        self.focus_handle.focus(window);
         self.is_dragging = true;
         if let Some(offset) = self.offset_from_point_clamped(event.position, cx) {
             if let Some(editor) = &self.editor {
@@ -287,7 +289,11 @@ impl Render for VisualMapPanel {
         let editor = match &self.editor {
             Some(ed) => ed,
             None => {
-                return v_flex()
+                let container = v_flex().size_full().bg(bg_color);
+
+                let container = container.focus_indicator(is_focused, theme);
+
+                return container
                     .id("visual-map-panel")
                     .track_focus(&self.focus_handle)
                     .on_mouse_down(
@@ -296,8 +302,6 @@ impl Render for VisualMapPanel {
                             this.focus_handle.focus(window);
                         }),
                     )
-                    .size_full()
-                    .bg(bg_color)
                     .child(header)
                     .child(
                         v_flex()
@@ -393,10 +397,12 @@ impl Render for VisualMapPanel {
             "Hover over pixels to view details".to_string()
         };
 
-        v_flex()
+        let container = v_flex().size_full().bg(bg_color);
+
+        let container = container.focus_indicator(is_focused, theme);
+
+        container
             .id("visual-map-panel")
-            .size_full()
-            .bg(bg_color)
             .track_focus(&self.focus_handle)
             .on_mouse_down(
                 gpui::MouseButton::Left,

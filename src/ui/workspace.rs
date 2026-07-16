@@ -90,34 +90,20 @@ impl Workspace {
         })
         .detach();
 
-        cx.on_focus_in(&file_tree.read(cx).focus_handle(cx), window, {
-            move |this, _, cx| {
+        let left_read = left_panel.read(cx);
+        let handles = [
+            file_tree.read(cx).focus_handle(cx),
+            left_read.struct_tree.read(cx).focus_handle(cx),
+            left_read.data_inspector.read(cx).focus_handle(cx),
+            left_read.visual_map.read(cx).focus_handle(cx),
+        ];
+        for handle in handles {
+            cx.on_focus_in(&handle, window, |this, _, cx| {
                 this.on_focus_changed(cx);
                 cx.notify();
-            }
-        })
-        .detach();
-
-        let struct_tree = left_panel.read(cx).struct_tree.clone();
-        cx.on_focus_in(&struct_tree.read(cx).focus_handle(cx), window, |this, _, cx| {
-            this.on_focus_changed(cx);
-            cx.notify();
-        })
-        .detach();
-
-        let data_inspector = left_panel.read(cx).data_inspector.clone();
-        cx.on_focus_in(&data_inspector.read(cx).focus_handle(cx), window, |this, _, cx| {
-            this.on_focus_changed(cx);
-            cx.notify();
-        })
-        .detach();
-
-        let visual_map = left_panel.read(cx).visual_map.clone();
-        cx.on_focus_in(&visual_map.read(cx).focus_handle(cx), window, |this, _, cx| {
-            this.on_focus_changed(cx);
-            cx.notify();
-        })
-        .detach();
+            })
+            .detach();
+        }
 
         cx.subscribe(&left_panel, |_, _, event, cx| match event {
             FileTreeViewEvent::OpenFile(path) => {

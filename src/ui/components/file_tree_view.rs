@@ -2,12 +2,12 @@ use crate::actions::{LoadChildren, OpenDiff, OpenFile, Rename, SelectItem};
 use std::collections::HashSet;
 use std::path::PathBuf;
 
+use crate::ui::style::StyleExt as _;
 use autocorrect::ignorer::Ignorer;
 use gpui::{
     App, AppContext, AsyncApp, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Render, SharedString,
     Styled, WeakEntity, Window, div, prelude::FluentBuilder as _, px,
 };
-
 use gpui_component::{
     ActiveTheme as _, IconName, h_flex,
     list::ListItem,
@@ -231,7 +231,11 @@ impl Render for FileTreeView {
         let is_focused = self.focus_handle.is_focused(window);
         let theme = cx.theme();
 
-        let container = v_flex()
+        let container = v_flex().size_full().flex_shrink_0().h_full().bg(theme.sidebar);
+
+        let container = container.focus_indicator(is_focused, theme);
+
+        container
             .id("file-tree-view")
             .key_context(CONTEXT)
             .track_focus(&self.focus_handle)
@@ -245,12 +249,6 @@ impl Render for FileTreeView {
             .on_action(cx.listener(Self::on_action_select_item))
             .on_action(cx.listener(Self::on_action_set_file_tree_folder))
             .on_action(cx.listener(Self::on_action_load_children))
-            .size_full()
-            .flex_shrink_0()
-            .h_full()
-            .bg(theme.sidebar);
-
-        container
             .child(
                 div()
                     .p_2()
@@ -313,7 +311,7 @@ impl Render for FileTreeView {
                             window.dispatch_action(Box::new(crate::actions::LoadChildren { path: item_id }), cx);
                         }
 
-                        let selection_bg = if is_focused { cx.theme().selection } else { cx.theme().accent };
+                        let selection_bg = if is_focused { cx.theme().selection } else { cx.theme().muted_foreground };
 
                         ListItem::new(ix)
                             .selected(is_focused && is_multi_selected)
