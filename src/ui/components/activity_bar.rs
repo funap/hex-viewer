@@ -8,6 +8,7 @@ pub enum Activity {
     Structure = 1,
     Inspector = 2,
     Map = 3,
+    Checksum = 4,
 }
 
 pub enum ActivityBarEvent {
@@ -62,7 +63,8 @@ impl Render for ActivityBar {
                     .child(self.render_icon(Activity::Files, IconName::File, "Files", cx))
                     .child(self.render_icon(Activity::Structure, IconName::Search, "Structure", cx))
                     .child(self.render_icon(Activity::Inspector, IconName::Inspector, "Inspector", cx))
-                    .child(self.render_icon(Activity::Map, IconName::Map, "Map", cx)),
+                    .child(self.render_icon(Activity::Map, IconName::Map, "Map", cx))
+                    .child(self.render_icon(Activity::Checksum, IconName::ChartPie, "Checksum", cx)),
             )
             .child(
                 div()

@@ -103,6 +103,9 @@ pub struct ShowFilesTab;
 #[derive(Clone, PartialEq, Action)]
 pub struct ShowStructureTab;
 
+#[derive(Clone, PartialEq, Action)]
+pub struct ShowChecksumTab;
+
 #[derive(Clone, PartialEq, Deserialize, JsonSchema, Action)]
 #[action(namespace = app)]
 pub struct LoadStructureDefinition;

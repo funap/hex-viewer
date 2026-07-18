@@ -1,5 +1,6 @@
 pub mod appearance;
 pub mod buffer;
+pub mod checksum;
 pub mod command;
 pub mod diff;
 pub mod document;

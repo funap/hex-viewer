@@ -1,6 +1,7 @@
 use gpui::*;
 
 use crate::core::editor::Editor;
+use crate::ui::components::checksum_panel::ChecksumPanel;
 use crate::ui::components::data_inspector::DataInspector;
 use crate::ui::components::file_tree_view::{FileTreeView, FileTreeViewEvent};
 use crate::ui::components::struct_tree_view::StructTreeView;
@@ -12,6 +13,7 @@ pub enum LeftPanelTab {
     Structure,
     Inspector,
     Map,
+    Checksum,
 }
 
 pub struct LeftPanel {
@@ -19,6 +21,7 @@ pub struct LeftPanel {
     pub struct_tree: Entity<StructTreeView>,
     pub data_inspector: Entity<DataInspector>,
     pub visual_map: Entity<VisualMapPanel>,
+    pub checksum_panel: Entity<ChecksumPanel>,
     pub active_tab: LeftPanelTab,
 }
 
@@ -29,6 +32,7 @@ impl LeftPanel {
         let struct_tree = cx.new(|cx| StructTreeView::new(Vec::new(), None, cx));
         let data_inspector = cx.new(|cx| DataInspector::new(None, cx));
         let visual_map = cx.new(|cx| VisualMapPanel::new(None, cx));
+        let checksum_panel = cx.new(|cx| ChecksumPanel::new(None, cx));
 
         cx.subscribe(&file_tree, |_, _, event: &FileTreeViewEvent, cx| match event {
             FileTreeViewEvent::OpenFile(path) => cx.emit(FileTreeViewEvent::OpenFile(path.clone())),
@@ -40,6 +44,7 @@ impl LeftPanel {
             struct_tree,
             data_inspector,
             visual_map,
+            checksum_panel,
             active_tab: LeftPanelTab::Files,
         }
     }
@@ -52,6 +57,9 @@ impl LeftPanel {
             panel.set_editor(editor.clone(), cx);
         });
         self.visual_map.update(cx, |panel, cx| {
+            panel.set_editor(editor.clone(), cx);
+        });
+        self.checksum_panel.update(cx, |panel, cx| {
             panel.set_editor(editor, cx);
         });
     }
@@ -76,6 +84,7 @@ impl Render for LeftPanel {
                 LeftPanelTab::Structure => self.struct_tree.clone().into_any_element(),
                 LeftPanelTab::Inspector => self.data_inspector.clone().into_any_element(),
                 LeftPanelTab::Map => self.visual_map.clone().into_any_element(),
+                LeftPanelTab::Checksum => self.checksum_panel.clone().into_any_element(),
             })
     }
 }
@@ -87,6 +96,7 @@ impl Focusable for LeftPanel {
             LeftPanelTab::Structure => self.struct_tree.read(cx).focus_handle(cx),
             LeftPanelTab::Inspector => self.data_inspector.read(cx).focus_handle(cx),
             LeftPanelTab::Map => self.visual_map.read(cx).focus_handle(cx),
+            LeftPanelTab::Checksum => self.checksum_panel.read(cx).focus_handle(cx),
         }
     }
 }

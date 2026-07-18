@@ -96,7 +96,9 @@ impl Workspace {
             left_read.struct_tree.read(cx).focus_handle(cx),
             left_read.data_inspector.read(cx).focus_handle(cx),
             left_read.visual_map.read(cx).focus_handle(cx),
+            left_read.checksum_panel.read(cx).focus_handle(cx),
         ];
+
         for handle in handles {
             cx.on_focus_in(&handle, window, |this, _, cx| {
                 this.on_focus_changed(cx);
@@ -433,12 +435,17 @@ impl Workspace {
         self.select_activity(Activity::Structure, window, cx);
     }
 
+    fn on_action_show_checksum_tab(&mut self, _: &ShowChecksumTab, window: &mut Window, cx: &mut Context<Self>) {
+        self.select_activity(Activity::Checksum, window, cx);
+    }
+
     fn select_activity(&mut self, activity: Activity, window: &mut Window, cx: &mut Context<Self>) {
         let tab = match activity {
             Activity::Files => LeftPanelTab::Files,
             Activity::Structure => LeftPanelTab::Structure,
             Activity::Inspector => LeftPanelTab::Inspector,
             Activity::Map => LeftPanelTab::Map,
+            Activity::Checksum => LeftPanelTab::Checksum,
         };
 
         let current_tab = self.left_panel.read(cx).active_tab;
@@ -776,6 +783,7 @@ impl Workspace {
             panel.struct_tree.update(cx, |_, cx| cx.notify());
             panel.data_inspector.update(cx, |_, cx| cx.notify());
             panel.visual_map.update(cx, |_, cx| cx.notify());
+            panel.checksum_panel.update(cx, |_, cx| cx.notify());
         });
 
         // Clone the item to release the immutable borrow on cx
@@ -824,6 +832,7 @@ impl Workspace {
                     LeftPanelTab::Structure => activity_bar.set_activity(Some(Activity::Structure), cx),
                     LeftPanelTab::Inspector => activity_bar.set_activity(Some(Activity::Inspector), cx),
                     LeftPanelTab::Map => activity_bar.set_activity(Some(Activity::Map), cx),
+                    LeftPanelTab::Checksum => activity_bar.set_activity(Some(Activity::Checksum), cx),
                 }
             } else {
                 activity_bar.set_activity(None, cx);
@@ -853,6 +862,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_action_open_visual_map))
             .on_action(cx.listener(Self::on_action_show_files_tab))
             .on_action(cx.listener(Self::on_action_show_structure_tab))
+            .on_action(cx.listener(Self::on_action_show_checksum_tab))
             .on_action(cx.listener(Self::on_action_load_structure_definition))
             .on_action(cx.listener(Self::on_action_clear_structure_definition))
             .on_action(cx.listener(Self::on_action_open_folder))
